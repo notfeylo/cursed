@@ -27,6 +27,8 @@ use std::path::{Path, PathBuf};
 /// Extensions we know how to turn into a cursor.
 const CURSOR_FILES: [&str; 2] = ["cur", "ani"];
 const IMAGE_FILES: [&str; 5] = ["png", "jpg", "jpeg", "webp", "bmp"];
+/// Read for metadata only — never executed, never installed.
+const META_FILES: [&str; 2] = ["inf", "txt"];
 
 /// Guards against pointing the importer at something enormous by accident —
 /// a home directory, say, rather than a folder of cursors.
@@ -110,6 +112,246 @@ fn role_from_hint(text: &str) -> Option<Role> {
     }
 }
 
+/* ── complete cursor schemes ────────────────────────────────────
+   A downloaded scheme is a folder of files named for the seventeen Windows
+   pointer roles — `Normal.cur`, `Wait.ani`, `NSResize.cur` — usually beside an
+   `install.inf`. Treated as loose files, each one would become its own pack
+   named "Wait" or "Help", a 47-file set would explode into 47 single-role
+   entries, and two schemes that both ship a `Help` would collide into one.
+
+   So a subdirectory is imported as exactly one pack. That is also the right
+   answer for the folders holding a single cursor at several resolutions.
+   ──────────────────────────────────────────────────────────── */
+
+/// How strongly a filename claims a role. The highest claim wins, which is how
+/// `Normal.cur` beats `Normal-lefties.cur` for the arrow.
+type Claim = i32;
+
+/// Filenames that name no Windows role, and must not be guessed at.
+///
+/// These are real cursors — drag-and-drop feedback, zoom, cell select — but
+/// Windows has no scheme slot for them. Letting them fall through to "probably
+/// the arrow" would overwrite a scheme's actual arrow with its zoom-in icon.
+fn names_no_windows_role(base: &str) -> bool {
+    const UNMAPPED: [&str; 14] = [
+        "alias", "cell", "copy", "context-menu", "contextmenu", "vertical-text", "verticaltext",
+        "zoom-in", "zoom-out", "zoomin", "zoomout", "pirate", "draft", "all-scroll",
+    ];
+    base.starts_with("dnd-")
+        || base.ends_with("_mask")
+        || base.ends_with("-mask")
+        || UNMAPPED.contains(&base)
+}
+
+/// Maps one filename stem onto a role, with a confidence.
+///
+/// Returns `None` both for names that mean nothing to us and for names that
+/// mean something Windows cannot express — the caller skips those rather than
+/// defaulting them to the arrow.
+fn role_from_filename(stem: &str) -> Option<(Role, Claim)> {
+    let lower = stem.trim().to_ascii_lowercase();
+    let mut base = lower.as_str();
+    let mut claim: Claim = 0;
+
+    // Resolution suffixes: `_32`, `_96`, `_32-48-64`, `_72-96-128`, `_256`.
+    // A file carrying several resolutions is the better master, so it outranks
+    // both a single-size file and one with no suffix at all.
+    if let Some(cut) = base.rfind('_') {
+        let tail = &base[cut + 1..];
+        if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit() || c == '-') {
+            claim += if tail.contains('-') { 6 } else { 2 };
+            base = &base[..cut];
+        } else {
+            claim += 4;
+        }
+    } else {
+        claim += 4;
+    }
+
+    let mut base = base.trim().to_owned();
+
+    // Left-handed variants ship alongside the right-handed ones. Both are
+    // valid; the right-handed file is the one to prefer.
+    for marker in ["-lefties", "_lefties", " lefties", "-left-handed"] {
+        if let Some(cut) = base.find(marker) {
+            base.replace_range(cut..cut + marker.len(), "");
+            claim -= 30;
+        }
+    }
+
+    // `Move_1`, `NSResize_2`, `Link-hand-02` — alternates for the same role.
+    while let Some(cut) = base.rfind(['-', '_']) {
+        let tail = &base[cut + 1..];
+        if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) {
+            base.truncate(cut);
+            claim -= 20;
+        } else {
+            break;
+        }
+    }
+    if base.contains("-alt") || base.contains("alternate-") {
+        claim -= 25;
+    }
+
+    let base = base.trim().trim_matches(['-', '_', ' ']).to_owned();
+    if base.is_empty() || names_no_windows_role(&base) {
+        return None;
+    }
+
+    // Exact names first. These are what a real scheme uses, and an exact hit
+    // must beat a substring hit somewhere else in a long filename.
+    let exact = match base.as_str() {
+        "normal" | "arrow" | "default" | "standard" | "pointer-normal" => Some(Role::Arrow),
+        "help" | "helpselect" | "whatsthis" => Some(Role::Help),
+        "appstarting" | "working" | "workinginbackground" | "progress" => Some(Role::AppStarting),
+        "wait" | "busy" | "loading" => Some(Role::Wait),
+        "cross" | "crosshair" | "precision" | "precisionselect" => Some(Role::Crosshair),
+        "ibeam" | "text" | "beam" | "textselect" => Some(Role::IBeam),
+        "nwpen" | "handwriting" | "pen" | "pencil" => Some(Role::NWPen),
+        "no" | "notallowed" | "unavailable" | "nodrop" | "forbidden" => Some(Role::No),
+        "sizens" | "nsresize" | "ns-resize" | "verticalresize" => Some(Role::SizeNS),
+        "sizewe" | "ewresize" | "ew-resize" | "horizontalresize" => Some(Role::SizeWE),
+        "sizenwse" | "nwresize" | "nwse-resize" | "seresize" => Some(Role::SizeNWSE),
+        "sizenesw" | "neresize" | "nesw-resize" | "swresize" => Some(Role::SizeNESW),
+        "sizeall" | "move" | "scroll" => Some(Role::SizeAll),
+        "uparrow" | "up" | "alternate" | "alternateselect" => Some(Role::UpArrow),
+        "hand" | "link" | "pointer" | "linkselect" | "handpointing" => Some(Role::Hand),
+        "pin" | "location" => Some(Role::Pin),
+        "person" | "user" => Some(Role::Person),
+        _ => None,
+    };
+    if let Some(role) = exact {
+        return Some((role, claim + 100));
+    }
+
+    // Then a looser read, for names like `Link-hand-Solstheim`.
+    role_from_hint(&base).map(|role| (role, claim + 50))
+}
+
+/// What an `install.inf` says: the scheme's own name, and its role mapping.
+///
+/// The `.inf` is authoritative — it is what Windows itself would act on — so it
+/// beats guessing from filenames. It is parsed as text and never executed.
+fn parse_inf(text: &str) -> (Option<String>, Vec<(String, String)>) {
+    let mut name = None;
+    let mut pairs = Vec::new();
+
+    for line in text.lines() {
+        let line = line.trim();
+        if !line.to_ascii_uppercase().starts_with("HKCU") {
+            continue;
+        }
+        // `HKCU,"Control Panel\Cursors","Arrow",,"%25%\Cursors\Arrow.cur"`
+        let quoted: Vec<&str> = line
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        let [key, value, rest @ ..] = quoted.as_slice() else {
+            continue;
+        };
+        if !key.to_ascii_lowercase().contains("control panel\\cursors") {
+            continue;
+        }
+        let Some(target) = rest.first() else { continue };
+
+        if value.eq_ignore_ascii_case("(default)") {
+            let cleaned: String = target.chars().filter(|c| !c.is_control()).collect();
+            if !cleaned.is_empty() {
+                name = Some(cleaned);
+            }
+            continue;
+        }
+        // Only the final component; the `.inf` does not get to choose a path.
+        if let Some(file) = Path::new(&target.replace('\\', "/"))
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+        {
+            pairs.push(((*value).to_owned(), file));
+        }
+    }
+    (name, pairs)
+}
+
+/// Download sites append a hash to the folder they hand you.
+fn strip_hash_suffix(raw: &str) -> &str {
+    match raw.rsplit_once('-') {
+        Some((head, tail))
+            if tail.len() >= 6 && tail.chars().all(|c| c.is_ascii_hexdigit()) && !head.is_empty() =>
+        {
+            head
+        }
+        _ => raw,
+    }
+}
+
+/// `Skyrim-Set-2-563e85ef` becomes `Skyrim Set 2`.
+fn pretty_folder_name(raw: &str) -> String {
+    let stem = strip_hash_suffix(raw);
+
+    // A folder holding one cursor is often named for the role it fills, and
+    // the role's own spelling reads better than a title-cased slug.
+    if let Some((role, _)) = role_from_filename(stem) {
+        if stem.replace(['-', '_', ' '], "").eq_ignore_ascii_case(role.registry_value()) {
+            return role.registry_value().to_owned();
+        }
+    }
+
+    let mut words: Vec<String> = stem
+        .split(['-', '_', ' '])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut chars = w.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect();
+
+    // Sites suffix the folder with the role it was filed under. Once it is one
+    // pack among several words, that suffix is noise.
+    if words.len() > 1 {
+        let last = words[words.len() - 1].to_ascii_lowercase();
+        if ["normal", "cursor", "pointer", "link", "set"].contains(&last.as_str()) {
+            words.pop();
+        }
+    }
+
+    words.join(" ")
+}
+
+/// Credit the author when the pack says who they are.
+fn author_from_readme(text: &str) -> Option<String> {
+    for line in text.lines().take(40) {
+        let line = line.trim();
+        // Compared on a lowercased copy rather than by slicing the original:
+        // `line[..prefix.len()]` splits any line that opens with a multi-byte
+        // character, and readme files are full of emoji. Byte offsets still
+        // line up because ASCII lowercasing never changes a byte's width.
+        let lower = line.to_ascii_lowercase();
+        for prefix in ["author:", "by:", "created by:", "artist:"] {
+            if lower.starts_with(prefix) {
+                let Some(rest) = line.get(prefix.len()..) else {
+                    continue;
+                };
+                let who: String = rest
+                    .trim()
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .take(40)
+                    .collect();
+                if !who.is_empty() {
+                    return Some(who);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Best-effort category from the name and whether the file really animates.
 ///
 /// Deliberately coarse. Getting this exactly right is impossible and not worth
@@ -185,68 +427,252 @@ struct Candidate {
     source: String,
 }
 
-/// Walks a folder, one level of subdirectories deep, collecting candidates and
-/// expanding any zips into a scratch directory.
-fn collect(folder: &Path, scratch: &Path, problems: &mut Vec<String>) -> AppResult<Vec<Candidate>> {
-    let mut out = Vec::new();
-    let mut seen = 0usize;
-    let mut stack = vec![folder.to_path_buf()];
-    let mut depth_guard = 0usize;
+/// One subdirectory, resolved down to a single pack.
+struct SchemeCandidate {
+    name: String,
+    author: String,
+    /// The best file found for each role, and the claim that won it.
+    picks: BTreeMap<Role, (PathBuf, Claim)>,
+}
 
-    while let Some(dir) = stack.pop() {
-        depth_guard += 1;
-        if depth_guard > 64 {
+/// Every cursor and metadata file inside one directory.
+fn files_within(dir: &Path, budget: &mut usize) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    let mut guard = 0usize;
+
+    while let Some(next) = stack.pop() {
+        guard += 1;
+        if guard > 64 || *budget == 0 {
             break;
         }
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Ok(entries) = std::fs::read_dir(&next) else {
             continue;
         };
         for entry in entries.filter_map(Result::ok) {
-            if seen >= MAX_FILES_SCANNED {
-                problems.push(format!("stopped after {MAX_FILES_SCANNED} files"));
-                return Ok(out);
+            if *budget == 0 {
+                break;
             }
-            seen += 1;
+            *budget -= 1;
             let path = entry.path();
-
             if path.is_dir() {
                 stack.push(path);
-                continue;
+            } else {
+                out.push(path);
             }
-
-            let ext = extension_of(&path);
-            if ext == "zip" {
-                match expand_zip(&path, scratch) {
-                    Ok(dir) => stack.push(dir),
-                    Err(e) => problems.push(format!(
-                        "{}: {e}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    )),
-                }
-                continue;
-            }
-
-            if !CURSOR_FILES.contains(&ext.as_str()) && !IMAGE_FILES.contains(&ext.as_str()) {
-                continue;
-            }
-
-            let stem = path
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let (name, role, source) = parse_name(&stem);
-            if name.is_empty() {
-                continue;
-            }
-            out.push(Candidate {
-                path,
-                name,
-                role,
-                source,
-            });
         }
     }
-    Ok(out)
+    out.sort();
+    out
+}
+
+/// Turns one directory into a single pack, or `None` if it holds no cursor.
+///
+/// The `install.inf`, when there is one, is authoritative: it is the mapping
+/// Windows itself would act on, so it outranks anything inferred from a
+/// filename. Everything else falls back to reading the name, and files naming a
+/// role Windows cannot express are skipped rather than guessed at.
+fn resolve_dir(dir: &Path, budget: &mut usize) -> Option<SchemeCandidate> {
+    let files = files_within(dir, budget);
+
+    let mut inf_roles: BTreeMap<String, Role> = BTreeMap::new();
+    let mut scheme_name: Option<String> = None;
+    let mut author = String::new();
+
+    for path in &files {
+        match extension_of(path).as_str() {
+            "inf" => {
+                let Ok(text) = std::fs::read_to_string(path) else {
+                    continue;
+                };
+                let (name, pairs) = parse_inf(crate::util::strip_bom(&text));
+                if let Some(name) = name {
+                    scheme_name = Some(name);
+                }
+                for (value, file) in pairs {
+                    if let Some((role, _)) = role_from_filename(&value) {
+                        inf_roles.insert(file.to_ascii_lowercase(), role);
+                    }
+                }
+            }
+            "txt" if author.is_empty() => {
+                if let Ok(text) = std::fs::read_to_string(path) {
+                    if let Some(who) = author_from_readme(crate::util::strip_bom(&text)) {
+                        author = who;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut picks: BTreeMap<Role, (PathBuf, Claim)> = BTreeMap::new();
+    for path in &files {
+        let ext = extension_of(path);
+        if !CURSOR_FILES.contains(&ext.as_str()) && !IMAGE_FILES.contains(&ext.as_str()) {
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
+        let claimed = match inf_roles.get(&file_name) {
+            Some(role) => Some((*role, 200 + role_from_filename(&stem).map_or(0, |(_, c)| c))),
+            None => role_from_filename(&stem),
+        };
+        let Some((role, claim)) = claimed else {
+            continue;
+        };
+        match picks.get(&role) {
+            Some((_, best)) if *best >= claim => {}
+            _ => {
+                picks.insert(role, (path.clone(), claim));
+            }
+        }
+    }
+
+    // A folder whose files are named for what they *depict* rather than for a
+    // role — `Baby Zombie - Minecraft_32-48-64.ani` — names no role at all. It
+    // is still a cursor the user downloaded and still wants, so the best file
+    // becomes the arrow, exactly as a lone loose file would.
+    if picks.is_empty() {
+        let best = files
+            .iter()
+            .filter(|p| {
+                let ext = extension_of(p);
+                CURSOR_FILES.contains(&ext.as_str()) || IMAGE_FILES.contains(&ext.as_str())
+            })
+            .max_by_key(|p| {
+                let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                // Reuse the resolution ranking: multi-size beats plain beats
+                // one fixed size.
+                let lower = stem.to_ascii_lowercase();
+                match lower.rsplit_once('_') {
+                    Some((_, tail))
+                        if !tail.is_empty()
+                            && tail.chars().all(|c| c.is_ascii_digit() || c == '-') =>
+                    {
+                        if tail.contains('-') {
+                            6
+                        } else {
+                            2
+                        }
+                    }
+                    _ => 4,
+                }
+            })?;
+        picks.insert(Role::Arrow, (best.clone(), 1));
+    }
+
+    let raw = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = scheme_name.unwrap_or_else(|| pretty_folder_name(&raw));
+    if name.trim().is_empty() {
+        return None;
+    }
+
+    Some(SchemeCandidate {
+        name,
+        author,
+        picks,
+    })
+}
+
+/// The loose files sitting directly in `folder`, paired by the `--` convention.
+fn collect_loose(folder: &Path, budget: &mut usize) -> Vec<Candidate> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return out;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        if *budget == 0 {
+            break;
+        }
+        *budget -= 1;
+        let path = entry.path();
+        if path.is_dir() {
+            continue;
+        }
+        let ext = extension_of(&path);
+        if !CURSOR_FILES.contains(&ext.as_str()) && !IMAGE_FILES.contains(&ext.as_str()) {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let (name, role, source) = parse_name(&stem);
+        if name.is_empty() {
+            continue;
+        }
+        // Files that follow the `--` convention already carry a clean name.
+        // Anything else is a raw download filename, so it gets the same tidying
+        // a folder name gets: `sukuna-human-finger-f4e78762` is not a name to
+        // show anyone.
+        let name = if stem.contains("--") {
+            name
+        } else {
+            let pretty = pretty_folder_name(&name);
+            if pretty.is_empty() { name } else { pretty }
+        };
+        out.push(Candidate {
+            path,
+            name,
+            role,
+            source,
+        });
+    }
+    out
+}
+
+/// Subdirectories to import, including archives expanded into scratch.
+///
+/// An archive sitting beside an already-extracted copy of itself is skipped.
+/// Download sites hand you both, and importing each would produce two identical
+/// packs from one download.
+fn scheme_dirs(folder: &Path, scratch: &Path, problems: &mut Vec<String>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    let mut archives: Vec<PathBuf> = Vec::new();
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return dirs;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            dirs.push(path);
+        } else if extension_of(&path) == "zip" {
+            archives.push(path);
+        }
+    }
+
+    let extracted: Vec<String> = dirs
+        .iter()
+        .filter_map(|d| d.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()))
+        .collect();
+
+    for archive in archives {
+        let stem = archive
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if extracted.contains(&stem) {
+            continue;
+        }
+        match expand_zip(&archive, scratch) {
+            Ok(dir) => dirs.push(dir),
+            Err(e) => problems.push(format!(
+                "{}: {e}",
+                archive.file_name().unwrap_or_default().to_string_lossy()
+            )),
+        }
+    }
+
+    dirs.sort();
+    dirs
 }
 
 /// Extracts a zip into a fresh scratch directory.
@@ -286,7 +712,13 @@ fn expand_zip(archive: &Path, scratch: &Path) -> AppResult<PathBuf> {
             continue;
         }
         let ext = extension_of(Path::new(&base));
-        if !CURSOR_FILES.contains(&ext.as_str()) && !IMAGE_FILES.contains(&ext.as_str()) {
+        // `.inf` and `.txt` come out too, but only ever to be read as text for
+        // the scheme's name, role mapping and author. Neither is installed and
+        // neither is executed.
+        if !CURSOR_FILES.contains(&ext.as_str())
+            && !IMAGE_FILES.contains(&ext.as_str())
+            && !META_FILES.contains(&ext.as_str())
+        {
             continue;
         }
 
@@ -361,6 +793,54 @@ fn install_file(candidate: &Candidate, dir: &Path) -> AppResult<(String, bool)> 
     }
 }
 
+/// Writes one resolved directory out as a single multi-role pack.
+fn install_scheme(scheme: &SchemeCandidate, root: &Path) -> AppResult<ImportedPack> {
+    let slug = paths::slugify(&scheme.name);
+    if slug.is_empty() {
+        return Err(AppError::invalid("that pack has no usable name"));
+    }
+    let dir = root.join(&slug);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir)?;
+
+    let mut roles: BTreeMap<Role, String> = BTreeMap::new();
+    let mut animated = false;
+
+    for (role, (path, _)) in &scheme.picks {
+        let candidate = Candidate {
+            path: path.clone(),
+            name: scheme.name.clone(),
+            role: Some(*role),
+            source: scheme.author.clone(),
+        };
+        // One bad file in a 47-file scheme must not cost the other 46.
+        let Ok((file_name, is_animated)) = install_file(&candidate, &dir) else {
+            continue;
+        };
+        let unique = format!("{}-{file_name}", role.file_stem().to_ascii_lowercase());
+        let _ = std::fs::rename(dir.join(&file_name), dir.join(&unique));
+        roles.insert(*role, unique);
+        animated |= is_animated;
+    }
+
+    if roles.is_empty() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(AppError::invalid("none of its files could be read as a cursor"));
+    }
+
+    let pack = ImportedPack {
+        id: format!("user:{slug}"),
+        name: scheme.name.chars().take(40).collect(),
+        category: categorise(&scheme.name, animated).to_owned(),
+        roles,
+        animated,
+        source: scheme.author.chars().filter(|c| !c.is_control()).take(40).collect(),
+        imported: crate::util::iso_now(),
+    };
+    std::fs::write(dir.join("pack.json"), serde_json::to_string_pretty(&pack)?)?;
+    Ok(pack)
+}
+
 /// Imports every cursor found under `folder`.
 pub fn import_folder(folder: &Path) -> AppResult<ImportReport> {
     if !folder.is_dir() {
@@ -372,14 +852,7 @@ pub fn import_folder(folder: &Path) -> AppResult<ImportReport> {
     std::fs::create_dir_all(&scratch)?;
 
     let mut problems: Vec<String> = Vec::new();
-    let candidates = collect(folder, &scratch, &mut problems)?;
-
-    // Group by display name so `Name--cursor` and `Name--pointer` become one
-    // pack with two roles rather than two packs with one role each.
-    let mut grouped: BTreeMap<String, Vec<Candidate>> = BTreeMap::new();
-    for candidate in candidates {
-        grouped.entry(candidate.name.clone()).or_default().push(candidate);
-    }
+    let mut budget = MAX_FILES_SCANNED;
 
     let root = imported_dir()?;
     let mut report = ImportReport {
@@ -388,6 +861,41 @@ pub fn import_folder(folder: &Path) -> AppResult<ImportReport> {
         problems: Vec::new(),
         names: Vec::new(),
     };
+
+    // Each subdirectory is one pack. A downloaded scheme is a folder of files
+    // named for the Windows roles, so treated as loose files it would become
+    // forty packs called "Wait" and "Help" — and two schemes that both ship a
+    // `Help` would land in the same pack and overwrite each other.
+    for dir in scheme_dirs(folder, &scratch, &mut problems) {
+        if report.imported >= MAX_PACKS_PER_IMPORT {
+            break;
+        }
+        let Some(scheme) = resolve_dir(&dir, &mut budget) else {
+            continue;
+        };
+        match install_scheme(&scheme, &root) {
+            Ok(pack) => {
+                report.imported += 1;
+                if report.names.len() < 40 {
+                    report.names.push(pack.name);
+                }
+            }
+            Err(e) => {
+                report.skipped += 1;
+                if problems.len() < 12 {
+                    problems.push(format!("{}: {e}", scheme.name));
+                }
+            }
+        }
+    }
+
+    // Files sitting directly in the folder keep the old pairing: this is the
+    // `Name--cursor--Site.png` / `Name--pointer--Site.png` convention.
+    let candidates = collect_loose(folder, &mut budget);
+    let mut grouped: BTreeMap<String, Vec<Candidate>> = BTreeMap::new();
+    for candidate in candidates {
+        grouped.entry(candidate.name.clone()).or_default().push(candidate);
+    }
 
     for (name, files) in grouped.into_iter().take(MAX_PACKS_PER_IMPORT) {
         let slug = paths::slugify(&name);
@@ -588,6 +1096,179 @@ mod tests {
         assert_eq!(categorise_by_keyword("Grey BMW M5", false), "VEHICLES");
         assert_eq!(categorise_by_keyword("Sanrio Hello Kitty", false), "ANIME");
         assert_eq!(categorise_by_keyword("anything", true), "ANIMATED");
+    }
+
+    /// The names a downloaded scheme actually uses, from the three sets in
+    /// hand: Windows spellings, CSS/W3C spellings, and `*Resize` spellings.
+    #[test]
+    fn real_scheme_filenames_map_to_the_right_roles() {
+        let cases = [
+            ("Normal", Role::Arrow),
+            ("Arrow", Role::Arrow),
+            ("Help", Role::Help),
+            ("AppStarting", Role::AppStarting),
+            ("Wait", Role::Wait),
+            ("Cross", Role::Crosshair),
+            ("Precision", Role::Crosshair),
+            ("IBeam", Role::IBeam),
+            ("Text", Role::IBeam),
+            ("Handwriting", Role::NWPen),
+            ("pencil", Role::NWPen),
+            ("NO", Role::No),
+            ("NotAllowed", Role::No),
+            ("SizeNS", Role::SizeNS),
+            ("NSResize", Role::SizeNS),
+            ("SizeWE", Role::SizeWE),
+            ("EWResize", Role::SizeWE),
+            ("SizeNWSE", Role::SizeNWSE),
+            ("NWResize", Role::SizeNWSE),
+            ("SizeNESW", Role::SizeNESW),
+            ("NEResize", Role::SizeNESW),
+            ("SizeAll", Role::SizeAll),
+            ("Move", Role::SizeAll),
+            ("UpArrow", Role::UpArrow),
+            ("Alternate", Role::UpArrow),
+            ("Hand", Role::Hand),
+            ("Link", Role::Hand),
+        ];
+        for (stem, want) in cases {
+            let got = role_from_filename(stem).map(|(r, _)| r);
+            assert_eq!(got, Some(want), "{stem} should be {want:?}");
+        }
+    }
+
+    /// Resolution suffixes are not part of the role, and the file carrying
+    /// several resolutions is the better master.
+    #[test]
+    fn resolution_suffixes_are_stripped_and_multi_size_wins() {
+        let plain = role_from_filename("Wait").expect("Wait");
+        let multi = role_from_filename("Wait_32-48-64").expect("Wait_32-48-64");
+        let single = role_from_filename("Wait_256").expect("Wait_256");
+
+        assert_eq!(multi.0, Role::Wait);
+        assert_eq!(single.0, Role::Wait);
+        assert!(multi.1 > plain.1, "a multi-resolution file is the better master");
+        assert!(plain.1 > single.1, "one fixed size is the weakest master");
+    }
+
+    /// Both are real cursors and both are wanted, but only one can be the
+    /// scheme's arrow — and it is the right-handed one.
+    #[test]
+    fn right_handed_and_first_alternates_beat_their_variants() {
+        let normal = role_from_filename("Normal").expect("Normal");
+        let lefty = role_from_filename("Normal-lefties").expect("Normal-lefties");
+        assert_eq!(lefty.0, Role::Arrow, "still an arrow, just not the one to use");
+        assert!(normal.1 > lefty.1);
+
+        let move_first = role_from_filename("Move").expect("Move");
+        let move_alt = role_from_filename("Move_1").expect("Move_1");
+        assert_eq!(move_alt.0, Role::SizeAll);
+        assert!(move_first.1 > move_alt.1);
+    }
+
+    /// Windows has no slot for these. Guessing would let a scheme's zoom-in
+    /// icon overwrite its actual arrow.
+    #[test]
+    fn cursors_with_no_windows_role_are_skipped_not_guessed() {
+        for stem in [
+            "alias",
+            "cell",
+            "copy",
+            "context-menu",
+            "vertical-text",
+            "zoom-in",
+            "zoom-out",
+            "dnd-ask",
+            "dnd-link",
+            "dnd-none",
+            "pirate",
+            "dot_box_mask",
+        ] {
+            assert_eq!(role_from_filename(stem), None, "{stem} names no Windows role");
+        }
+    }
+
+    /// `vertical-text` must not take IBeam away from `Text`, and `dnd-link`
+    /// must not take Hand away from `Link`.
+    #[test]
+    fn a_near_miss_never_outranks_the_real_thing() {
+        assert!(role_from_filename("vertical-text").is_none());
+        assert_eq!(role_from_filename("Text").map(|(r, _)| r), Some(Role::IBeam));
+        assert!(role_from_filename("dnd-link").is_none());
+        assert_eq!(role_from_filename("Link").map(|(r, _)| r), Some(Role::Hand));
+    }
+
+    #[test]
+    fn an_inf_yields_the_scheme_name_and_its_role_mapping() {
+        let inf = r#"
+[Scheme.Reg]
+HKCU,"Control Panel\Cursors","Arrow",,"%25%\Cursors\Arrow.cur"
+HKCU,"Control Panel\Cursors","Wait",,"%25%\Cursors\Wait.ani"
+HKCU,"Control Panel\Cursors","(Default)",,"Ghost"
+HKCU,"Control Panel\Cursors\Schemes","Ghost",,""
+"#;
+        let (name, pairs) = parse_inf(inf);
+        assert_eq!(name.as_deref(), Some("Ghost"));
+        assert!(pairs.contains(&("Arrow".into(), "Arrow.cur".into())));
+        assert!(pairs.contains(&("Wait".into(), "Wait.ani".into())));
+        // The Schemes subkey is a different key and carries no role.
+        assert_eq!(pairs.len(), 2, "only Control Panel\\Cursors values count");
+    }
+
+    /// An `.inf` names its own files. It does not get to name a path.
+    #[test]
+    fn an_inf_cannot_point_outside_its_own_folder() {
+        let inf = r#"HKCU,"Control Panel\Cursors","Arrow",,"..\..\Windows\System32\evil.cur""#;
+        let (_, pairs) = parse_inf(inf);
+        assert_eq!(pairs, vec![("Arrow".to_owned(), "evil.cur".to_owned())]);
+    }
+
+    #[test]
+    fn folder_names_lose_their_download_hash() {
+        assert_eq!(pretty_folder_name("Skyrim-Set-2-563e85ef"), "Skyrim Set 2");
+        assert_eq!(pretty_folder_name("Ghost-8e871896"), "Ghost");
+        assert_eq!(pretty_folder_name("Geared-Brass-3715df67"), "Geared Brass");
+        // A trailing role word is the site's filing, not part of the name.
+        assert_eq!(
+            pretty_folder_name("glowing-futuristic-arrow-normal-b7dac674"),
+            "Glowing Futuristic Arrow"
+        );
+        // A folder named for the role it fills reads better spelled properly.
+        assert_eq!(pretty_folder_name("sizenwse-319e6096"), "SizeNWSE");
+    }
+
+    /// A raw download filename is not a name to show anyone, but the `--`
+    /// convention's name already is and must survive untouched.
+    #[test]
+    fn raw_download_filenames_are_tidied_but_conventional_ones_are_not() {
+        assert_eq!(pretty_folder_name("sukuna-human-finger-f4e78762"), "Sukuna Human Finger");
+        assert_eq!(pretty_folder_name("paper-airplane-e7ea7488"), "Paper Airplane");
+        // Not a hash, so nothing is stripped.
+        assert_eq!(pretty_folder_name("cur1020"), "Cur1020");
+        // The `--` convention keeps its own name, punctuation and all.
+        assert_eq!(parse_name("Batman & Batarang--cursor--Sweezy").0, "Batman & Batarang");
+    }
+
+    #[test]
+    fn an_author_is_credited_when_the_readme_names_one() {
+        assert_eq!(
+            author_from_readme("Ghost\n=====\n\nAuthor: treetog\n").as_deref(),
+            Some("treetog")
+        );
+        assert_eq!(author_from_readme("no attribution here"), None);
+    }
+
+    /// Readme files are full of emoji, and a line that opens with one used to
+    /// crash the whole import on a byte-index slice.
+    #[test]
+    fn a_readme_full_of_emoji_does_not_crash_the_import() {
+        assert_eq!(author_from_readme("💫 sparkly pack 💫\nAuthor: someone\n").as_deref(), Some("someone"));
+        assert_eq!(author_from_readme("💫"), None);
+        assert_eq!(author_from_readme("by: 🎨 artist"), Some("🎨 artist".to_owned()));
+        // Every prefix, against a line too short to hold it.
+        for line in ["b", "by", "au", "💫b", "🎨"] {
+            let _ = author_from_readme(line);
+        }
     }
 
     #[test]

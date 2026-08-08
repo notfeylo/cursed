@@ -65,13 +65,18 @@ impl RenderSpec {
 
 /// Whether the generated packs appear in the catalog.
 ///
-/// Off. The generated artwork is parametric, so it always reads as variations on
-/// a theme however many are added — and next to real, hand-drawn cursors it just
-/// pads the grid. The built-ins still exist and are still used to fill the roles
-/// an imported cursor does not define; they are simply not offered as choices.
+/// On, and it needs to stay on.
 ///
-/// Flip this back on to restore them.
-const SHOW_GENERATED_PACKS: bool = false;
+/// These packs are the only cursors that exist on a machine which has just
+/// installed Cursed. They are defined in Rust and compiled into the executable,
+/// so they need no download, no unpacking, no network and no database — which is
+/// the entire point of the app: open it, pick a cursor, done.
+///
+/// Turning this off once emptied the catalog for everybody except the one person
+/// who had already imported a folder, so a new user was greeted by an app that
+/// asked them to go and find cursors themselves. An import is an *addition* to
+/// the library. It is never the library.
+const SHOW_GENERATED_PACKS: bool = true;
 
 pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
     let mut out: Vec<PackSummary> = if SHOW_GENERATED_PACKS {
@@ -82,7 +87,10 @@ pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
                 Ok(PackSummary {
                     id: pack.id.to_owned(),
                     name: pack.name.to_owned(),
-                    category: pack.category.as_str(),
+                    // The built-ins are the clean, geometric, recolourable half
+                    // of the catalog — which is what MINIMAL CURSED was named
+                    // for and left empty waiting on.
+                    category: "MINIMAL CURSED",
                     author: "feylo",
                     recolorable: true,
                     animated: pack.animated,
