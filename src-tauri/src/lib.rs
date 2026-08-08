@@ -14,6 +14,7 @@ pub mod cursor;
 pub mod custom;
 pub mod error;
 pub mod hotkeys;
+pub mod idle;
 pub mod packs;
 pub mod paths;
 pub mod session;
@@ -179,6 +180,9 @@ pub fn run() {
                     // or the hotkey, so the watchdog keeps working (PRD §9).
                     api.prevent_close();
                     let _ = window.hide();
+                    // Hidden means idle: hand the webview's resident pages back
+                    // rather than sitting on them for the rest of the session.
+                    idle::release_memory_soon();
                 }
             }
         })

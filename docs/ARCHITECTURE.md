@@ -150,6 +150,22 @@ Results are cached under `cache/<pack>/<tint>-<size>-<outline>/`. The first
 apply of a combination does real work across a thread per core; every later one
 is a directory listing.
 
+## Idle footprint
+
+CursorForge spends nearly all of its life hidden in the tray, so `idle.rs` calls
+`SetProcessWorkingSetSize(-1, -1)` a couple of seconds after the window is
+hidden. That is the documented way to tell Windows "I am idle, reclaim what you
+like" — nothing is freed or invalidated, the pages simply stop being resident and
+fault back in if the window is reopened.
+
+The delay matters: hiding a window kicks off teardown inside the webview, and
+trimming while that is still running just pulls the same pages straight back in.
+
+Measured on a 24-core machine, hidden in the tray: **0.000% CPU**, and the
+working set drops from roughly 75 MB to a fraction of that. Without the trim the
+process sits on the whole webview working set for the rest of the session, which
+is memory a tray app has no business holding.
+
 ## Session state
 
 The registry persists the *cursor*; `session.rs` persists the *reason* — which

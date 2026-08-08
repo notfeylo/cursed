@@ -443,6 +443,7 @@ pub fn frontend_ready(app: AppHandle) -> AppResult<()> {
 pub fn hide_to_tray(app: AppHandle) -> AppResult<()> {
     if let Some(window) = app.get_webview_window("main") {
         window.hide().map_err(|e| AppError::msg(e.to_string()))?;
+        crate::idle::release_memory_soon();
     }
     Ok(())
 }
