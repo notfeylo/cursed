@@ -1,0 +1,79 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CursorForge",
+  "version": "1.0.0",
+  "identifier": "dev.feylo.cursorforge",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "CursorForge",
+        "width": 420,
+        "height": 660,
+        "minWidth": 400,
+        "minHeight": 600,
+        "maxWidth": 520,
+        "maxHeight": 900,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "center": true,
+        "visible": false,
+        "skipTaskbar": false,
+        "dragDropEnabled": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'",
+      "dangerousDisableAssetCspModification": false,
+      "freezePrototype": true,
+      "assetProtocol": {
+        "enable": false,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "createUpdaterArtifacts": false,
+    "publisher": "feylo",
+    "copyright": "Copyright (c) 2026 feylo",
+    "category": "Utility",
+    "shortDescription": "Give your dead cursor a new life.",
+    "longDescription": "CursorForge replaces every Windows pointer role with a crisp, multi-resolution cursor scheme, converts your own images into real .cur / .ani files, and keeps the result from being wiped by theme changes and updates. No administrator rights, no overlay, no added input latency.",
+    "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "allowDowngrades": false,
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false,
+        "languages": ["English"],
+        "compression": "lzma",
+        "installerHooks": "installer-hooks.nsh",
+        "startMenuFolder": "CursorForge"
+      }
+    }
+  },
+  "plugins": {}
+}

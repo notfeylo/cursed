@@ -1,0 +1,7 @@
+# Pinned so a release built here and a release built in CI come from the same
+# compiler. Bump deliberately, in its own commit.
+[toolchain]
+channel = "1.96"
+components = ["clippy", "rustfmt"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+profile = "minimal"

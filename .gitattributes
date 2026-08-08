@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+# Generated catalog artwork. Collapsed in reviews by default — the diff that
+# matters is the pack definition in src-tauri/src/packs/, not 1,152 rendered SVGs.
+assets/packs/** linguist-generated=true
+
+# Binary, so never line-ending-normalised.
+*.woff2 binary
+*.png binary
+*.ico binary
+*.icns binary
+*.cur binary
+*.ani binary
+*.cfpack binary

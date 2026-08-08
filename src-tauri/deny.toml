@@ -1,0 +1,36 @@
+[licenses]
+version = 2
+# Permissive plus the file-level copyleft that resvg / tiny-skia use. Anything
+# else needs a conscious decision, not a silent dependency bump.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    "OFL-1.1",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+# Nothing here should ever pull in a networking stack. If one appears, it means
+# a dependency started phoning home and that is a decision, not an upgrade.
+[[bans.deny]]
+name = "reqwest"
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

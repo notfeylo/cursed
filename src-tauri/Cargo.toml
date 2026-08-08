@@ -1,0 +1,82 @@
+[package]
+name = "cursorforge"
+version = "1.0.0"
+description = "Give your dead cursor a new life."
+authors = ["feylo"]
+license = "MIT"
+repository = "https://github.com/feylo/cursorforge"
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "cursorforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "cursorforge"
+path = "src/main.rs"
+
+# Build-time catalog generator: parametric SVG masters -> multi-resolution .cur.
+# Shares the exact byte writers that ship at runtime, so what we test is what we ship.
+[[bin]]
+name = "genpacks"
+path = "src/bin/genpacks.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-log = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
+
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+    "bmp",
+    "gif",
+] }
+fast_image_resize = { version = "5", features = ["image"] }
+resvg = { version = "0.45", default-features = false }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Networking_WinHttp",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Power",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Note: `tauri-plugin-updater` is deliberately absent. It pulls reqwest+rustls
+# (~2 MB of binary) for a feature that, unsigned, cannot verify anything useful
+# yet. Until code signing is in place the update check is a WinHTTP request to
+# the GitHub Releases API — OS trust store, no extra dependency, no false sense
+# of integrity (PRD §13.7).
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false

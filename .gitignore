@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.vite/
+*.local
+
+# Rust
+src-tauri/target/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+desktop.ini
+
+# Secrets — never commit signing material
+*.key
+.tauri/
