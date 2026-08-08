@@ -120,7 +120,19 @@ fn role_from_hint(text: &str) -> Option<Role> {
 /// "Animated" and then ship a static PNG preview alongside the `.ani`, so
 /// trusting the name puts still images in the animated category and makes the
 /// filter useless.
-fn categorise(name: &str, animated: bool) -> &'static str {
+fn categorise(_name: &str, _animated: bool) -> &'static str {
+    // Everything imported lands in OPTIMAL CURSED for now. MINIMAL CURSED
+    // exists alongside it and is deliberately empty until there is something to
+    // put there — an empty, named shelf is clearer than guessing which cursors
+    // belong on it.
+    "OPTIMAL CURSED"
+}
+
+/// The keyword buckets used before everything was collapsed into one category.
+/// Kept because the moment MINIMAL CURSED gets contents, this is how imports get
+/// sorted into it again.
+#[allow(dead_code)]
+fn categorise_by_keyword(name: &str, animated: bool) -> &'static str {
     let n = name.to_ascii_lowercase();
     const GAMING: [&str; 13] = [
         "game", "knight", "sword", "pickaxe", "craft", "blox", "valorant", "csgo", "fortnite",
@@ -555,21 +567,27 @@ mod tests {
         assert_eq!(parse_name("my-cool-thing").1, None);
     }
 
+    /// Everything imported currently lands in one category on purpose.
+    /// MINIMAL CURSED exists but is empty until there is something to put in it.
     #[test]
-    fn categories_are_roughly_right_rather_than_everything_in_one_heap() {
-        assert_eq!(categorise("Minecraft Enchanted Sword", true), "ANIMATED");
-        assert_eq!(
-            categorise("Minecraft Enchanted Sword Animated", false),
-            "GAMING",
-            "a static file labelled Animated is not animated"
-        );
-        assert_eq!(categorise("Jujutsu Kaisen Sukuna Flame", false), "ANIME");
-        assert_eq!(categorise("Hollow Knight & Game Arrow", false), "GAMING");
-        assert_eq!(categorise("Grey BMW M5", false), "VEHICLES");
-        assert_eq!(categorise("Pixel Racing", false), "VEHICLES");
-        assert_eq!(categorise("Neon Glow Thing", false), "NEON");
-        assert_eq!(categorise("something plain", false), "IMPORTED");
-        assert_eq!(categorise("Batman & Batarang", false), "CHARACTERS");
+    fn every_import_lands_in_optimal_cursed_for_now() {
+        for (name, animated) in [
+            ("Batman & Batarang", false),
+            ("Minecraft Enchanted Sword", true),
+            ("something plain", false),
+            ("", false),
+        ] {
+            assert_eq!(categorise(name, animated), "OPTIMAL CURSED", "for {name:?}");
+        }
+    }
+
+    /// The keyword buckets are kept for when MINIMAL CURSED gets contents, so
+    /// they should still work rather than rot.
+    #[test]
+    fn the_keyword_buckets_still_sort_correctly_when_needed() {
+        assert_eq!(categorise_by_keyword("Grey BMW M5", false), "VEHICLES");
+        assert_eq!(categorise_by_keyword("Sanrio Hello Kitty", false), "ANIME");
+        assert_eq!(categorise_by_keyword("anything", true), "ANIMATED");
     }
 
     #[test]

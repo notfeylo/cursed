@@ -45,31 +45,13 @@ export const ROLE_LABELS: Record<Role, string> = {
   Person: "Person select",
 };
 
-export type Category =
-  | "IMPORTED"
-  | "ANIME"
-  | "VEHICLES"
-  | "PRECISION"
-  | "NEON"
-  | "MINIMAL"
-  | "RETRO"
-  | "GAMING"
-  | "ANIMATED"
-  | "FUN";
+export type Category = "OPTIMAL CURSED" | "MINIMAL CURSED";
 
-/** Imported categories lead, because they are the user's own additions. */
-export const CATEGORIES: Category[] = [
-  "IMPORTED",
-  "ANIME",
-  "VEHICLES",
-  "GAMING",
-  "ANIMATED",
-  "PRECISION",
-  "NEON",
-  "MINIMAL",
-  "RETRO",
-  "FUN",
-];
+/**
+ * MINIMAL CURSED is deliberately empty for now — a named, empty shelf is
+ * clearer than guessing which cursors belong on it.
+ */
+export const CATEGORIES: Category[] = ["OPTIMAL CURSED", "MINIMAL CURSED"];
 
 export interface PackSummary {
   id: string;

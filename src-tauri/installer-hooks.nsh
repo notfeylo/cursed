@@ -21,8 +21,18 @@
   DetailPrint "Restoring your original Windows pointer scheme..."
   ; Runs synchronously and exits immediately; a failure here must not block the
   ; uninstall, so the exit code is popped and ignored.
-  nsExec::ExecToLog '"$INSTDIR\Cursed.exe" --restore-defaults'
-  Pop $0
+  ;
+  ; Both names are tried on purpose. Builds before the executable was renamed
+  ; shipped `cursorforge.exe`, and naming only the current one meant the restore
+  ; silently did nothing on those installs — leaving the registry pointing at
+  ; cursor files the uninstaller was about to delete, which is the exact state
+  ; this hook exists to prevent.
+  IfFileExists "$INSTDIR\Cursed.exe" 0 +3
+    nsExec::ExecToLog '"$INSTDIR\Cursed.exe" --restore-defaults'
+    Pop $0
+  IfFileExists "$INSTDIR\cursorforge.exe" 0 +3
+    nsExec::ExecToLog '"$INSTDIR\cursorforge.exe" --restore-defaults'
+    Pop $0
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

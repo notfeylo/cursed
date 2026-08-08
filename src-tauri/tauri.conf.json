@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cursed",
-  "version": "1.3.0",
+  "mainBinaryName": "Cursed",
+  "version": "1.4.1",
   "identifier": "dev.feylo.cursed",
   "build": {
     "beforeDevCommand": "npm run dev",

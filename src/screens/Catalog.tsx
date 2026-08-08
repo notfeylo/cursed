@@ -148,7 +148,14 @@ export function Catalog() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" onMouseLeave={onLeave}>
         {visible.length === 0 ? (
-          <EmptyState query={query} onReset={() => { setQuery(""); setCategory("ALL"); }} />
+          <EmptyState
+            query={query}
+            empty={packs.length === 0}
+            onReset={() => {
+              setQuery("");
+              setCategory("ALL");
+            }}
+          />
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {visible.map((pack) => (
@@ -273,15 +280,36 @@ function Tile({
   );
 }
 
-function EmptyState({ query, onReset }: { query: string; onReset: () => void }) {
+function EmptyState({
+  query,
+  empty,
+  onReset,
+}: {
+  query: string;
+  /** Nothing has been imported at all, as opposed to nothing matching a filter. */
+  empty: boolean;
+  onReset: () => void;
+}) {
+  const go = useStore((s) => s.go);
+
+  // An empty catalog and an over-filtered one look identical but need opposite
+  // advice, so they say different things.
+  if (empty) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-[12px] text-text">No cursors yet.</p>
+        <p className="text-[11px] text-text-dim">
+          Import a folder of cursors and they will appear here, exactly as they look.
+        </p>
+        <Button onClick={() => go("settings")}>IMPORT A FOLDER</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       <p className="text-[12px] text-text-muted">
         Nothing matches <span className="mono text-text">{query || "that filter"}</span>.
-      </p>
-      <p className="text-[11px] text-text-dim">
-        Try <span className="display text-text-muted">PRECISION</span> for crosshairs, or
-        drop your own PNG under CUSTOM.
       </p>
       <Button variant="ghost" onClick={onReset}>
         SHOW EVERYTHING

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cursed â€” Cursor replacement for Windows</title>
+    <title>Cursed — Cursor replacement for Windows</title>
     <meta
       name="description"
       content="Replace every Windows pointer role with a crisp, multi-resolution cursor scheme, or turn any image into a real .cur or .ani. Free, no account, no telemetry. No administrator rights, no overlay, no added input latency."
@@ -12,7 +12,7 @@
     <link rel="icon" href="favicon.png" type="image/png" />
     <link rel="stylesheet" href="styles.css" />
 
-    <meta property="og:title" content="Cursed â€” Cursor replacement for Windows" />
+    <meta property="og:title" content="Cursed — Cursor replacement for Windows" />
     <meta
       property="og:description"
       content="Your pointer. Possessed. 216 full pointer schemes, all 17 roles, sharp at every DPI. Free, no account, no telemetry."
@@ -77,17 +77,17 @@
           <h2 class="section-label" id="about-h">About</h2>
 
           <p class="lead">
-            Cursed is a Windows application that replaces your mouse pointer â€” all
-            seventeen of its roles â€” with a crisp, multi-resolution cursor scheme. It also
+            Cursed is a Windows application that replaces your mouse pointer — all
+            seventeen of its roles — with a crisp, multi-resolution cursor scheme. It also
             turns any image you drop on it into a real Windows cursor file.
           </p>
 
           <p>
-            Changing a cursor in Windows today means burrowing into Settings â†’ Bluetooth &amp;
-            devices â†’ Mouse â†’ Additional mouse settings â†’ Pointers, then changing seventeen
+            Changing a cursor in Windows today means burrowing into Settings → Bluetooth &amp;
+            devices → Mouse → Additional mouse settings → Pointers, then changing seventeen
             roles one at a time in a file dialog that has not moved on since 1998. Most people
             give up. Third-party packs arrive as zip files full of loose
-            <span class="mono">.cur</span> files, replace only the arrow, ship a single 32Ã—32
+            <span class="mono">.cur</span> files, replace only the arrow, ship a single 32×32
             bitmap that turns to mush at 150% scaling, and get wiped by the next theme change.
           </p>
 
@@ -103,14 +103,14 @@
             cursor tool is a transparent always-on-top window that follows the mouse and paints
             a sprite. That approach is permanently laggy: the window is composited by the
             desktop compositor at your monitor's refresh interval, so it trails the real pointer
-            by one to two frames â€” 8 to 33 ms â€” on any hardware, forever. It also breaks in
+            by one to two frames — 8 to 33 ms — on any hardware, forever. It also breaks in
             fullscreen games and fights with anything else drawing on screen.
           </p>
           <p>
             Cursed does not do that. Every cursor it produces is a real
             <span class="mono">.cur</span> or <span class="mono">.ani</span> file registered
             with Windows, which means it is drawn by the graphics card's dedicated hardware
-            cursor plane â€” the same path Windows uses for its own arrow. It updates at your
+            cursor plane — the same path Windows uses for its own arrow. It updates at your
             mouse's polling rate with no compositing step at all.
             <strong>Zero added input latency is not a target here; it is a property of the
             design.</strong>
@@ -136,7 +136,7 @@
           <h3>What it changes</h3>
           <p>
             Only per-user pointer settings, under
-            <span class="mono">HKCU\Control Panel\Cursors</span> â€” the same settings the Windows
+            <span class="mono">HKCU\Control Panel\Cursors</span> — the same settings the Windows
             Settings app exposes. It needs no administrator rights, never writes machine-wide
             settings, installs no driver or service, and injects no code into any other process.
           </p>
@@ -151,7 +151,7 @@
             <li>
               <span class="k">Catalog</span>
               <span class="v"
-                >216 full schemes across seven categories â€” precision, neon, minimal, retro,
+                >216 full schemes across seven categories — precision, neon, minimal, retro,
                 gaming, animated and fun. Each one defines all seventeen pointer roles, so you
                 never end up with a neon arrow and a stock Windows hourglass.</span
               >
@@ -200,7 +200,7 @@
               <span class="k">Blend</span>
               <span class="v"
                 >Use your own image as the arrow and a catalog scheme for the other sixteen
-                roles â€” the mode that turns one picture into a coherent pointer set.</span
+                roles — the mode that turns one picture into a coherent pointer set.</span
               >
             </li>
             <li>
@@ -213,7 +213,7 @@
             <li>
               <span class="k">Presets</span>
               <span class="v"
-                >Save the whole pointer â€” scheme, colour, size, outline â€” and switch between
+                >Save the whole pointer — scheme, colour, size, outline — and switch between
                 saved presets from the tray or a global hotkey. Export and share them as a single
                 file.</span
               >
@@ -229,7 +229,7 @@
 
           <h3>Requirements</h3>
           <p>
-            Windows 10 or 11, 64-bit. Nothing else to install â€” the installer fetches the
+            Windows 10 or 11, 64-bit. Nothing else to install — the installer fetches the
             WebView2 runtime automatically if your machine does not already have it, which almost
             every Windows 11 machine does.
           </p>
@@ -239,12 +239,12 @@
             Some applications draw their own pointer instead of asking Windows for one. Many
             games using raw mouse input, some remote-desktop sessions, and a few
             hardware-accelerated canvases fall into this category, and no cursor tool can change
-            those without injecting code into them â€” which Cursed will never do, because
+            those without injecting code into them — which Cursed will never do, because
             that is what trips anti-cheat systems and antivirus heuristics. This is an explicit
             non-goal, not an oversight.
           </p>
           <p>
-            Secure surfaces â€” the administrator prompt, Ctrl+Alt+Delete, the sign-in screen â€”
+            Secure surfaces — the administrator prompt, Ctrl+Alt+Delete, the sign-in screen —
             always use the system cursors. That is Windows working correctly.
           </p>
           <p>
@@ -261,7 +261,7 @@
 
           <a
             class="download-btn"
-            href="https://github.com/notfeylo/cursorforge/releases/download/v1.2.0/Cursed_1.2.0_x64-setup.exe"
+            href="https://github.com/notfeylo/cursorforge/releases/latest/download/Cursed-Setup.exe"
             download
             rel="noopener noreferrer"
           >
@@ -288,11 +288,11 @@
           </div>
 
           <dl class="spec">
-            <div><dt>Version</dt><dd>1.2.0</dd></div>
-            <div><dt>Size</dt><dd>2.4 MB</dd></div>
+            <div><dt>Version</dt><dd>Always latest</dd></div>
+            <div><dt>Size</dt><dd>~2.5 MB</dd></div>
             <div><dt>Platform</dt><dd>Windows 10 / 11, x64</dd></div>
             <div><dt>Install</dt><dd>Per-user, no admin</dd></div>
-            <div><dt>Schemes</dt><dd>216 Ã— 17 roles</dd></div>
+            <div><dt>Schemes</dt><dd>216 × 17 roles</dd></div>
             <div><dt>Licence</dt><dd>MIT</dd></div>
           </dl>
 
@@ -300,22 +300,26 @@
             The installer is not code-signed yet, so your browser or SmartScreen may warn
             <span class="mono">Windows protected your PC</span>. Select
             <strong>More info</strong>, then <strong>Run anyway</strong>. That is a reputation
-            warning shown to all new unsigned software, not a detection of anything harmful â€” the
+            warning shown to all new unsigned software, not a detection of anything harmful — the
             full source is public and you can build it yourself.
           </p>
 
           <p class="note">
-            Changed your mind? <strong>Settings â†’ Restore Windows Default</strong> puts every
+            Changed your mind? <strong>Settings → Restore Windows Default</strong> puts every
             pointer back exactly as it was, and the uninstaller does it for you automatically.
           </p>
 
           <p class="note">
-            Verify your download (SHA-256):<br />
-            <span class="mono checksum" id="checksum">9ca930593eead9d92b935d278e43f40411b18d151078752b4ef3689cc9a3c925</span>
+            Verify your download against the checksums published with the release:<br />
+            <a
+              href="https://github.com/notfeylo/cursorforge/releases/latest/download/SHA256SUMS.txt"
+              rel="noopener noreferrer"
+              >SHA256SUMS.txt</a
+            >
           </p>
 
           <p class="note">
-            <a href="https://github.com/notfeylo/cursorforge" rel="noopener noreferrer">Source on GitHub</a> Â·
+            <a href="https://github.com/notfeylo/cursorforge" rel="noopener noreferrer">Source on GitHub</a> ·
             <a href="https://github.com/notfeylo/cursorforge/releases" rel="noopener noreferrer">All releases</a>
           </p>
         </div>

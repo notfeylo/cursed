@@ -63,22 +63,36 @@ impl RenderSpec {
     }
 }
 
+/// Whether the generated packs appear in the catalog.
+///
+/// Off. The generated artwork is parametric, so it always reads as variations on
+/// a theme however many are added — and next to real, hand-drawn cursors it just
+/// pads the grid. The built-ins still exist and are still used to fill the roles
+/// an imported cursor does not define; they are simply not offered as choices.
+///
+/// Flip this back on to restore them.
+const SHOW_GENERATED_PACKS: bool = false;
+
 pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
-    let mut out: Vec<PackSummary> = styles::all()
-        .into_iter()
-        .map(|pack| {
-            let preview = preview_uri(&pack, pack.default_tint)?;
-            Ok(PackSummary {
-                id: pack.id.to_owned(),
-                name: pack.name.to_owned(),
-                category: pack.category.as_str(),
-                author: "feylo",
-                recolorable: true,
-                animated: pack.animated,
-                preview,
+    let mut out: Vec<PackSummary> = if SHOW_GENERATED_PACKS {
+        styles::all()
+            .into_iter()
+            .map(|pack| {
+                let preview = preview_uri(&pack, pack.default_tint)?;
+                Ok(PackSummary {
+                    id: pack.id.to_owned(),
+                    name: pack.name.to_owned(),
+                    category: pack.category.as_str(),
+                    author: "feylo",
+                    recolorable: true,
+                    animated: pack.animated,
+                    preview,
+                })
             })
-        })
-        .collect::<AppResult<_>>()?;
+            .collect::<AppResult<_>>()?
+    } else {
+        Vec::new()
+    };
 
     // The user's own imports sit at the front: they went to the trouble of
     // adding them, so they should not have to scroll past 216 built-ins first.
@@ -112,13 +126,8 @@ pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
 /// values and fall back rather than leaking memory for arbitrary strings.
 fn leak_category(category: &str) -> &'static str {
     match category {
-        "ANIMATED" => "ANIMATED",
-        "ANIME" => "ANIME",
-        "GAMING" => "GAMING",
-        "VEHICLES" => "VEHICLES",
-        "NEON" => "NEON",
-        "RETRO" => "RETRO",
-        _ => "IMPORTED",
+        "MINIMAL CURSED" => "MINIMAL CURSED",
+        _ => "OPTIMAL CURSED",
     }
 }
 
