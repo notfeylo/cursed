@@ -398,6 +398,8 @@ export function SettingsScreen() {
             hint="Local rotating file; takes effect on next launch"
           />
 
+          <Diagnostics />
+
           <div className="pt-3">
             {confirmRestore ? (
               <div className="space-y-2">
@@ -423,6 +425,63 @@ export function SettingsScreen() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * A copyable support report.
+ *
+ * "It doesn't work" is unanswerable, and asking a non-technical user to find
+ * their AppData folder or read a registry key never ends well. One button that
+ * produces pasteable text turns every future report into something actionable.
+ */
+function Diagnostics() {
+  const [report, setReport] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const load = async () => {
+    setFailed(null);
+    try {
+      setReport(await ipc.getDiagnostics());
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "The report could not be built.");
+    }
+  };
+
+  const copy = async () => {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(report);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard access can be refused; the text is on screen and
+      // selectable either way, so this is not worth an error banner.
+    }
+  };
+
+  return (
+    <Field label="Diagnostics" hint="Paste this into a bug report">
+      {report === null ? (
+        <Button full variant="ghost" onClick={() => void load()}>
+          BUILD REPORT
+        </Button>
+      ) : (
+        <div className="space-y-2">
+          <pre className="mono max-h-44 overflow-auto rounded-xs border border-border bg-bg p-2 text-[10px] leading-relaxed whitespace-pre text-text-dim select-text">
+            {report}
+          </pre>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" onClick={() => void load()}>
+              REFRESH
+            </Button>
+            <Button onClick={() => void copy()}>{copied ? "COPIED" : "COPY REPORT"}</Button>
+          </div>
+        </div>
+      )}
+      {failed && <p className="mt-1 text-[11px] text-danger">{failed}</p>}
+    </Field>
   );
 }
 

@@ -125,6 +125,8 @@ export const getCacheSize = () => call<number>("get_cache_size");
 export const clearCache = () => call<number>("clear_cache");
 export const getLegalDoc = (kind: "terms" | "privacy" | "licenses") =>
   call<string>("get_legal_doc", { kind });
+/** A pasteable plain-text support report. */
+export const getDiagnostics = () => call<string>("get_diagnostics");
 export const getBuildInfo = () =>
   call<{ version: string; commit: string; target: string }>("get_build_info");
 export interface UpdateStatus {

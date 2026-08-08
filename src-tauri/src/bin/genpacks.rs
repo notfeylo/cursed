@@ -147,6 +147,20 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);
     }
+    if args.get(1).map(String::as_str) == Some("--diagnostics") {
+        // The same report the Diagnostics panel produces, reachable without a
+        // window — which is what you want when the window is the problem.
+        match cursorforge_lib::commands::get_diagnostics() {
+            Ok(report) => {
+                println!("{report}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("diagnostics failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Relative to the caller's working directory, which for `cargo run` is
     // wherever the command was invoked — the repo root, via `npm run`. Passing

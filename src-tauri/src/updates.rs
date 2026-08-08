@@ -513,6 +513,49 @@ pub fn auto_update_in_background() {
 mod tests {
     use super::*;
 
+    /// The three files that carry a version must agree.
+    ///
+    /// `Cargo.toml` is what the updater reports as the running version;
+    /// `tauri.conf.json` is what the installer stamps onto the `.exe`. When they
+    /// drift the app compares a version it is not actually running against the
+    /// newest release, so it either offers an update already installed or stays
+    /// quiet about one that is not.
+    #[test]
+    fn every_file_that_carries_a_version_agrees() {
+        let cargo = env!("CARGO_PKG_VERSION");
+
+        let tauri: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let package: serde_json::Value =
+            serde_json::from_str(include_str!("../../package.json")).expect("package.json");
+
+        assert_eq!(
+            tauri["version"].as_str(),
+            Some(cargo),
+            "tauri.conf.json disagrees with Cargo.toml"
+        );
+        assert_eq!(
+            package["version"].as_str(),
+            Some(cargo),
+            "package.json disagrees with Cargo.toml"
+        );
+    }
+
+    /// The release asset is matched by name, and the uninstaller hook calls the
+    /// binary by name, so both have to stay what the code expects.
+    #[test]
+    fn the_bundle_is_named_what_the_rest_of_the_code_expects() {
+        let tauri: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        assert_eq!(tauri["productName"].as_str(), Some("Cursed"));
+        assert_eq!(tauri["mainBinaryName"].as_str(), Some("Cursed"));
+        // Per-user, so an update never needs an administrator prompt.
+        assert_eq!(
+            tauri["bundle"]["windows"]["nsis"]["installMode"].as_str(),
+            Some("currentUser")
+        );
+    }
+
     #[test]
     fn version_comparison_handles_the_usual_shapes() {
         assert!(is_newer("1.1.0", "1.0.0"));

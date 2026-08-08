@@ -438,6 +438,50 @@ mod tests {
         }
     }
 
+    /// The bug this exists to prevent: the catalog was shipped with the
+    /// built-ins switched off, so every machine without an import showed an
+    /// empty grid. Nothing failed — the app correctly reported an empty
+    /// library, because the library was empty.
+    ///
+    /// A user's imports live in their own `%APPDATA%`, so they cannot be what
+    /// makes the catalog non-empty for anybody else. Only the compiled-in packs
+    /// can, and this asserts they are actually offered.
+    #[test]
+    fn the_built_in_catalog_is_never_empty() {
+        // Deliberately goes through the same call the catalog screen makes,
+        // rather than reading the flag: what matters is what a fresh machine
+        // actually receives, and the flag is only one way to get that wrong.
+        let summaries = list_summaries().expect("the catalog must load");
+        let built_in = summaries.iter().filter(|s| s.author == "feylo").count();
+
+        assert!(
+            built_in >= 100,
+            "only {built_in} built-in packs reached the catalog; a machine with \
+             no imports would look bare or empty"
+        );
+
+        // Every tile must arrive as a data URI. The webview holds no filesystem
+        // capability and the asset protocol is disabled, so any other shape of
+        // preview silently renders nothing.
+        for summary in summaries.iter().filter(|s| s.author == "feylo") {
+            assert!(
+                summary.preview.starts_with("data:image/png;base64,"),
+                "{} did not produce a data URI",
+                summary.id
+            );
+        }
+    }
+
+    /// Two packs sharing an id would collide in the cache directory, so one
+    /// would serve the other's rendered files.
+    #[test]
+    fn built_in_pack_ids_are_unique() {
+        let mut seen = std::collections::BTreeSet::new();
+        for pack in styles::all() {
+            assert!(seen.insert(pack.id.to_owned()), "duplicate pack id: {}", pack.id);
+        }
+    }
+
     #[test]
     fn cache_keys_separate_every_visual_choice() {
         let base = spec();

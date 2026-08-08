@@ -432,6 +432,145 @@ pub fn get_build_info() -> AppResult<BuildInfo> {
     })
 }
 
+/// A plain-text report the user can copy straight into a message.
+///
+/// This exists because "it doesn't work" is unanswerable. Everything in it has
+/// already been the difference between working and not: which version is really
+/// running, whether the data directory can be written, how many cursors the
+/// catalog can actually offer, and whether the seventeen registry values still
+/// point at files that exist.
+///
+/// It carries no personal data beyond paths inside the user's own profile,
+/// because the entire point is that it can be pasted to a stranger.
+#[tauri::command]
+pub fn get_diagnostics() -> AppResult<String> {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+
+    let _ = writeln!(out, "CURSED DIAGNOSTICS");
+    let _ = writeln!(
+        out,
+        "version {}   commit {}   arch {}",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("CURSORFORGE_COMMIT").unwrap_or("local"),
+        std::env::consts::ARCH
+    );
+    let _ = writeln!(
+        out,
+        "exe     {}",
+        std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|e| e.to_string())
+    );
+
+    // A profile that cannot be written is the difference between a working
+    // catalog and a screen with nothing on it.
+    let _ = writeln!(out, "\nSTORAGE");
+    for (label, dir) in [
+        ("data  ", paths::root()),
+        ("cache ", paths::cache_dir()),
+        ("custom", paths::custom_dir()),
+        ("backup", paths::backup_dir()),
+    ] {
+        match dir {
+            Ok(path) => {
+                let exists = path.is_dir();
+                let writable = exists && {
+                    let probe = path.join(".write-probe");
+                    let ok = std::fs::write(&probe, b"x").is_ok();
+                    let _ = std::fs::remove_file(&probe);
+                    ok
+                };
+                let _ = writeln!(out, "{label}  exists={exists} writable={writable}  {}", path.display());
+            }
+            Err(e) => {
+                let _ = writeln!(out, "{label}  UNAVAILABLE: {e}");
+            }
+        }
+    }
+
+    // A built-in count of zero is a bug, not a preference.
+    let built_in = crate::packs::styles::all().len();
+    let imported = crate::import::list().map(|v| v.len()).unwrap_or(0);
+    let _ = writeln!(out, "\nCATALOG");
+    let _ = writeln!(out, "built-in {built_in}   imported {imported}   total {}", built_in + imported);
+    if built_in == 0 {
+        let _ = writeln!(out, "!! the built-in catalog is empty -- this is a bug, please report it");
+    }
+    let _ = writeln!(
+        out,
+        "cache    {:.2} MB",
+        catalog::cache_size().unwrap_or(0) as f64 / 1_048_576.0
+    );
+
+    // What Windows is pointing at right now, and whether it is still there. A
+    // missing file is a cursor that silently reverts to the default.
+    let _ = writeln!(out, "\nREGISTRY  HKCU\\Control Panel\\Cursors");
+    let _ = writeln!(
+        out,
+        "scheme  {}",
+        crate::cursor::scheme::read_scheme_name().unwrap_or_else(|_| "(none)".into())
+    );
+    for role in crate::cursor::roles::ALL_ROLES {
+        match crate::cursor::scheme::read_role(role) {
+            Ok(value) if value.trim().is_empty() => {
+                let _ = writeln!(out, "  {:<12} (empty -- Windows default)", role.registry_value());
+            }
+            Ok(value) => {
+                let present = std::path::Path::new(&crate::util::expand_env(&value)).exists();
+                let _ = writeln!(
+                    out,
+                    "  {:<12} {value}{}",
+                    role.registry_value(),
+                    if present { "" } else { "   << FILE MISSING" }
+                );
+            }
+            Err(e) => {
+                let _ = writeln!(out, "  {:<12} unreadable: {e}", role.registry_value());
+            }
+        }
+    }
+
+    let _ = writeln!(out, "\nSAFETY NET");
+    let _ = writeln!(
+        out,
+        "original scheme snapshot  {}",
+        paths::original_scheme_file()
+            .map(|p| p.is_file().to_string())
+            .unwrap_or_else(|e| e.to_string())
+    );
+    let _ = writeln!(out, "applied state recorded    {}", crate::session::load().is_some());
+
+    let _ = writeln!(out, "\nUPDATES");
+    let _ = writeln!(out, "endpoint  {}", updates::RELEASES_URL);
+    let state = updates::state();
+    let _ = writeln!(
+        out,
+        "checking={} downloading={} ready={}",
+        state.checking, state.downloading, state.ready
+    );
+    match &state.status {
+        Some(s) => {
+            let _ = writeln!(
+                out,
+                "current {}   latest {}   newer {}",
+                s.current,
+                s.latest.clone().unwrap_or_else(|| "(unknown)".into()),
+                s.newer_available
+            );
+        }
+        None => {
+            let _ = writeln!(out, "no check has completed yet");
+        }
+    }
+    // Verbatim. A paraphrased error is a useless error.
+    if let Some(err) = &state.error {
+        let _ = writeln!(out, "last error: {err}");
+    }
+
+    Ok(out)
+}
+
 #[tauri::command]
 pub fn check_for_updates() -> AppResult<updates::UpdateStatus> {
     updates::check()

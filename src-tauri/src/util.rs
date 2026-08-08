@@ -43,6 +43,72 @@ pub fn strip_bom(text: &str) -> &str {
     text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
+/// Expands `%VAR%` the way Windows does in registry paths.
+///
+/// Cursor paths in `HKCU\Control Panel\Cursors` are stored with the variables
+/// still in them — `%SystemRoot%\Cursors\aero_arrow.cur`. To answer "does that
+/// file still exist", the variables have to come out first. An unknown variable
+/// is left exactly as it was, so the result stays recognisable in a report
+/// rather than turning into a path with a hole in it.
+pub fn expand_env(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+
+    while let Some(open) = rest.find('%') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        match after.find('%') {
+            Some(close) => {
+                let name = &after[..close];
+                match std::env::var(name) {
+                    Ok(value) => out.push_str(&value),
+                    // Keep it verbatim, delimiters and all.
+                    Err(_) => {
+                        out.push('%');
+                        out.push_str(name);
+                        out.push('%');
+                    }
+                }
+                rest = &after[close + 1..];
+            }
+            None => {
+                // A lone `%` is literal.
+                out.push('%');
+                out.push_str(after);
+                return out;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(test)]
+mod expand_env_tests {
+    use super::expand_env;
+
+    #[test]
+    fn a_known_variable_is_replaced_and_an_unknown_one_is_left_alone() {
+        std::env::set_var("CURSED_TEST_DIR", r"C:\somewhere");
+        assert_eq!(
+            expand_env(r"%CURSED_TEST_DIR%\Cursors\arrow.cur"),
+            r"C:\somewhere\Cursors\arrow.cur"
+        );
+        // Left verbatim, so a report still shows what the registry actually says.
+        assert_eq!(
+            expand_env(r"%NO_SUCH_VARIABLE_HERE%\x.cur"),
+            r"%NO_SUCH_VARIABLE_HERE%\x.cur"
+        );
+    }
+
+    #[test]
+    fn text_without_variables_survives_unchanged() {
+        for text in [r"C:\Windows\Cursors\aero_arrow.cur", "", "100%", "50% and 60"] {
+            assert_eq!(expand_env(text), text, "{text:?}");
+        }
+    }
+}
+
 /// Parses `#RRGGBB` (or `#RGB`) into linear 8-bit channels. Anything else is
 /// rejected rather than silently defaulted — a bad tint should surface as an
 /// error, not as a black cursor.

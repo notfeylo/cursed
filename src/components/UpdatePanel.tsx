@@ -158,7 +158,28 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
         </>
       )}
 
-      {message && <p className="mt-2 text-center text-[11px] text-danger">{message}</p>}
+      {message && (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-center text-[11px] break-words text-danger">{message}</p>
+          {/* Never a dead end. Whatever went wrong — no network, a proxy, an
+              antivirus holding the installer — the releases page still works in
+              a browser, so the user is one click from the same file. */}
+          <Button
+            full
+            variant="ghost"
+            onClick={() =>
+              void ipc
+                .openExternal("https://github.com/notfeylo/cursorforge/releases/latest")
+                .catch(() => undefined)
+            }
+          >
+            DOWNLOAD IT MANUALLY
+          </Button>
+          <p className="text-center text-[10px] text-text-dim">
+            Opens the releases page in your browser.
+          </p>
+        </div>
+      )}
     </Card>
   );
 }

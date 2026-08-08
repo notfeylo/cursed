@@ -56,11 +56,21 @@ here; it is a property of the design.
 
 ## Install
 
-Download `Cursed_1.1.0_x64-setup.exe` from
-[Releases](https://github.com/notfeylo/cursorforge/releases) and double-click it.
+Download and double-click:
+
+**[Cursed-Setup.exe](https://github.com/notfeylo/cursorforge/releases/latest/download/Cursed-Setup.exe)**
+· [all releases](https://github.com/notfeylo/cursorforge/releases)
+· [checksums](https://github.com/notfeylo/cursorforge/releases/latest/download/SHA256SUMS.txt)
+
+That link always resolves to the newest release. It is deliberately not a
+version-specific filename — the previous wording named a build five versions
+old and stayed that way, because publishing a release does not edit prose.
 
 Per-user install under `%LOCALAPPDATA%\Cursed` — **no UAC prompt**, no
 terminal, no PowerShell.
+
+Every install carries the full built-in cursor library. Nothing is downloaded on
+first run and nothing needs importing.
 
 ## Build from source
 

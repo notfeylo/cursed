@@ -129,6 +129,7 @@ pub fn run() {
             commands::clear_cache,
             commands::get_legal_doc,
             commands::get_build_info,
+            commands::get_diagnostics,
             commands::check_for_updates,
             commands::download_update,
             commands::install_update,
