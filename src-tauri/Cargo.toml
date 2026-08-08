@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Give your dead cursor a new life."
 authors = ["feylo"]
 license = "MIT"
-repository = "https://github.com/feylo/cursorforge"
+repository = "https://github.com/notfeylo/cursorforge"
 edition = "2021"
 rust-version = "1.82"
 

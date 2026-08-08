@@ -200,6 +200,72 @@ pub fn all() -> Vec<PackDef> {
         pack("fun-rune", "RUNE", Fun, Builder::new().form(Chevron).fill(Hairline).glow(0.5).reticle(Bracket).done(), "#A24BFF"),
         pack("fun-circuit", "CIRCUIT", Fun, Builder::new().form(Pixel).fill(Outline).reticle(GapCross).done(), "#33D6A6"),
         pack("fun-sticker", "STICKER", Fun, Builder::new().round().weight(8.0).reticle(Circle).done(), "#FF7A2E"),
+
+        // ── PRECISION II ──────────────────────────────────────
+        pack("precision-square", "SQUARE", Precision, Builder::new().form(Slim).reticle(Square).done(), "#EDF1F7"),
+        pack("precision-corner", "CORNER", Precision, Builder::new().form(Slim).reticle(CornerDot).done(), "#EDF1F7"),
+        pack("precision-saltire", "SALTIRE", Precision, Builder::new().form(Slim).reticle(Saltire).done(), "#EDF1F7"),
+        pack("precision-hex", "HEX", Precision, Builder::new().form(Slim).reticle(Hex).done(), "#EDF1F7"),
+        pack("precision-grid", "GRID", Precision, Builder::new().form(Slim).fill(Hairline).reticle(Grid).done(), "#EDF1F7"),
+        pack("precision-rings", "RINGS", Precision, Builder::new().form(Slim).reticle(Rings).done(), "#EDF1F7"),
+        pack("precision-bar", "BAR", Precision, Builder::new().form(Slim).reticle(Bar).done(), "#EDF1F7"),
+        pack("precision-caret", "CARET", Precision, Builder::new().form(Slim).reticle(Caret).done(), "#EDF1F7"),
+
+        // ── NEON II ───────────────────────────────────────────
+        pack("neon-halo", "HALO", Neon, Builder::new().form(Round).glow(0.9).round().reticle(Rings).done(), "#5CB8FF"),
+        pack("neon-flux", "FLUX", Neon, Builder::new().form(Kite).glow(0.85).reticle(Arc).done(), "#33D6A6"),
+        pack("neon-nova", "NOVA", Neon, Builder::new().form(Wedge).glow(0.95).reticle(Star).done(), "#FFD23D"),
+        pack("neon-signal", "SIGNAL", Neon, Builder::new().form(Slim).glow(0.8).reticle(Bar).done(), "#FF3DD8"),
+        pack("neon-drift", "DRIFT", Neon, Builder::new().form(Split).glow(0.85).reticle(Caret).done(), "#A24BFF"),
+        pack("neon-pulse-x", "PULSE X", Neon, Builder::new().form(Round).glow(0.9).round().reticle(Saltire).done(), "#FF7A2E"),
+
+        // ── MINIMAL II ────────────────────────────────────────
+        pack("minimal-thread", "THREAD", Minimal, Builder::new().form(Slim).fill(Hairline).weight(2.0).reticle(Bar).done(), "#EDF1F7"),
+        pack("minimal-pebble", "PEBBLE", Minimal, Builder::new().form(Round).round().reticle(Dot).done(), "#EDF1F7"),
+        pack("minimal-notch-x", "NOTCH X", Minimal, Builder::new().form(Split).reticle(Notch).done(), "#EDF1F7"),
+        pack("minimal-quill", "QUILL", Minimal, Builder::new().form(Kite).fill(Hairline).reticle(Caret).done(), "#EDF1F7"),
+        pack("minimal-block", "BLOCK", Minimal, Builder::new().form(Wedge).reticle(Square).done(), "#EDF1F7"),
+        pack("minimal-arc", "ARC", Minimal, Builder::new().form(Round).fill(Outline).reticle(Arc).done(), "#EDF1F7"),
+        pack("minimal-chalk", "CHALK", Minimal, Builder::new().form(Slim).round().weight(6.5).reticle(Saltire).done(), "#EDF1F7"),
+        pack("minimal-trace", "TRACE", Minimal, Builder::new().form(Split).fill(Hairline).reticle(Grid).done(), "#EDF1F7"),
+
+        // ── RETRO II ──────────────────────────────────────────
+        pack("retro-vector", "VECTOR CRT", Retro, Builder::new().form(Pixel).fill(Hairline).glow(0.45).reticle(Square).done(), "#33D6A6"),
+        pack("retro-mono", "MONO CRT", Retro, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
+        pack("retro-tape", "TAPE", Retro, Builder::new().form(Wedge).reticle(Bar).done(), "#FF7A2E"),
+        pack("retro-cassette", "CASSETTE", Retro, Builder::new().form(Pixel).reticle(Rings).done(), "#FFD23D"),
+        pack("retro-plasma", "PLASMA TUBE", Retro, Builder::new().form(Pixel).glow(0.6).reticle(Star).done(), "#FF3DD8"),
+        pack("retro-bevel", "BEVEL CRT", Retro, Builder::new().form(Wedge).fill(Outline).reticle(Hex).done(), "#EDF1F7"),
+
+        // ── GAMING II ─────────────────────────────────────────
+        pack("gaming-scope", "SCOPE", Gaming, Builder::new().form(Slim).reticle(Rings).done(), "#33D6A6"),
+        pack("gaming-mark", "MARK", Gaming, Builder::new().form(Slim).reticle(Square).done(), "#2E8BFF"),
+        pack("gaming-flick", "FLICK", Gaming, Builder::new().form(Slim).reticle(Saltire).done(), "#FF4D5E"),
+        pack("gaming-burst", "BURST", Gaming, Builder::new().form(Slim).reticle(Star).done(), "#FFD23D"),
+        pack("gaming-strafe", "STRAFE", Gaming, Builder::new().form(Slim).reticle(Caret).done(), "#A24BFF"),
+        pack("gaming-hold", "HOLD", Gaming, Builder::new().form(Slim).reticle(CornerDot).done(), "#33D6A6"),
+        pack("gaming-lane", "LANE", Gaming, Builder::new().form(Slim).reticle(Bar).done(), "#2E8BFF"),
+        pack("gaming-hexlock", "HEXLOCK", Gaming, Builder::new().form(Slim).reticle(Hex).done(), "#FF7A2E"),
+        pack("gaming-arcshot", "ARCSHOT", Gaming, Builder::new().form(Blade).reticle(Arc).done(), "#7DFF3D"),
+        pack("gaming-mesh", "MESH", Gaming, Builder::new().form(Blade).fill(Hairline).reticle(Grid).done(), "#8AE9FF"),
+
+        // ── ANIMATED II ───────────────────────────────────────
+        pack("animated-halo", "HALO SPIN", Animated, Builder::new().form(Round).glow(0.75).round().reticle(Rings).done(), "#5CB8FF"),
+        pack("animated-sweep", "SWEEP", Animated, Builder::new().form(Slim).reticle(Arc).done(), "#33D6A6"),
+        pack("animated-flicker", "FLICKER", Animated, Builder::new().form(Split).reticle(Bar).done(), "#FF3DD8"),
+        pack("animated-beacon", "BEACON", Animated, Builder::new().form(Wedge).glow(0.8).reticle(Star).done(), "#FFD23D"),
+        pack("animated-drift-x", "DRIFT X", Animated, Builder::new().form(Kite).glow(0.6).reticle(Caret).done(), "#A24BFF"),
+        pack("animated-lattice", "LATTICE", Animated, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
+
+        // ── FUN II ────────────────────────────────────────────
+        pack("fun-bubble", "BUBBLE", Fun, Builder::new().form(Round).round().weight(7.5).reticle(Rings).done(), "#5CB8FF"),
+        pack("fun-comet-x", "COMET X", Fun, Builder::new().form(Kite).glow(0.8).reticle(Star).done(), "#FF7A2E"),
+        pack("fun-paper-x", "PAPER X", Fun, Builder::new().form(Split).fill(Outline).reticle(Hex).done(), "#EDF1F7"),
+        pack("fun-candy", "CANDY", Fun, Builder::new().form(Round).round().glow(0.5).reticle(Caret).done(), "#FF3DD8"),
+        pack("fun-anvil", "ANVIL", Fun, Builder::new().form(Wedge).weight(6.0).reticle(Square).done(), "#EDF1F7"),
+        pack("fun-prism-x", "PRISM X", Fun, Builder::new().form(Kite).glow(0.7).reticle(Saltire).done(), "#A24BFF"),
+        pack("fun-loop", "LOOP", Fun, Builder::new().form(Round).fill(Outline).reticle(Arc).done(), "#33D6A6"),
+        pack("fun-static", "STATIC", Fun, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
     ]
 }
 
@@ -212,9 +278,14 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
+    /// The spec set 64 as the v1 floor. Growing past it is fine; dropping below
+    /// it is a regression, and a silent duplicate that shrinks the list would
+    /// otherwise go unnoticed.
     #[test]
-    fn the_catalog_ships_sixty_four_packs() {
-        assert_eq!(all().len(), 64, "PRD §7 targets 64 full schemes");
+    fn the_catalog_meets_or_beats_the_target() {
+        let count = all().len();
+        assert!(count >= 64, "catalog shrank to {count}; the v1 floor is 64");
+        assert_eq!(count, 116, "update this when packs are added deliberately");
     }
 
     #[test]
@@ -254,11 +325,25 @@ mod tests {
                 "{category:?} has no packs"
             );
         }
-        assert_eq!(
-            packs.iter().filter(|p| p.category == Category::Gaming).count(),
-            12,
-            "PRD §7 asks for twelve gaming reticles"
+        assert!(
+            packs.iter().filter(|p| p.category == Category::Gaming).count() >= 12,
+            "PRD §7 asks for at least twelve gaming reticles"
         );
+
+        // No category should be a token single entry — an empty-looking filter
+        // pill is worse than not offering the filter.
+        for category in [
+            Category::Precision,
+            Category::Neon,
+            Category::Minimal,
+            Category::Retro,
+            Category::Gaming,
+            Category::Animated,
+            Category::Fun,
+        ] {
+            let count = packs.iter().filter(|p| p.category == category).count();
+            assert!(count >= 6, "{category:?} has only {count} packs");
+        }
     }
 
     #[test]

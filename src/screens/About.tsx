@@ -118,7 +118,7 @@ export function About() {
             <Button
               variant="ghost"
               onClick={() =>
-                void ipc.openExternal("https://github.com/feylo/cursorforge").catch(() => undefined)
+                void ipc.openExternal("https://github.com/notfeylo/cursorforge").catch(() => undefined)
               }
             >
               GITHUB
@@ -127,7 +127,7 @@ export function About() {
               variant="ghost"
               onClick={() =>
                 void ipc
-                  .openExternal("https://github.com/feylo/cursorforge/issues")
+                  .openExternal("https://github.com/notfeylo/cursorforge/issues")
                   .catch(() => undefined)
               }
             >

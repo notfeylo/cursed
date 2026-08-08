@@ -1,0 +1,131 @@
+{
+  "animated": false,
+  "author": "feylo",
+  "category": "PRECISION",
+  "id": "precision-caret",
+  "license": "MIT",
+  "name": "CARET",
+  "recolorable": true,
+  "roles": {
+    "AppStarting": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "AppStarting.svg"
+    },
+    "Arrow": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "Arrow.svg"
+    },
+    "Crosshair": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "Crosshair.svg"
+    },
+    "Hand": {
+      "hotspot": [
+        0.3400000035762787,
+        0.05999999865889549
+      ],
+      "src": "Hand.svg"
+    },
+    "Help": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "Help.svg"
+    },
+    "IBeam": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "IBeam.svg"
+    },
+    "NWPen": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "NWPen.svg"
+    },
+    "No": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "No.svg"
+    },
+    "Person": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "Person.svg"
+    },
+    "Pin": {
+      "hotspot": [
+        0.05999999865889549,
+        0.03999999910593033
+      ],
+      "src": "Pin.svg"
+    },
+    "SizeAll": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "SizeAll.svg"
+    },
+    "SizeNESW": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "SizeNESW.svg"
+    },
+    "SizeNS": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "SizeNS.svg"
+    },
+    "SizeNWSE": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "SizeNWSE.svg"
+    },
+    "SizeWE": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "SizeWE.svg"
+    },
+    "UpArrow": {
+      "hotspot": [
+        0.5,
+        0.05999999865889549
+      ],
+      "src": "UpArrow.svg"
+    },
+    "Wait": {
+      "hotspot": [
+        0.5,
+        0.5
+      ],
+      "src": "Wait.svg"
+    }
+  },
+  "version": "1.0.0"
+}

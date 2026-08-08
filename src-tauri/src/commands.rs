@@ -417,9 +417,9 @@ pub fn check_for_updates() -> AppResult<updates::UpdateStatus> {
 #[tauri::command]
 pub fn open_external(url: String) -> AppResult<()> {
     const ALLOWED: [&str; 3] = [
-        "https://github.com/feylo/cursorforge",
-        "https://github.com/feylo/cursorforge/issues",
-        "https://github.com/feylo/cursorforge/releases",
+        "https://github.com/notfeylo/cursorforge",
+        "https://github.com/notfeylo/cursorforge/issues",
+        "https://github.com/notfeylo/cursorforge/releases",
     ];
     if !ALLOWED.contains(&url.as_str()) {
         return Err(AppError::invalid("that link is not one CursorForge opens"));
@@ -493,7 +493,7 @@ mod tests {
     fn external_links_are_allow_listed() {
         assert!(open_external("https://example.com/".into()).is_err());
         assert!(open_external("file:///C:/Windows".into()).is_err());
-        assert!(open_external("https://github.com/feylo/cursorforge.evil.com".into()).is_err());
+        assert!(open_external("https://github.com/notfeylo/cursorforge.evil.com".into()).is_err());
     }
 
     #[test]

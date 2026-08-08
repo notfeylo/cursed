@@ -17,7 +17,7 @@ use windows::Win32::Networking::WinHttp::{
 };
 
 const HOST: &str = "api.github.com";
-const PATH: &str = "/repos/feylo/cursorforge/releases/latest";
+const PATH: &str = "/repos/notfeylo/cursorforge/releases/latest";
 /// GitHub requires a User-Agent and rejects requests without one.
 const AGENT: &str = "CursorForge-UpdateCheck";
 /// A release payload is a few kilobytes; anything far larger is not our JSON.
@@ -190,7 +190,7 @@ pub fn check() -> AppResult<UpdateStatus> {
         current,
         latest,
         newer_available,
-        url: "https://github.com/feylo/cursorforge/releases",
+        url: "https://github.com/notfeylo/cursorforge/releases",
     })
 }
 

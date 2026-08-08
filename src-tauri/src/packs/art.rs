@@ -1,7 +1,7 @@
 //! Catalog artwork, as parametric vectors.
 //!
 //! Every glyph is drawn in a 100x100 box, in white and grey only. Colour is
-//! applied later by the tint pass, which is what turns 64 packs into an
+//! applied later by the tint pass, which is what turns 116 packs into an
 //! effectively unbounded catalog from a payload of roughly nothing (PRD §7.1).
 //!
 //! Greys are not decoration: the tint multiplies the master's luminance, so a
@@ -27,6 +27,16 @@ pub enum Form {
     Blade,
     /// Stair-stepped, quantised to an 8x8 grid.
     Pixel,
+    /// Long and narrow, with a fine point — reads as precise.
+    Slim,
+    /// Soft, rounded silhouette with no sharp interior corners.
+    Round,
+    /// Classic outline broken by a gap along the spine.
+    Split,
+    /// Wide and stubby, heavier than Classic.
+    Wedge,
+    /// A drawn arrow: shaft plus a separate head.
+    Kite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +67,26 @@ pub enum Reticle {
     DotRing,
     CircleCross,
     TripleTick,
+    /// Open square outline.
+    Square,
+    /// Four corner ticks with a centre dot.
+    CornerDot,
+    /// A pair of opposing arcs.
+    Arc,
+    /// Six-point star burst.
+    Star,
+    /// Fine grid of crossing lines.
+    Grid,
+    /// Concentric rings.
+    Rings,
+    /// A single horizontal rule.
+    Bar,
+    /// Chevron above a dot.
+    Caret,
+    /// Cross rotated 45 degrees.
+    Saltire,
+    /// Hexagon outline.
+    Hex,
 }
 
 #[derive(Debug, Clone)]
@@ -170,6 +200,16 @@ fn arrow_d(form: Form) -> &'static str {
         Form::Pixel => {
             "M8 8 L8 72 L24 56 L24 72 L32 88 L48 88 L40 64 L56 64 L56 56 L40 40 L40 24 L24 24 L24 8 Z"
         }
+        Form::Slim => "M6 4 L44 66 L28 62 L34 88 L26 90 L20 64 L6 72 Z",
+        // Every corner is a curve, so it reads soft at any size.
+        Form::Round => {
+            "M8 6 Q6 3 10 5 L58 50 Q62 54 56 55 L38 57 L50 84 Q52 89 46 90 L40 92 Q35 93 33 88 L22 62 L10 74 Q6 78 6 72 Z"
+        }
+        // Classic silhouette with the spine opened up.
+        Form::Split => "M6 4 L58 54 L36 54 L50 88 L40 92 L27 60 L6 76 Z M18 26 L18 56 L28 46 Z",
+        Form::Wedge => "M6 4 L70 44 L40 50 L54 80 L40 88 L26 58 L6 70 Z",
+        // A shaft with a discrete head, rather than one silhouette.
+        Form::Kite => "M6 4 L34 32 L26 40 Z M30 36 L38 28 L86 76 L78 84 Z",
     }
 }
 
@@ -289,6 +329,46 @@ fn reticle(style: &Style) -> String {
             r#"<path d="M50 14 L50 30 M20 50 L36 50 M80 50 L64 50 M50 86 L50 70" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round"/>
 <circle cx="50" cy="50" r="{thin:.1}" fill="{EDGE}"/>"#
         ),
+        Reticle::Square => format!(
+            r#"<rect x="24" y="24" width="52" height="52" fill="none" stroke="{EDGE}" stroke-width="{w:.1}"/>"#
+        ),
+        Reticle::CornerDot => format!(
+            r#"<path d="M24 34 L24 24 L34 24 M66 24 L76 24 L76 34 M76 66 L76 76 L66 76 M34 76 L24 76 L24 66" fill="none" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="{:.1}" fill="{EDGE}"/>"#,
+            w * 1.1
+        ),
+        Reticle::Arc => format!(
+            r#"<path d="M26 34 A30 30 0 0 1 74 34 M26 66 A30 30 0 0 0 74 66" fill="none" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="{thin:.1}" fill="{EDGE}"/>"#
+        ),
+        Reticle::Star => format!(
+            r#"<path d="M50 12 L50 88 M22 28 L78 72 M78 28 L22 72" stroke="{EDGE}" stroke-width="{thin:.1}" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="{:.1}" fill="{EDGE}"/>"#,
+            w * 0.9
+        ),
+        Reticle::Grid => format!(
+            r#"<path d="M34 16 L34 84 M66 16 L66 84 M16 34 L84 34 M16 66 L84 66" stroke="{EDGE}" stroke-width="{thin:.1}"/>"#
+        ),
+        Reticle::Rings => format!(
+            r#"<circle cx="50" cy="50" r="30" fill="none" stroke="{DEEP}" stroke-width="{thin:.1}"/>
+<circle cx="50" cy="50" r="18" fill="none" stroke="{EDGE}" stroke-width="{w:.1}"/>
+<circle cx="50" cy="50" r="{thin:.1}" fill="{EDGE}"/>"#
+        ),
+        Reticle::Bar => format!(
+            r#"<path d="M14 50 L86 50" stroke="{EDGE}" stroke-width="{:.1}" stroke-linecap="round"/>"#,
+            w * 1.4
+        ),
+        Reticle::Caret => format!(
+            r#"<path d="M32 44 L50 26 L68 44" fill="none" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50" cy="66" r="{:.1}" fill="{EDGE}"/>"#,
+            w * 1.2
+        ),
+        Reticle::Saltire => format!(
+            r#"<path d="M24 24 L76 76 M76 24 L24 76" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round"/>"#
+        ),
+        Reticle::Hex => format!(
+            r#"<path d="M50 18 L78 34 L78 66 L50 82 L22 66 L22 34 Z" fill="none" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linejoin="round"/>"#
+        ),
     }
 }
 
@@ -394,15 +474,52 @@ mod tests {
     use super::*;
     use crate::cursor::roles::ALL_ROLES;
 
+    /// Every form the catalog can reference. Kept here so adding a variant
+    /// without exercising it fails the build rather than shipping a blank
+    /// cursor.
+    const ALL_FORMS: [Form; 10] = [
+        Form::Classic,
+        Form::Triangle,
+        Form::Chevron,
+        Form::Blade,
+        Form::Pixel,
+        Form::Slim,
+        Form::Round,
+        Form::Split,
+        Form::Wedge,
+        Form::Kite,
+    ];
+
+    const ALL_RETICLES: [Reticle; 24] = [
+        Reticle::Plus,
+        Reticle::ThinCross,
+        Reticle::Dot,
+        Reticle::TCross,
+        Reticle::GapCross,
+        Reticle::MicroDot,
+        Reticle::Circle,
+        Reticle::Diamond,
+        Reticle::Bracket,
+        Reticle::ChevronPair,
+        Reticle::Notch,
+        Reticle::DotRing,
+        Reticle::CircleCross,
+        Reticle::TripleTick,
+        Reticle::Square,
+        Reticle::CornerDot,
+        Reticle::Arc,
+        Reticle::Star,
+        Reticle::Grid,
+        Reticle::Rings,
+        Reticle::Bar,
+        Reticle::Caret,
+        Reticle::Saltire,
+        Reticle::Hex,
+    ];
+
     #[test]
     fn every_role_renders_to_parseable_svg_for_every_form() {
-        for form in [
-            Form::Classic,
-            Form::Triangle,
-            Form::Chevron,
-            Form::Blade,
-            Form::Pixel,
-        ] {
+        for form in ALL_FORMS {
             let style = Style {
                 form,
                 ..Style::default()
@@ -420,22 +537,7 @@ mod tests {
 
     #[test]
     fn every_reticle_variant_draws_something() {
-        for reticle_variant in [
-            Reticle::Plus,
-            Reticle::ThinCross,
-            Reticle::Dot,
-            Reticle::TCross,
-            Reticle::GapCross,
-            Reticle::MicroDot,
-            Reticle::Circle,
-            Reticle::Diamond,
-            Reticle::Bracket,
-            Reticle::ChevronPair,
-            Reticle::Notch,
-            Reticle::DotRing,
-            Reticle::CircleCross,
-            Reticle::TripleTick,
-        ] {
+        for reticle_variant in ALL_RETICLES {
             let style = Style {
                 reticle: reticle_variant,
                 ..Style::default()
@@ -443,6 +545,33 @@ mod tests {
             let svg = render_role(&style, Role::Crosshair, 0.0);
             let bitmap = crate::build::svg::render(&svg, 64).unwrap();
             assert!(!bitmap.is_empty(), "{reticle_variant:?} rendered blank");
+        }
+    }
+
+    /// A glyph that renders but sits mostly outside the box is worse than one
+    /// that fails outright, because it only shows up once it is on screen.
+    #[test]
+    fn every_form_fills_a_reasonable_share_of_the_canvas() {
+        for form in ALL_FORMS {
+            let style = Style {
+                form,
+                ..Style::default()
+            };
+            let bitmap =
+                crate::build::svg::render(&render_role(&style, Role::Arrow, 0.0), 64).unwrap();
+            let covered = bitmap
+                .pixels
+                .iter()
+                .skip(3)
+                .step_by(4)
+                .filter(|&&a| a > 24)
+                .count();
+            let share = covered as f32 / (64.0 * 64.0);
+            assert!(
+                (0.02..0.75).contains(&share),
+                "{form:?} covers {:.1}% of the canvas",
+                share * 100.0
+            );
         }
     }
 

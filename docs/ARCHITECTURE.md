@@ -127,7 +127,7 @@ anything.
 ## Rendering
 
 `packs/art.rs` describes all 17 role glyphs as parametric SVG; `packs/styles.rs`
-holds the 64 packs as parameter sets. Nothing is a shipped bitmap.
+holds the 116 packs as parameter sets. Nothing is a shipped bitmap.
 
 At apply time each role is rendered from the vector **at every target size** —
 32, 48, 64, 96, 128, 160, 192, 256 — tinted, optionally outlined, and packed
@@ -190,7 +190,7 @@ src-tauri/src/
 │   └── pipeline.rs   decode guards and the build steps
 ├── packs/
 │   ├── art.rs        17 parametric role glyphs
-│   ├── styles.rs     the 64 packs
+│   ├── styles.rs     the 116 packs
 │   ├── catalog.rs    render, cache, export
 │   └── cfpack.rs     import/export with strict validation
 └── state/
