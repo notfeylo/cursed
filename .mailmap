@@ -1,0 +1,13 @@
+# Canonical identity for this repository.
+#
+# GitHub attributes a commit by e-mail address, not by the name string. The
+# address `feylo@users.noreply.github.com` belongs to the GitHub account named
+# `feylo` (id 19762460) — a different person who registered that username in
+# 2016. This project is by `notfeylo` (id 229680963), whose noreply address is
+# the id-prefixed form below.
+#
+# History has been rewritten so no commit carries the wrong address, but this
+# mapping stays: it keeps `git shortlog`, `git blame` and every tool that reads
+# the log resolving to one identity if the wrong address is ever used again.
+
+feylo <229680963+notfeylo@users.noreply.github.com> <feylo@users.noreply.github.com>
