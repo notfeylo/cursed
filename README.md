@@ -56,7 +56,7 @@ here; it is a property of the design.
 
 ## Install
 
-Download `CursorForge_1.0.0_x64-setup.exe` from
+Download `CursorForge_1.1.0_x64-setup.exe` from
 [Releases](https://github.com/notfeylo/cursorforge/releases) and double-click it.
 
 Per-user install under `%LOCALAPPDATA%\CursorForge` — **no UAC prompt**, no
