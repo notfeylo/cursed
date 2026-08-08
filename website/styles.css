@@ -111,6 +111,9 @@ body {
 
 /* ----------------------------------------------------------- main -- */
 
+/* `flex: 1` already claims the space left between masthead and footer. Adding
+   `height: 100%` on top resolves against the whole body instead, so the grid
+   grows taller than its slot and pushes its content down through the footer. */
 main {
   flex: 1;
   min-height: 0;
@@ -121,8 +124,7 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 48px;
-  align-items: start;
-  height: 100%;
+  align-items: stretch;
 }
 
 /* About — the only scrolling region. */
@@ -147,11 +149,15 @@ main {
   padding-bottom: 34px;
 }
 
-/* Download — static, never scrolls away. */
+/* Download — a full-height column of its own, so the button is on screen the
+   whole time someone is reading. It scrolls internally rather than overflowing:
+   the card is taller than a short laptop viewport, and content disappearing
+   behind the footer is worse than a second scroll region. */
 .download {
-  position: sticky;
-  top: 0;
-  align-self: start;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .download-inner {
@@ -395,17 +401,21 @@ footer span:first-child {
 
 /* ------------------------------------------------------ scrollbar -- */
 
-.about::-webkit-scrollbar {
+.about::-webkit-scrollbar,
+.download::-webkit-scrollbar {
   width: 8px;
 }
-.about::-webkit-scrollbar-track {
+.about::-webkit-scrollbar-track,
+.download::-webkit-scrollbar-track {
   background: transparent;
 }
-.about::-webkit-scrollbar-thumb {
+.about::-webkit-scrollbar-thumb,
+.download::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 999px;
 }
-.about::-webkit-scrollbar-thumb:hover {
+.about::-webkit-scrollbar-thumb:hover,
+.download::-webkit-scrollbar-thumb:hover {
   background: #3a4560;
 }
 
@@ -428,7 +438,7 @@ footer span:first-child {
     mask-image: none;
   }
   .download {
-    position: static;
+    overflow: visible;
     margin-top: 34px;
   }
   .masthead {
