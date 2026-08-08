@@ -147,6 +147,59 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);
     }
+    if args.get(1).map(String::as_str) == Some("--fetch-update") {
+        // Downloads whatever the release feed is offering and checks it against
+        // the checksum published with that release, then stops. Exercises the
+        // exact path the in-app updater runs, minus launching the installer --
+        // which is the half that had never been proven end to end.
+        // An explicit target can be given, because the interesting case is
+        // "what would an older install do" and this binary is never older than
+        // the release it is testing against.
+        let explicit = match (args.get(2), args.get(3)) {
+            (Some(tag), Some(asset)) => Some((tag.clone(), asset.clone())),
+            _ => None,
+        };
+        match explicit.map(Ok).unwrap_or_else(|| {
+            cursorforge_lib::updates::check().map(|s| {
+                (
+                    s.latest.clone().unwrap_or_default(),
+                    s.installer.clone().unwrap_or_default(),
+                )
+            })
+        }) {
+            Ok((tag, asset)) => {
+                if tag.is_empty() || asset.is_empty() {
+                    println!("nothing offered; pass a tag and asset explicitly to force one");
+                    std::process::exit(0);
+                }
+                println!("downloading {asset} from v{tag}");
+                match cursorforge_lib::updates::download(&tag, &asset) {
+                    Ok(file) => {
+                        println!("downloaded  {}", file.display());
+                        match cursorforge_lib::updates::verify_only(&tag, &asset) {
+                            Ok(hash) => {
+                                println!("checksum    {hash}");
+                                println!("VERIFIED against the published checksum");
+                            }
+                            Err(e) => {
+                                eprintln!("VERIFY FAILED: {e}");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("DOWNLOAD FAILED: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("check failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if args.get(1).map(String::as_str) == Some("--diagnostics") {
         // The same report the Diagnostics panel produces, reachable without a
         // window — which is what you want when the window is the problem.

@@ -380,6 +380,26 @@ fn published_hash(tag: &str, asset: &str) -> AppResult<String> {
 /// published, and a release asset can be replaced. So the file is hashed and
 /// compared against `SHA256SUMS.txt` from the same release; a mismatch deletes
 /// the file rather than leaving an unverified executable on disk.
+/// Checks a downloaded installer against the published checksum and stops.
+///
+/// The same comparison `verify_and_launch` makes, without launching anything —
+/// so the download and verification half of the updater can be proven on its
+/// own rather than only by watching an installer appear.
+pub fn verify_only(tag: &str, asset: &str) -> AppResult<String> {
+    let file = download_dir()?.join(asset);
+    if !is_our_installer(asset) || !file.exists() {
+        return Err(AppError::invalid("there is no downloaded installer to check"));
+    }
+    let expected = published_hash(tag, asset)?;
+    let actual = sha256_file(&file)?;
+    if !crate::hash::hex_eq(&actual, &expected) {
+        return Err(AppError::msg(format!(
+            "checksum mismatch: got {actual}, the release publishes {expected}"
+        )));
+    }
+    Ok(actual)
+}
+
 pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
     let file = download_dir()?.join(asset);
     if !is_our_installer(asset) || !file.exists() {
