@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest something CursorForge should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things are settled and not up for debate, so it saves everyone time
+        to say so here:
+
+        - **No overlay.** Cursor trails, click ripples, and anything else that
+          paints a sprite over the screen add permanent input latency. See the
+          architecture rule in `docs/ARCHITECTURE.md`.
+        - **No injection.** Overriding the cursor inside apps that draw their own
+          needs process injection, which trips anti-cheat and AV heuristics.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The situation, not the solution. What are you trying to do today, and what gets in the way?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What did you have in mind?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you tried instead?

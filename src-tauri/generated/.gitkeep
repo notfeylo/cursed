@@ -1,0 +1,2 @@
+# Populated by `npm run generate:packs`. Bundled as an app resource so a fresh
+# install has the catalog available before the first render.

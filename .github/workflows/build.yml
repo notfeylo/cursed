@@ -1,0 +1,109 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # TypeScript strict, zero `any`, plus the production bundle.
+      - name: Frontend
+        run: npm run build
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Every pack must define all 17 roles; this fails the build if one doesn't.
+      - name: Catalog
+        run: cargo run --manifest-path src-tauri/Cargo.toml --bin genpacks -- ../assets/packs
+
+      - name: Catalog is committed and current
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain assets/packs)" ]]; then
+            echo "::error::assets/packs is out of date — run 'npm run generate:packs' and commit."
+            git --no-pager diff --stat assets/packs
+            exit 1
+          fi
+
+      - name: Build the installer
+        run: npm run tauri build
+
+      - name: Installer size budget
+        shell: bash
+        run: |
+          # PRD §12: under 12 MB is the target, over 25 MB is a hard failure.
+          setup=$(find src-tauri/target/release/bundle/nsis -name '*-setup.exe' | head -n1)
+          bytes=$(stat -c%s "$setup")
+          mb=$((bytes / 1048576))
+          echo "installer: ${mb} MB ($setup)"
+          if (( bytes > 25 * 1048576 )); then
+            echo "::error::installer is ${mb} MB, over the 25 MB hard limit"
+            exit 1
+          fi
+          if (( bytes > 12 * 1048576 )); then
+            echo "::warning::installer is ${mb} MB, over the 12 MB target"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cursorforge-installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+  audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: npm ci
+
+      # Build fails on a high or critical advisory (PRD §13.7).
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file src-tauri/Cargo.lock --deny warnings
+
+      - name: cargo deny
+        run: |
+          cargo install cargo-deny --locked
+          cargo deny --manifest-path src-tauri/Cargo.toml check licenses bans

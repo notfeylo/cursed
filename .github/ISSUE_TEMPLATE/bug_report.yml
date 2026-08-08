@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in CursorForge behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: many games and some remote-desktop sessions draw their own
+        pointer and are unaffected by any cursor tool. That one is a documented
+        non-goal — see the limitations in the README.
+
+        Security issues go through a private advisory, not a public issue.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 (build 26100)"
+    validations:
+      required: true
+
+  - type: input
+    id: display
+    attributes:
+      label: Display scaling and cursor size
+      placeholder: "150% scaling, cursor size 48"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: CursorForge version
+      description: Settings → About
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: app
+    attributes:
+      label: Which application was the cursor wrong in?
+      placeholder: "Explorer / Chrome / a specific game"
+
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Control Panel → Mouse → Pointers
+      description: A screenshot of this tab is often the fastest way to show what went wrong.
