@@ -21,3 +21,8 @@ desktop.ini
 # Secrets — never commit signing material
 *.key
 .tauri/
+
+# Release artifacts. Built by `npm run tauri build` and published to GitHub
+# Releases — 5 MB of binaries has no business in git history.
+dist-release/
+release-notes.md
