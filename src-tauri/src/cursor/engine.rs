@@ -102,7 +102,7 @@ pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
         Err(_) if role.live_layer_is_best_effort() => Ok(()),
         Err(e) => Err(AppError::Win32(format!(
             "{role} could not be applied: {}",
-            e.message()
+            crate::error::describe_win32(&e)
         ))),
     }
 }

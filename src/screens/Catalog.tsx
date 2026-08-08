@@ -266,30 +266,44 @@ function Tile({
         </span>
       )}
 
-      {/*
-        The preview PNG is used as an alpha mask over a solid fill rather than
-        drawn directly, so the grid tracks the swatch the user just picked
-        without a render round-trip per tile. Drawing the PNG itself would show
-        the pack's own default colour and quietly contradict the swatch row.
-      */}
-      <span
-        role="img"
-        aria-label={pack.name}
-        style={{
-          WebkitMaskImage: `url("${pack.preview}")`,
-          maskImage: `url("${pack.preview}")`,
-          WebkitMaskSize: "contain",
-          maskSize: "contain",
-          WebkitMaskPosition: "center",
-          maskPosition: "center",
-          WebkitMaskRepeat: "no-repeat",
-          maskRepeat: "no-repeat",
-          background: tint,
-        }}
-        className="block h-9 w-9 transition-transform duration-150 group-hover:scale-110"
-      />
+      {pack.recolorable ? (
+        /*
+          Our own artwork is greyscale, so the preview is used as an alpha mask
+          over a solid fill: the grid tracks the swatch the user just picked
+          with no render round-trip per tile. Drawing the PNG itself would show
+          the pack's default colour and quietly contradict the swatch row.
+        */
+        <span
+          role="img"
+          aria-label={pack.name}
+          style={{
+            WebkitMaskImage: `url("${pack.preview}")`,
+            maskImage: `url("${pack.preview}")`,
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            background: tint,
+          }}
+          className="block h-9 w-9 transition-transform duration-150 group-hover:scale-110"
+        />
+      ) : (
+        /*
+          An imported cursor is somebody's finished, full-colour artwork. Masking
+          it to the accent colour would flatten it to a silhouette and throw away
+          the very thing that makes it worth importing, so it is drawn as-is.
+        */
+        <img
+          src={pack.preview}
+          alt={pack.name}
+          draggable={false}
+          className="h-10 w-10 object-contain transition-transform duration-150 group-hover:scale-110"
+        />
+      )}
 
-      <span className="display mt-2 truncate text-[8px] text-text-dim transition-colors duration-150 group-hover:text-text">
+      <span className="display mt-2 w-full truncate px-0.5 text-center text-[8px] text-text-dim transition-colors duration-150 group-hover:text-text">
         {pack.name}
       </span>
 

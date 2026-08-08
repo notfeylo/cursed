@@ -103,11 +103,22 @@ impl ApplyArgs {
 /// Hover has to feel free, so this builds and sets the **arrow alone**. The
 /// other sixteen roles are not what a browsing user is looking at, and building
 /// them on every hover would turn a 120 ms debounce into visible lag.
+/// Never fails.
+///
+/// A hover preview is a courtesy, not a commitment. If a particular cursor will
+/// not load, the honest outcome is that the pointer does not change while the
+/// user's mouse passes over one tile — not an error banner covering the catalog
+/// they are trying to browse. Anything worth investigating goes to the log.
 #[tauri::command]
 pub fn preview_pack(args: ApplyArgs) -> AppResult<()> {
     let spec = args.spec();
-    let set = catalog::build_preview_set(&args.pack_id, &spec)?;
-    cursor::preview(&set, spec.size)
+    let attempt = catalog::build_preview_set(&args.pack_id, &spec)
+        .and_then(|set| cursor::preview(&set, spec.size));
+
+    if let Err(e) = attempt {
+        log::debug!("preview of {} skipped: {e}", args.pack_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
