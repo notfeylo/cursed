@@ -61,6 +61,23 @@ Hover previews build and set **only the arrow**. Building all seventeen roles on
 every hover would turn a debounce into visible lag, and the arrow is the pointer
 the user is actually looking at while browsing.
 
+**`SetSystemCursor` accepts only fourteen ids.** The documented `OCR_*` values
+cover fourteen of the seventeen roles. `NWPen`, `Pin` and `Person` are `IDC_*`
+resource ids — genuine scheme roles that Windows writes to the registry and
+honours after a reload, but that it refuses as a live in-session override.
+
+Treating those refusals as failures is a trap worth naming, because the symptom
+does not point at the cause: every apply returns an error, so the code that
+records *what* was applied never runs, so nothing persists across launches and
+the watchdog has nothing to protect — while the cursor visibly changes and looks
+fine. The three are marked best-effort on the live layer, and the registry write
+is what carries them.
+
+For the same reason, `commit` records the applied state **before** attempting the
+live layer and downgrades a partial live-layer result to a logged warning. Once
+the registry write has succeeded the choice has been made; forgetting it because
+the in-session override was incomplete would be strictly worse than reporting it.
+
 ### B — Scheme layer (`cursor/scheme.rs`)
 
 Writes `HKEY_CURRENT_USER\Control Panel\Cursors` — 17 `REG_EXPAND_SZ` values,

@@ -160,6 +160,12 @@ pub fn read_role(role: Role) -> AppResult<String> {
     }
 }
 
+/// The active scheme's display name, as shown in the Windows Pointers tab.
+pub fn read_scheme_name() -> AppResult<String> {
+    let key = cursors_key(KEY_READ)?;
+    Ok(key.get_value::<String, _>("").unwrap_or_default())
+}
+
 /// Snapshot of every value CursorForge is capable of changing.
 pub fn read_all() -> AppResult<(BTreeMap<String, String>, Option<u32>, String)> {
     let key = cursors_key(KEY_READ)?;

@@ -72,23 +72,39 @@ pub fn active_state() -> AppResult<ActiveState> {
         },
         None => {
             // Nothing applied this session — but a previous session may have
-            // written a scheme that is still live. Read it back rather than
-            // claiming the pointer is stock.
-            let current = scheme::read_role(roles::Role::Arrow).unwrap_or_default();
-            let ours = current.to_lowercase().contains("cursorforge");
-            ActiveState {
-                pack_id: None,
-                pack_name: ours.then(|| "RESTORED".to_owned()),
-                tint: "#2E8BFF".to_owned(),
-                size,
-                is_default: !ours,
+            // written a scheme that is still live. Read the scheme's own name
+            // back rather than showing a placeholder: the registry knows it is
+            // "PLASMA", and telling the user anything vaguer is just noise.
+            let name = scheme::read_scheme_name().unwrap_or_default();
+            match name.strip_prefix(SCHEME_PREFIX) {
+                Some(pack_name) if !pack_name.is_empty() => ActiveState {
+                    pack_id: None,
+                    pack_name: Some(pack_name.to_owned()),
+                    tint: "#2E8BFF".to_owned(),
+                    size,
+                    is_default: false,
+                },
+                _ => ActiveState {
+                    pack_id: None,
+                    pack_name: None,
+                    tint: "#2E8BFF".to_owned(),
+                    size,
+                    is_default: true,
+                },
             }
         }
     })
 }
 
-/// Commits a scheme: registry first (so it is durable even if the live layer
-/// fails), then the live layer (so the change is visible immediately).
+/// Commits a scheme: registry first, so the choice is durable, then the live
+/// layer, so it is visible immediately.
+///
+/// The order of the last two steps matters. Once the registry write has
+/// succeeded the choice *has* been made, so it is recorded before the live layer
+/// is attempted. A live-layer problem is worth reporting, but it must never
+/// cause us to forget what is now sitting in the registry — that would leave the
+/// cursor changed with nothing tracking it, no persistence across launches, and
+/// a watchdog with nothing to protect.
 pub fn commit(
     set: CursorSet,
     display_name: &str,
@@ -99,7 +115,14 @@ pub fn commit(
     let scheme_name = format!("{SCHEME_PREFIX}{display_name}");
     scheme::write(&set, &scheme_name)?;
     scheme::write_base_size(size)?;
-    engine::apply_live(&set, size)?;
+
+    // A role Windows refuses as a live override is still committed to the
+    // registry and still correct after the next reload, so this is a warning
+    // about *when* the pointer changes, not whether. Failing the command here
+    // would report a durable, successful change as an error.
+    if let Err(e) = engine::apply_live(&set, size) {
+        log::warn!("scheme committed, but the in-session override was partial: {e}");
+    }
 
     set_applied(Some(Applied {
         set,

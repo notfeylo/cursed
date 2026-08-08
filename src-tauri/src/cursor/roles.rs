@@ -99,11 +99,19 @@ impl Role {
         }
     }
 
-    /// `Pin` and `Person` exist in the scheme but are not documented as
-    /// `SetSystemCursor` targets. We still try — and we never treat a refusal as
-    /// a failure of the whole apply.
+    /// Whether `SetSystemCursor` may legitimately refuse this role.
+    ///
+    /// `SetSystemCursor` accepts only the fourteen documented `OCR_*` values.
+    /// `NWPen`, `Pin` and `Person` are `IDC_*` resource ids — real scheme roles
+    /// that Windows will write to the registry and honour after a reload, but
+    /// that it will not accept as a live in-session override.
+    ///
+    /// This distinction is not cosmetic. Treating a refusal here as a failed
+    /// apply makes *every* apply report an error, which in turn skips recording
+    /// what was applied — so the cursor changes, but nothing persists and the
+    /// watchdog has nothing to protect.
     pub const fn live_layer_is_best_effort(self) -> bool {
-        matches!(self, Role::Pin | Role::Person)
+        matches!(self, Role::NWPen | Role::Pin | Role::Person)
     }
 
     /// Filename stem used for this role inside a pack directory.
@@ -166,6 +174,38 @@ mod tests {
         let ids: HashSet<_> = ALL_ROLES.iter().map(|r| r.ocr_id()).collect();
         assert_eq!(values.len(), 17, "registry value names must be distinct");
         assert_eq!(ids.len(), 17, "OCR ids must be distinct");
+    }
+
+    /// The fourteen ids `SetSystemCursor` documents. Any role outside this set
+    /// must be best-effort on the live layer, or a refusal Windows considers
+    /// normal gets reported as a failed apply.
+    #[test]
+    fn exactly_the_undocumented_roles_are_best_effort() {
+        const DOCUMENTED_OCR: [u32; 14] = [
+            32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649,
+            32650, 32651,
+        ];
+        for role in ALL_ROLES {
+            let documented = DOCUMENTED_OCR.contains(&role.ocr_id());
+            assert_eq!(
+                role.live_layer_is_best_effort(),
+                !documented,
+                "{role} ({}) is {}documented, so best-effort should be {}",
+                role.ocr_id(),
+                if documented { "" } else { "un" },
+                !documented
+            );
+        }
+    }
+
+    #[test]
+    fn every_role_still_persists_through_the_registry() {
+        // Best-effort applies only to the in-session override. All seventeen
+        // roles are written to the scheme regardless, which is what makes the
+        // cursor survive a reboot.
+        for role in ALL_ROLES {
+            assert!(!role.registry_value().is_empty());
+        }
     }
 
     #[test]

@@ -80,53 +80,61 @@
 
 /* ────────────────────────────────────────────────────────────
    Base
+
+   These MUST live in `@layer base`. Unlayered CSS outranks every layered
+   rule in the cascade, so a bare `button { background: none }` here would
+   silently beat `bg-accent` on the primary button and `border` on the ghost
+   ones — utilities applied, but overridden, which looks like Tailwind is
+   broken rather than like a cascade mistake.
    ──────────────────────────────────────────────────────────── */
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-}
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
 
-body {
-  background: transparent;
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.45;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  body {
+    background: transparent;
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 
-  /* A desktop chrome, not a web page. */
-  user-select: none;
-  -webkit-user-select: none;
-  cursor: default;
-}
+    /* A desktop chrome, not a web page. */
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
 
-input,
-textarea {
-  user-select: text;
-  -webkit-user-select: text;
-}
+  input,
+  textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
 
-::selection {
-  background: var(--color-accent-dim);
-  color: var(--color-accent-hi);
-}
+  ::selection {
+    background: var(--color-accent-dim);
+    color: var(--color-accent-hi);
+  }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: default;
-}
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: default;
+  }
 
-:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: 2px;
+  :focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────
