@@ -8,9 +8,30 @@ import { CustomImport } from "./screens/CustomImport";
 import { Saved } from "./screens/Saved";
 import { SettingsScreen } from "./screens/Settings";
 import { About } from "./screens/About";
+import { Specimen } from "./screens/Specimen";
 import { useStore } from "./store";
 
+/**
+ * Dev-only, and absent from any build.
+ *
+ * `import.meta.env.DEV` is a compile-time constant, so the bundler drops this
+ * branch — and the `Specimen` import with it — from a production build. Reached
+ * at `http://localhost:1420/?specimen` under `npm run dev`.
+ *
+ * Kept out of the app's own navigation on purpose: it is a reference sheet for
+ * whoever is working on the design, not a screen anyone ships.
+ */
+const SHOW_SPECIMEN =
+  import.meta.env.DEV &&
+  typeof window !== "undefined" &&
+  window.location.search.includes("specimen");
+
 export default function App() {
+  if (SHOW_SPECIMEN) return <Specimen />;
+  return <MainApp />;
+}
+
+function MainApp() {
   const view = useStore((s) => s.view);
   const ready = useStore((s) => s.ready);
   const error = useStore((s) => s.error);

@@ -287,12 +287,18 @@
             <span>100% local</span>
           </div>
 
+          <!-- Version, size and released are rewritten at build time by
+               scripts/sync-release.mjs from the latest GitHub Release. The CSP
+               forbids scripts entirely, so this cannot be fetched in the
+               browser — and a hardcoded version is exactly how the README ended
+               up telling people to download 1.1.0 five versions later. -->
           <dl class="spec">
-            <div><dt>Version</dt><dd>Always latest</dd></div>
-            <div><dt>Size</dt><dd>~2.5 MB</dd></div>
+            <div><dt>Version</dt><dd id="rel-version">1.7.0</dd></div>
+            <div><dt>Size</dt><dd id="rel-size">2.47 MB</dd></div>
+            <div><dt>Released</dt><dd id="rel-date">2026-08-08</dd></div>
             <div><dt>Platform</dt><dd>Windows 10 / 11, x64</dd></div>
             <div><dt>Install</dt><dd>Per-user, no admin</dd></div>
-            <div><dt>Schemes</dt><dd>216 × 17 roles</dd></div>
+            <div><dt>Cursors</dt><dd>205 × 17 roles</dd></div>
             <div><dt>Licence</dt><dd>MIT</dd></div>
           </dl>
 

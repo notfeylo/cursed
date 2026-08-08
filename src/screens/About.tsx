@@ -32,7 +32,13 @@ const DOCS: { kind: Doc; title: string; blurb: string; icon: React.ReactNode }[]
 const titleOf = (kind: Doc) => DOCS.find((d) => d.kind === kind)?.title ?? "";
 
 export function About() {
-  const [info, setInfo] = useState({ version: "1.0.0", commit: "local", target: "x86_64" });
+  const [info, setInfo] = useState<ipc.BuildInfo>({
+    version: "—",
+    commit: "local",
+    target: "x86_64",
+    built: "—",
+    windows: "—",
+  });
   const [doc, setDoc] = useState<Doc | null>(null);
 
   useEffect(() => {
@@ -50,11 +56,25 @@ export function About() {
         <div className="flex flex-col items-center gap-2 pb-4">
           <Mark size={54} animated id="about" />
           <span className="display text-[13px] text-text">CURSED</span>
-          <span className="mono text-[10px] text-text-dim">
-            v{info.version} · {info.commit} · {info.target}
-          </span>
+          <span className="mono text-[11px] text-accent-hi">v{info.version}</span>
           <span className="text-[11px] text-text-muted">Give your dead cursor a new life.</span>
         </div>
+
+        <SectionTitle>Build</SectionTitle>
+        <Card>
+          {/* Everything a support conversation asks for, in one place that can
+              be read aloud over a chat window. */}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+            <Row label="Version" value={`v${info.version}`} />
+            <Row label="Built" value={info.built} />
+            <Row label="Commit" value={info.commit} />
+            <Row label="Architecture" value={info.target} />
+            <Row label="Windows" value={info.windows} />
+          </dl>
+        </Card>
+
+        <SectionTitle>Updates</SectionTitle>
+        <UpdateStatusLine />
 
         <SectionTitle>Legal</SectionTitle>
         <div className="grid gap-1.5">
@@ -109,12 +129,102 @@ export function About() {
             MIT licensed. © 2026 feylo. Cursed changes only per-user pointer settings
             and is not affiliated with Microsoft.
           </p>
-          <p className="mt-2 text-[11px] text-text-dim">
-            Updates live under Settings → Updates.
-          </p>
         </Card>
       </div>
     </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-text-dim">{label}</dt>
+      <dd className="mono min-w-0 truncate text-right text-text" title={value}>
+        {value}
+      </dd>
+    </>
+  );
+}
+
+/**
+ * Update state in plain language, and never a dead end.
+ *
+ * The full download-and-install flow lives in Settings; this is the answer to
+ * "am I up to date?", which is the question people actually open About to ask.
+ * It reports an outcome in every case, including the failure — a check that
+ * silently does nothing is worse than no check.
+ */
+function UpdateStatusLine() {
+  const [state, setState] = useState<ipc.UpdateState | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const read = () => void ipc.getUpdateState().then(setState).catch(() => undefined);
+
+  useEffect(() => {
+    if (!ipc.isDesktop()) return;
+    read();
+    const timer = window.setInterval(read, 4000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      await ipc.startUpdateCheck();
+    } catch {
+      /* the state below reports the failure */
+    } finally {
+      window.setTimeout(() => {
+        setChecking(false);
+        read();
+      }, 1200);
+    }
+  };
+
+  const busy = checking || state?.checking === true;
+  const latest = state?.status?.latest;
+  const newer = state?.status?.newerAvailable === true;
+
+  const line = busy
+    ? "Checking…"
+    : state?.error
+      ? state.error
+      : state?.ready
+        ? `${latest} downloaded and verified — install it in Settings`
+        : newer
+          ? `${latest} is available — download it in Settings`
+          : state?.status
+            ? "You're on the latest version."
+            : "Not checked yet.";
+
+  const tone = state?.error
+    ? "text-danger"
+    : newer || state?.ready
+      ? "text-accent-hi"
+      : state?.status
+        ? "text-success"
+        : "text-text-dim";
+
+  return (
+    <Card>
+      <p className={`text-[11px] break-words ${tone}`}>{line}</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Button variant="ghost" onClick={() => void check()} disabled={busy}>
+          {busy ? "CHECKING" : "CHECK NOW"}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() =>
+            void ipc
+              .openExternal("https://github.com/notfeylo/cursorforge/releases/latest")
+              .catch(() => undefined)
+          }
+        >
+          DOWNLOAD MANUALLY
+        </Button>
+      </div>
+    </Card>
   );
 }
 

@@ -421,6 +421,10 @@ pub struct BuildInfo {
     pub version: String,
     pub commit: String,
     pub target: String,
+    /// `YYYY-MM-DD`, stamped at compile time.
+    pub built: String,
+    /// What Windows calls itself, e.g. `Windows 11 24H2 (build 26200)`.
+    pub windows: String,
 }
 
 #[tauri::command]
@@ -429,7 +433,47 @@ pub fn get_build_info() -> AppResult<BuildInfo> {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         commit: option_env!("CURSORFORGE_COMMIT").unwrap_or("local").to_owned(),
         target: std::env::consts::ARCH.to_owned(),
+        built: env!("CURSED_BUILD_DATE").to_owned(),
+        windows: windows_build(),
     })
+}
+
+/// The OS version, read from the registry.
+///
+/// `GetVersionEx` lies unless the application manifest opts in, and
+/// `RtlGetVersion` needs an ntdll import for one string. These values are
+/// read-only, always present, and say what the user would read in `winver`.
+fn windows_build() -> String {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    let Ok(key) = RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+    else {
+        return "unknown".to_owned();
+    };
+
+    let product: String = key.get_value("ProductName").unwrap_or_default();
+    let display: String = key.get_value("DisplayVersion").unwrap_or_default();
+    let build: String = key.get_value("CurrentBuild").unwrap_or_default();
+
+    // Windows 11 still reports "Windows 10 ..." in ProductName; build 22000 is
+    // the line where it became 11, and reporting 10 on an 11 machine makes the
+    // whole report look wrong.
+    let product = match build.parse::<u32>() {
+        Ok(n) if n >= 22_000 => product.replace("Windows 10", "Windows 11"),
+        _ => product,
+    };
+
+    let mut out = if product.is_empty() { "Windows".to_owned() } else { product };
+    if !display.is_empty() {
+        out.push(' ');
+        out.push_str(&display);
+    }
+    if !build.is_empty() {
+        out.push_str(&format!(" (build {build})"));
+    }
+    out
 }
 
 /// A plain-text report the user can copy straight into a message.
