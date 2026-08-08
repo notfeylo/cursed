@@ -1,0 +1,136 @@
+import { useEffect, useState } from "react";
+import { Button, Card } from "./ui";
+import * as ipc from "../lib/ipc";
+
+type Phase = "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "failed";
+
+/**
+ * The whole update flow, in one place.
+ *
+ * Lives in Settings rather than buried under About: an update nobody can find
+ * is an update nobody installs. `autoCheck` runs a check as soon as the panel
+ * mounts, so the common case needs no clicks at all.
+ */
+export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [status, setStatus] = useState<ipc.UpdateStatus | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const check = async () => {
+    setPhase("checking");
+    setMessage(null);
+    try {
+      const next = await ipc.checkForUpdates();
+      setStatus(next);
+      setPhase(next.newerAvailable ? "available" : "current");
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "Couldn't reach GitHub.");
+    }
+  };
+
+  useEffect(() => {
+    if (autoCheck && ipc.isDesktop()) void check();
+    // Intentionally runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCheck]);
+
+  const download = async () => {
+    if (!status?.latest || !status.installer) return;
+    setPhase("downloading");
+    setMessage(null);
+    try {
+      await ipc.downloadUpdate(status.latest, status.installer);
+      setPhase("ready");
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "The download failed.");
+    }
+  };
+
+  const install = async () => {
+    if (!status?.latest || !status.installer) return;
+    setMessage(null);
+    try {
+      // Verifies the download against the checksum published with the release
+      // before running it, then closes the app so the installer can replace it.
+      await ipc.installUpdate(status.latest, status.installer);
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "The installer could not be verified.");
+    }
+  };
+
+  const offering = phase === "available" || phase === "downloading" || phase === "ready";
+
+  return (
+    <Card>
+      {offering ? (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="display text-[11px] text-accent-hi">
+              VERSION {status?.latest} AVAILABLE
+            </span>
+            {status?.size ? (
+              <span className="mono shrink-0 text-[10px] text-text-dim">
+                {(status.size / 1_048_576).toFixed(1)} MB
+              </span>
+            ) : null}
+          </div>
+
+          {status?.notes && (
+            <p className="max-h-28 overflow-y-auto text-[11px] whitespace-pre-line text-text-muted">
+              {status.notes}
+            </p>
+          )}
+
+          {phase === "ready" ? (
+            <>
+              <Button full onClick={() => void install()}>
+                INSTALL & RESTART
+              </Button>
+              <p className="text-[11px] text-text-dim">
+                The download is checked against the checksum published with the release before
+                it runs. CursorForge closes so the installer can replace it.
+              </p>
+            </>
+          ) : (
+            <>
+              <Button full onClick={() => void download()} disabled={phase === "downloading"}>
+                {phase === "downloading" ? "DOWNLOADING" : "DOWNLOAD UPDATE"}
+              </Button>
+              {phase === "downloading" && <div className="h-px w-full shimmer" />}
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-[12px] text-text">
+              {phase === "current" ? "Up to date" : "Updates"}
+            </span>
+            {status?.current && (
+              <span className="mono text-[10px] text-text-dim">v{status.current}</span>
+            )}
+          </div>
+          <Button
+            full
+            variant={phase === "current" ? "ghost" : "primary"}
+            onClick={() => void check()}
+            disabled={phase === "checking"}
+          >
+            {phase === "checking" ? "CHECKING" : "CHECK FOR UPDATES"}
+          </Button>
+          {phase === "checking" && <div className="mt-2 h-px w-full shimmer" />}
+          {phase === "current" && (
+            <p className="mt-2 text-center text-[11px] text-success">
+              You're on the latest version.
+            </p>
+          )}
+        </>
+      )}
+
+      {message && <p className="mt-2 text-center text-[11px] text-danger">{message}</p>}
+    </Card>
+  );
+}

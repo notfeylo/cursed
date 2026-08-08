@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Info } from "lucide-react";
+import { FolderOpen, FolderPlus, Info, Trash2 } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { UpdatePanel } from "../components/UpdatePanel";
 import {
   Button,
   Card,
@@ -14,6 +16,7 @@ import {
 import * as ipc from "../lib/ipc";
 import type { ApplyMode } from "../lib/types";
 import { useStore } from "../store";
+import type { ApplyMode as _ApplyMode } from "../lib/types";
 
 export function SettingsScreen() {
   const settings = useStore((s) => s.settings);
@@ -22,17 +25,54 @@ export function SettingsScreen() {
   const setError = useStore((s) => s.setError);
   const refreshActive = useStore((s) => s.refreshActive);
 
+  const bootstrap = useStore((s) => s.bootstrap);
+
   const [storageDir, setStorageDir] = useState("");
   const [cacheBytes, setCacheBytes] = useState(0);
   const [systemSize, setSystemSize] = useState(32);
   const [confirmRestore, setConfirmRestore] = useState(false);
+
+  const [imported, setImported] = useState<ipc.ImportedPack[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  const refreshImported = () => {
+    void ipc.listImported().then(setImported).catch(() => undefined);
+  };
 
   useEffect(() => {
     if (!ipc.isDesktop()) return;
     void ipc.getStorageDir().then(setStorageDir).catch(() => undefined);
     void ipc.getCacheSize().then(setCacheBytes).catch(() => undefined);
     void ipc.getCursorBaseSize().then(setSystemSize).catch(() => undefined);
+    refreshImported();
   }, []);
+
+  const importFolder = async () => {
+    const folder = await openDialog({ directory: true, multiple: false });
+    if (typeof folder !== "string") return;
+
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const report = await ipc.importCursorFolder(folder);
+      setImportMsg(
+        report.imported === 0
+          ? "No cursors found in that folder."
+          : `Imported ${report.imported} cursor${report.imported === 1 ? "" : "s"}` +
+              (report.skipped ? `, skipped ${report.skipped}.` : ".") +
+              (report.problems.length ? ` ${report.problems[0]}` : ""),
+      );
+      refreshImported();
+      // The catalog list is loaded once at startup, so it has to be refetched
+      // or the new cursors would not appear until the next launch.
+      await bootstrap();
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const restore = async () => {
     try {
@@ -59,6 +99,89 @@ export function SettingsScreen() {
       </ScreenHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        <SectionTitle>Updates</SectionTitle>
+        <UpdatePanel autoCheck />
+
+        <SectionTitle>My cursors</SectionTitle>
+        <Card>
+          <p className="mb-2 text-[11px] text-text-muted">
+            Point CursorForge at a folder of cursors you already have.{" "}
+            <span className="mono">.cur</span>, <span className="mono">.ani</span>,{" "}
+            <span className="mono">.png</span> and <span className="mono">.zip</span> all work,
+            and files named <span className="mono">Name--cursor</span> /{" "}
+            <span className="mono">Name--pointer</span> are paired automatically.
+          </p>
+
+          <Button full onClick={() => void importFolder()} disabled={importing}>
+            <FolderPlus size={13} />
+            {importing ? "IMPORTING" : "IMPORT A FOLDER"}
+          </Button>
+          {importing && <div className="mt-2 h-px w-full shimmer" />}
+          {importMsg && <p className="mt-2 text-[11px] text-text-muted">{importMsg}</p>}
+
+          {imported.length > 0 && (
+            <>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="display text-[10px] text-text-dim">
+                  {imported.length} IMPORTED
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void ipc
+                      .deleteAllImported()
+                      .then(() => {
+                        refreshImported();
+                        setImportMsg(null);
+                        return bootstrap();
+                      })
+                      .catch(() => undefined)
+                  }
+                  className="text-[11px] text-danger hover:underline"
+                >
+                  Remove all
+                </button>
+              </div>
+              <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
+                {imported.map((pack) => (
+                  <div
+                    key={pack.id}
+                    className="flex items-center gap-2 rounded-xs px-1 py-1 hover:bg-elevated"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">
+                      {pack.name}
+                    </span>
+                    <span className="display shrink-0 text-[9px] text-text-dim">
+                      {pack.category}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${pack.name}`}
+                      onClick={() =>
+                        void ipc
+                          .deleteImported(pack.id)
+                          .then(() => {
+                            refreshImported();
+                            return bootstrap();
+                          })
+                          .catch(() => undefined)
+                      }
+                      className="shrink-0 text-text-dim hover:text-danger"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <p className="mt-2 text-[11px] text-text-dim">
+            Imported cursors stay on this machine. They are never uploaded, and never bundled
+            into CursorForge itself.
+          </p>
+        </Card>
+
         <SectionTitle>General</SectionTitle>
         <Card>
           <Toggle

@@ -326,6 +326,28 @@ pub fn target_sizes() -> &'static [u32] {
     &TARGET_SIZES
 }
 
+/// The sizes worth generating for a source image of a given resolution.
+///
+/// Catalog artwork is vector, so every size is drawn at full detail. An imported
+/// bitmap is not: upscaling a 128 px PNG to 256 px adds no detail, just a blurry
+/// image and a much larger file. A `.cur` stores every size as uncompressed
+/// BGRA, so the top three sizes alone are about 80% of the bytes — for a 128 px
+/// source that is half a megabyte per cursor buying nothing.
+///
+/// One size above the source is kept so the cursor still has something to offer
+/// at high DPI rather than being upscaled by the OS from its largest entry.
+pub fn sizes_for_source(width: u32, height: u32) -> Vec<u32> {
+    let longest = width.max(height).max(32);
+    let mut out: Vec<u32> = TARGET_SIZES.into_iter().filter(|&s| s <= longest).collect();
+    if let Some(&next) = TARGET_SIZES.iter().find(|&&s| s > longest) {
+        out.push(next);
+    }
+    if out.is_empty() {
+        out.push(32);
+    }
+    out
+}
+
 /// Picks the `.ani` size closest to what Windows is currently drawing.
 pub fn nearest_size(requested: u32) -> u32 {
     TARGET_SIZES
@@ -437,6 +459,21 @@ mod tests {
     fn sprite_sheets_that_do_not_divide_evenly_are_refused() {
         assert!(slice_sprite_sheet(&Bitmap::new(5, 4), 2, 2).is_err());
         assert!(slice_sprite_sheet(&Bitmap::new(4, 4), 0, 2).is_err());
+    }
+
+    #[test]
+    fn size_ladders_do_not_upscale_a_small_source_into_a_huge_file() {
+        // A 128 px source gets the sizes up to 128 plus one step beyond.
+        let sizes = sizes_for_source(128, 128);
+        assert_eq!(sizes, vec![32, 48, 64, 96, 128, 160]);
+        assert!(!sizes.contains(&256), "256 from a 128px source is just blur");
+
+        // A large source still gets the full ladder.
+        assert_eq!(sizes_for_source(512, 512), TARGET_SIZES.to_vec());
+
+        // A tiny source still produces something usable.
+        let tiny = sizes_for_source(16, 16);
+        assert!(!tiny.is_empty() && tiny[0] == 32);
     }
 
     #[test]

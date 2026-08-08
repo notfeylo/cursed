@@ -64,7 +64,7 @@ impl RenderSpec {
 }
 
 pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
-    styles::all()
+    let mut out: Vec<PackSummary> = styles::all()
         .into_iter()
         .map(|pack| {
             let preview = preview_uri(&pack, pack.default_tint)?;
@@ -78,7 +78,48 @@ pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
                 preview,
             })
         })
-        .collect()
+        .collect::<AppResult<_>>()?;
+
+    // The user's own imports sit at the front: they went to the trouble of
+    // adding them, so they should not have to scroll past 216 built-ins first.
+    //
+    // These are not recolourable. They are somebody's finished artwork, and
+    // tinting a Batman logo blue would just break it — the tint pass is designed
+    // for our own greyscale masters, not for arbitrary full-colour images.
+    let mut imported: Vec<PackSummary> = crate::import::list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|pack| {
+            let preview = crate::import::preview(&pack).ok()?;
+            Some(PackSummary {
+                id: pack.id.clone(),
+                name: pack.name.clone(),
+                category: leak_category(&pack.category),
+                author: "imported",
+                recolorable: false,
+                animated: pack.animated,
+                preview,
+            })
+        })
+        .collect();
+
+    imported.append(&mut out);
+    Ok(imported)
+}
+
+/// Imported categories are user data, but `PackSummary` carries a `&'static
+/// str` for the built-ins. The set is small and closed, so map onto known
+/// values and fall back rather than leaking memory for arbitrary strings.
+fn leak_category(category: &str) -> &'static str {
+    match category {
+        "ANIMATED" => "ANIMATED",
+        "ANIME" => "ANIME",
+        "GAMING" => "GAMING",
+        "VEHICLES" => "VEHICLES",
+        "NEON" => "NEON",
+        "RETRO" => "RETRO",
+        _ => "IMPORTED",
+    }
 }
 
 /// A tinted 64 px render of the pack's Arrow, as a `data:` URI.
@@ -240,6 +281,28 @@ pub fn build_roles(pack_id: &str, roles: &[Role], spec: &RenderSpec) -> AppResul
     Ok(set)
 }
 
+/// True for a pack the user imported rather than one we ship.
+pub fn is_imported(pack_id: &str) -> bool {
+    pack_id.starts_with("user:")
+}
+
+/// Builds the scheme for an imported pack.
+///
+/// An import usually defines one or two roles — an arrow and a hand. The other
+/// fifteen come from a built-in pack so the pointer set stays coherent, which is
+/// the same reasoning as Blend mode for custom images: a lone custom arrow next
+/// to fifteen stock Windows cursors looks broken, not customised.
+pub fn build_imported(pack_id: &str, base: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
+    let pack = crate::import::get(pack_id)?;
+    let files = crate::import::role_files(&pack)?;
+
+    let mut set = build_roles(base, &ALL_ROLES, spec)?;
+    for (role, path) in files {
+        set.insert(role, path);
+    }
+    Ok(set)
+}
+
 /// Builds a complete 17-role scheme.
 pub fn build_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
     let set = build_roles(pack_id, &ALL_ROLES, spec)?;
@@ -257,6 +320,17 @@ pub fn build_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
 /// pointer a user is looking at while browsing is the arrow, so preview renders
 /// exactly that and nothing else — then the commit builds the rest.
 pub fn build_preview_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
+    if is_imported(pack_id) {
+        // An imported pack's files already exist, so hovering costs a lookup
+        // rather than a render.
+        let pack = crate::import::get(pack_id)?;
+        let files = crate::import::role_files(&pack)?;
+        let mut set = CursorSet::default();
+        if let Some(path) = files.get(&Role::Arrow).or_else(|| files.values().next()) {
+            set.insert(Role::Arrow, path.clone());
+        }
+        return Ok(set);
+    }
     build_roles(pack_id, &[Role::Arrow], spec)
 }
 

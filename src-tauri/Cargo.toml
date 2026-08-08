@@ -1,6 +1,6 @@
 [package]
 name = "cursorforge"
-version = "1.1.0"
+version = "1.2.0"
 description = "Give your dead cursor a new life."
 authors = ["feylo"]
 license = "MIT"
@@ -71,8 +71,8 @@ windows = { version = "0.61", features = [
 # Note: `tauri-plugin-updater` is deliberately absent. It pulls reqwest+rustls
 # (~2 MB of binary) for a feature that, unsigned, cannot verify anything useful
 # yet. Until code signing is in place the update check is a WinHTTP request to
-# the GitHub Releases API — OS trust store, no extra dependency, no false sense
-# of integrity (PRD §13.7).
+# the GitHub Releases API â€” OS trust store, no extra dependency, no false sense
+# of integrity (PRD Â§13.7).
 
 [profile.release]
 opt-level = "z"

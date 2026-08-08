@@ -118,8 +118,25 @@ pub fn clear_preview() -> AppResult<()> {
 #[tauri::command]
 pub fn apply_pack(app: AppHandle, args: ApplyArgs) -> AppResult<()> {
     let spec = args.spec();
-    let set = catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), &spec)?;
-    let name = catalog::display_name(&args.pack_id).ok_or(AppError::UnknownPack)?;
+
+    // An imported pack defines a role or two; the rest come from a built-in so
+    // the pointer set stays coherent.
+    let (set, name) = if catalog::is_imported(&args.pack_id) {
+        let pack = crate::import::get(&args.pack_id)?;
+        let base = settings::get().blend_pack;
+        (
+            catalog::build_imported(&args.pack_id, &base, &spec)?,
+            pack.name,
+        )
+    } else {
+        (
+            catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), &spec)?,
+            catalog::display_name(&args.pack_id)
+                .ok_or(AppError::UnknownPack)?
+                .to_owned(),
+        )
+    };
+    let name = name.as_str();
 
     cursor::commit(
         set,
@@ -434,6 +451,33 @@ pub fn install_update(app: AppHandle, version: String, installer: String) -> App
 #[tauri::command]
 pub fn clear_update_downloads() -> AppResult<()> {
     updates::clear_downloads()
+}
+
+/* ── importing the user's own cursors ──────────────────────── */
+
+/// Imports every cursor found in a folder the user picked.
+///
+/// The path comes from the native file dialog rather than from the webview, and
+/// the import only ever *reads* from it — everything created lands under
+/// CursorForge's own storage.
+#[tauri::command]
+pub fn import_cursor_folder(folder: String) -> AppResult<crate::import::ImportReport> {
+    crate::import::import_folder(&PathBuf::from(folder))
+}
+
+#[tauri::command]
+pub fn list_imported() -> AppResult<Vec<crate::import::ImportedPack>> {
+    crate::import::list()
+}
+
+#[tauri::command]
+pub fn delete_imported(id: String) -> AppResult<()> {
+    crate::import::remove(&id)
+}
+
+#[tauri::command]
+pub fn delete_all_imported() -> AppResult<()> {
+    crate::import::remove_all()
 }
 
 /// Opens an external URL — but only one of ours.

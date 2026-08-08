@@ -152,6 +152,32 @@ export const installUpdate = (version: string, installer: string) =>
   call<void>("install_update", { version, installer });
 
 export const clearUpdateDownloads = () => call<void>("clear_update_downloads");
+
+/* ── importing your own cursors ────────────────────────────── */
+
+export interface ImportReport {
+  imported: number;
+  skipped: number;
+  problems: string[];
+  names: string[];
+}
+
+export interface ImportedPack {
+  id: string;
+  name: string;
+  category: string;
+  animated: boolean;
+  source: string;
+  imported: string;
+}
+
+/** Scans a folder for .cur/.ani/.png/.zip cursors and installs what it finds. */
+export const importCursorFolder = (folder: string) =>
+  call<ImportReport>("import_cursor_folder", { folder });
+
+export const listImported = () => call<ImportedPack[]>("list_imported");
+export const deleteImported = (id: string) => call<void>("delete_imported", { id });
+export const deleteAllImported = () => call<void>("delete_all_imported");
 export const openExternal = (url: string) => call<void>("open_external", { url });
 export const quitApp = () => call<void>("quit_app");
 export const hideToTray = () => call<void>("hide_to_tray");

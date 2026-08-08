@@ -16,6 +16,7 @@ pub mod error;
 pub mod hash;
 pub mod hotkeys;
 pub mod idle;
+pub mod import;
 pub mod packs;
 pub mod paths;
 pub mod session;
@@ -132,6 +133,10 @@ pub fn run() {
             commands::download_update,
             commands::install_update,
             commands::clear_update_downloads,
+            commands::import_cursor_folder,
+            commands::list_imported,
+            commands::delete_imported,
+            commands::delete_all_imported,
             commands::open_external,
             commands::hide_to_tray,
             commands::quit_app,

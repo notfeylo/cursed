@@ -6,6 +6,7 @@
 
 pub mod ani_writer;
 pub mod bitmap;
+pub mod cur_reader;
 pub mod cur_writer;
 pub mod hotspot;
 pub mod pipeline;

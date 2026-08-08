@@ -22,6 +22,9 @@ pub struct Settings {
     pub tint: String,
     pub outline: bool,
     pub apply_mode: ApplyMode,
+    /// Fills the roles a custom or imported cursor does not define, so a
+    /// one-role import does not leave fifteen stock Windows pointers behind it.
+    pub blend_pack: String,
     pub animation_speed: f32,
     pub reapply_on_resume: bool,
 
@@ -63,6 +66,7 @@ impl Default for Settings {
             tint: "#2E8BFF".to_owned(),
             outline: true,
             apply_mode: ApplyMode::Blend,
+            blend_pack: "precision-gap-cross".to_owned(),
             animation_speed: 1.0,
             reapply_on_resume: true,
 
@@ -93,6 +97,12 @@ impl Settings {
         while self.hotkey_presets.len() < 5 {
             let n = self.hotkey_presets.len() + 1;
             self.hotkey_presets.push(format!("Ctrl+Alt+{n}"));
+        }
+        // The blend pack fills roles an import does not define, so it has to be
+        // a pack that actually exists — a stale id from an older build would
+        // make every imported cursor fail to apply.
+        if crate::packs::styles::find(&self.blend_pack).is_none() {
+            self.blend_pack = "precision-gap-cross".to_owned();
         }
         self
     }
@@ -170,5 +180,15 @@ mod tests {
         assert_eq!(wild.watchdog_interval_secs, 3);
         assert_eq!(wild.tint, "#2E8BFF");
         assert_eq!(wild.hotkey_presets.len(), 5);
+    }
+
+    #[test]
+    fn a_blend_pack_that_no_longer_exists_falls_back_to_a_real_one() {
+        let stale = Settings {
+            blend_pack: "removed-in-an-older-build".into(),
+            ..Settings::default()
+        }
+        .sanitised();
+        assert!(crate::packs::styles::find(&stale.blend_pack).is_some());
     }
 }

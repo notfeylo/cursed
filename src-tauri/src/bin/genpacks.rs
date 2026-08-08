@@ -47,10 +47,40 @@ fn render_icon(args: &[String]) -> ! {
     }
 }
 
+/// `genpacks --import <folder>` runs the folder importer headlessly.
+///
+/// Exists so the import path can be exercised against a real folder of cursors
+/// without driving the GUI, which is how it was proven before shipping.
+fn run_import(args: &[String]) -> ! {
+    let Some(folder) = args.get(2) else {
+        eprintln!("usage: genpacks --import <folder>");
+        std::process::exit(2);
+    };
+    match cursorforge_lib::import::import_folder(std::path::Path::new(folder)) {
+        Ok(report) => {
+            println!("imported {}, skipped {}", report.imported, report.skipped);
+            for name in &report.names {
+                println!("  + {name}");
+            }
+            for problem in &report.problems {
+                println!("  ! {problem}");
+            }
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("import failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--icon") {
         render_icon(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--import") {
+        run_import(&args);
     }
 
     // Relative to the caller's working directory, which for `cargo run` is

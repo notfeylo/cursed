@@ -46,6 +46,9 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export type Category =
+  | "IMPORTED"
+  | "ANIME"
+  | "VEHICLES"
   | "PRECISION"
   | "NEON"
   | "MINIMAL"
@@ -54,13 +57,17 @@ export type Category =
   | "ANIMATED"
   | "FUN";
 
+/** Imported categories lead, because they are the user's own additions. */
 export const CATEGORIES: Category[] = [
+  "IMPORTED",
+  "ANIME",
+  "VEHICLES",
+  "GAMING",
+  "ANIMATED",
   "PRECISION",
   "NEON",
   "MINIMAL",
   "RETRO",
-  "GAMING",
-  "ANIMATED",
   "FUN",
 ];
 
