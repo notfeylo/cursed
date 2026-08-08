@@ -103,12 +103,70 @@ const ICONS: { name: string; node: React.ReactNode }[] = [
   { name: "X", node: <X /> },
 ];
 
+/**
+ * The three candidate stacks, rendered side by side on identical content.
+ *
+ * CURRENT is what ships today. A and B exist only here — nothing in the app
+ * references them, so choosing one is a later, deliberate change rather than
+ * something that has already half-happened.
+ */
+const PAIRINGS = [
+  {
+    id: "CURRENT",
+    stack: "Chakra Petch / Inter / JetBrains Mono",
+    display: "'Chakra Petch', sans-serif",
+    body: "'Inter', sans-serif",
+    mono: "'JetBrains Mono', monospace",
+  },
+  {
+    id: "A",
+    stack: "Space Grotesk / Inter Tight / JetBrains Mono",
+    display: "'Space Grotesk', sans-serif",
+    body: "'Inter Tight', sans-serif",
+    mono: "'JetBrains Mono', monospace",
+  },
+  {
+    id: "B",
+    stack: "Geist / Geist / Geist Mono",
+    display: "'Geist', sans-serif",
+    body: "'Geist', sans-serif",
+    mono: "'Geist Mono', monospace",
+  },
+] as const;
+
 /** The strings that break layouts, all in one place. */
 const LONG_PRESET = "My Extremely Long Preset Name For Testing Truncation";
 const LONG_PATH =
   "C:\\Users\\huzai\\AppData\\Roaming\\Cursed\\imported\\kuromi-naruto-crossover-akatsuki-cloak-kunai-dagger\\arrow-role.cur";
 const LONG_ERROR =
   "The downloaded installer does not match the checksum published with the release, so it was deleted. Check your connection and try again, or download it manually from the releases page.";
+
+/**
+ * The candidate faces, registered at runtime from `/dev-fonts/`.
+ *
+ * Deliberately not in `styles.css` and not under `src/assets`: either would put
+ * them through the bundler, and a stylesheet is always emitted even when the
+ * component importing it is tree-shaken — so eight fonts nothing uses would end
+ * up inside the installer. Vite serves project-root files in dev and copies
+ * only `public/`, so this is available at `?specimen` and absent from a build.
+ */
+const CANDIDATE_FACES = (
+  [
+    ["Space Grotesk", 600, "space-grotesk-600"],
+    ["Space Grotesk", 700, "space-grotesk-700"],
+    ["Inter Tight", 400, "inter-tight-400"],
+    ["Inter Tight", 500, "inter-tight-500"],
+    ["Geist", 400, "geist-400"],
+    ["Geist", 500, "geist-500"],
+    ["Geist", 700, "geist-700"],
+    ["Geist Mono", 400, "geist-mono-400"],
+  ] as const
+)
+  .map(
+    ([family, weight, file]) =>
+      `@font-face{font-family:"${family}";src:url("/dev-fonts/${file}.woff2") format("woff2");font-weight:${weight};font-display:block}`,
+  )
+  .join("");
 
 export function Specimen() {
   const [toggleA, setToggleA] = useState(true);
@@ -119,6 +177,7 @@ export function Specimen() {
 
   return (
     <div className="h-full overflow-y-auto bg-bg px-6 py-6 text-text">
+      <style>{CANDIDATE_FACES}</style>
       <div className="mx-auto max-w-[900px] space-y-8">
         <header className="flex items-center gap-3 border-b border-border pb-4">
           <Mark size={44} animated id="specimen" />
@@ -197,6 +256,68 @@ export function Specimen() {
             <p style={{ fontFamily: "'ThisFontDoesNotExist', serif" }} className="text-text-dim">
               Deliberate fallback (serif) — if the three above match this, they did not load
             </p>
+          </div>
+        </Block>
+
+        {/* ── font pairings ──────────────────────────────── */}
+        <Block title="Font pairings — same words, three stacks">
+          <p className="mb-3 text-[11px] text-text-dim">
+            Identical content in each, at the sizes the home screen actually uses. Compare the
+            display line first — it carries the app&apos;s character — then check the version
+            string, which has to stay unambiguous at 10px.
+          </p>
+          <div className="space-y-3">
+            {PAIRINGS.map((p) => (
+              <div key={p.id} className="rounded-sm border border-border p-4">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <span className="display text-[11px] text-accent-hi">{p.id}</span>
+                  <span className="mono text-[10px] text-text-dim">{p.stack}</span>
+                </div>
+
+                <div
+                  style={{
+                    fontFamily: p.display,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    fontSize: 28,
+                    lineHeight: 1.05,
+                  }}
+                  className="text-text"
+                >
+                  Enhance your cursor
+                </div>
+
+                <p
+                  style={{ fontFamily: p.body, fontSize: 14 }}
+                  className="mt-2 text-text-muted"
+                >
+                  Your pointer. Possessed. Every one of the seventeen roles, sharp at any size,
+                  with no added input latency.
+                </p>
+
+                <div className="mt-2 flex flex-wrap items-center gap-4">
+                  <span style={{ fontFamily: p.mono, fontSize: 10 }} className="text-text-dim">
+                    v1.8.0 · 0123456789 · %APPDATA%\Cursed
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: p.display,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontSize: 11,
+                    }}
+                    className="text-text"
+                  >
+                    Choose a cursor
+                  </span>
+                  <span style={{ fontFamily: p.body, fontSize: 12 }} className="text-text-muted">
+                    Illegible pairs: Il1 · O0 · rn/m
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </Block>
 
