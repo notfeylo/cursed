@@ -1,6 +1,6 @@
-# CursorForge
+# Cursed
 
-**Give your dead cursor a new life.**
+**Your pointer. Possessed.**
 
 A ~10 MB Windows app that replaces every pointer role with a crisp,
 multi-resolution cursor scheme, turns any image you drop on it into a real
@@ -18,11 +18,11 @@ one at a time in a 1998-era file dialog. Third-party packs arrive as zips of
 loose `.cur` files, replace only the arrow, ship a single 32×32 bitmap that
 turns to mush at 150% DPI, and get wiped by the next theme change.
 
-CursorForge fixes all of that in one window.
+Cursed fixes all of that in one window.
 
 ## The one architectural rule
 
-> **CursorForge never draws a cursor. It only tells Windows which cursor to
+> **Cursed never draws a cursor. It only tells Windows which cursor to
 > draw.**
 
 The obvious approach — a transparent always-on-top window that tracks the mouse
@@ -32,7 +32,7 @@ breaks in exclusive fullscreen, and it fights with games.
 
 The Windows system cursor is drawn by the GPU's dedicated hardware cursor plane.
 It updates at the mouse's polling rate with zero compositing latency, and it is
-DPI-aware for free. So every cursor CursorForge produces is a real `.cur` /
+DPI-aware for free. So every cursor Cursed produces is a real `.cur` /
 `.ani` file registered with Windows. Zero added input latency is not a target
 here; it is a property of the design.
 
@@ -56,10 +56,10 @@ here; it is a property of the design.
 
 ## Install
 
-Download `CursorForge_1.1.0_x64-setup.exe` from
+Download `Cursed_1.1.0_x64-setup.exe` from
 [Releases](https://github.com/notfeylo/cursorforge/releases) and double-click it.
 
-Per-user install under `%LOCALAPPDATA%\CursorForge` — **no UAC prompt**, no
+Per-user install under `%LOCALAPPDATA%\Cursed` — **no UAC prompt**, no
 terminal, no PowerShell.
 
 ## Build from source
@@ -87,7 +87,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 | ----------------------------------- | ------------------------------------------ |
 | `HKCU\Control Panel\Cursors`         | The 17 pointer roles and the scheme name   |
 | `HKCU\Control Panel\Cursors\Schemes` | The named scheme, so it appears in Windows |
-| `%APPDATA%\CursorForge`              | Settings, presets, custom and cached cursors |
+| `%APPDATA%\Cursed`              | Settings, presets, custom and cached cursors |
 
 `HKEY_LOCAL_MACHINE` is never written. No driver, no service, no injected DLL,
 no `SetWindowsHookEx`. See [SECURITY.md](SECURITY.md).
@@ -97,7 +97,7 @@ no `SetWindowsHookEx`. See [SECURITY.md](SECURITY.md).
 1. **Apps that draw their own cursor are unaffected.** Many games using raw
    input, some remote-desktop sessions, and a few hardware-accelerated canvases
    render their own pointer. Overriding those needs process injection, which
-   trips anti-cheat and AV heuristics. CursorForge will not do it. This is an
+   trips anti-cheat and AV heuristics. Cursed will not do it. This is an
    explicit non-goal.
 2. **Cursor trails and click ripples need an overlay**, which the architecture
    rules out. Deferred, and if they ever ship it will be behind a clearly
@@ -117,7 +117,7 @@ no `SetWindowsHookEx`. See [SECURITY.md](SECURITY.md).
 
 ## Privacy
 
-CursorForge collects nothing. No analytics, no telemetry, no account. The only
+Cursed collects nothing. No analytics, no telemetry, no account. The only
 network request it can make is an update check against GitHub Releases, and it
 can be turned off. See [PRIVACY.md](docs/PRIVACY.md).
 
@@ -126,4 +126,4 @@ can be turned off. See [PRIVACY.md](docs/PRIVACY.md).
 MIT — © 2026 feylo. All bundled cursor artwork is original work, licensed
 alongside the source.
 
-CursorForge is not affiliated with, endorsed by, or sponsored by Microsoft.
+Cursed is not affiliated with, endorsed by, or sponsored by Microsoft.

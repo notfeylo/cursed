@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Sparkles } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { Button, Slider } from "../components/ui";
+import { Button } from "../components/ui";
 import * as ipc from "../lib/ipc";
 import { CATEGORIES, type Category, type PackSummary } from "../lib/types";
 import { useStore } from "../store";
@@ -9,44 +9,30 @@ import { useStore } from "../store";
 /** Hovering must feel free, so the live preview waits for the pointer to settle. */
 const HOVER_DEBOUNCE_MS = 120;
 
-const SWATCHES = [
-  "#2E8BFF",
-  "#5CB8FF",
-  "#8AE9FF",
-  "#33D6A6",
-  "#7DFF3D",
-  "#FF7A2E",
-  "#FF4D5E",
-  "#FF3DD8",
-  "#A24BFF",
-  "#EDF1F7",
-];
-
+/**
+ * Browsing only.
+ *
+ * The colour swatches and size slider used to live along the bottom of this
+ * screen, competing with the grid for a few cramped pixels. They now have a
+ * screen of their own, reached by choosing a cursor — so this one does the one
+ * job it is good at: showing you what there is.
+ */
 export function Catalog() {
   const packs = useStore((s) => s.packs);
   const settings = useStore((s) => s.settings);
-  const go = useStore((s) => s.go);
-  const setError = useStore((s) => s.setError);
+  const select = useStore((s) => s.select);
   const setPreviewing = useStore((s) => s.setPreviewing);
-  const refreshActive = useStore((s) => s.refreshActive);
   const patchSettings = useStore((s) => s.patchSettings);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category | "ALL">("ALL");
-  const [tint, setTint] = useState(settings.tint);
-  const [size, setSize] = useState(settings.cursorSize ?? 32);
-  const [applying, setApplying] = useState<string | null>(null);
-  const [applied, setApplied] = useState<string | null>(null);
   const [tintPreviews, setTintPreviews] = useState(settings.tintPreviews);
+
+  const tint = settings.tint;
+  const size = settings.cursorSize ?? 32;
 
   const hoverTimer = useRef<number | null>(null);
   const previewedRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (settings.cursorSize === null) {
-      void ipc.getCursorBaseSize().then(setSize).catch(() => undefined);
-    }
-  }, [settings.cursorSize]);
 
   // A live preview must never outlive this screen: leaving with the system
   // cursor still overridden would look exactly like a bug.
@@ -81,7 +67,7 @@ export function Catalog() {
   };
 
   const onHover = (pack: PackSummary) => {
-    if (!ipc.isDesktop() || applying) return;
+    if (!ipc.isDesktop()) return;
     cancelHover();
     hoverTimer.current = window.setTimeout(() => {
       setPreviewing(true);
@@ -106,31 +92,20 @@ export function Catalog() {
     void ipc.clearPreview().catch(() => undefined);
   };
 
-  const commit = async (pack: PackSummary) => {
+  /**
+   * Choosing a cursor opens it for customising rather than applying it here.
+   *
+   * Browsing and tweaking were sharing one cramped strip along the bottom, so
+   * neither had room. Picking is now a decision to look closer, not a commitment.
+   */
+  const choose = (pack: PackSummary) => {
     cancelHover();
-    setApplying(pack.id);
-    try {
-      await ipc.applyPack({
-        packId: pack.id,
-        tint,
-        size,
-        outline: settings.outline,
-        applyMode: settings.applyMode,
-      });
+    if (previewedRef.current) {
       previewedRef.current = null;
-      setApplied(pack.id);
-      await refreshActive();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setApplying(null);
-      setPreviewing(false);
+      void ipc.clearPreview().catch(() => undefined);
     }
-  };
-
-  const done = async () => {
-    await patchSettings({ tint, cursorSize: size });
-    go("home");
+    setPreviewing(false);
+    select(pack);
   };
 
   return (
@@ -182,11 +157,9 @@ export function Catalog() {
                 pack={pack}
                 tint={tint}
                 tinted={tintPreviews}
-                busy={applying === pack.id}
-                active={applied === pack.id}
                 onEnter={() => onHover(pack)}
                 onLeave={onLeave}
-                onClick={() => void commit(pack)}
+                onClick={() => choose(pack)}
               />
             ))}
           </div>
@@ -216,39 +189,9 @@ export function Catalog() {
           </span>
         </button>
 
-        <div className="mb-2 flex items-center gap-1.5">
-          {SWATCHES.map((swatch) => (
-            <button
-              key={swatch}
-              type="button"
-              aria-label={swatch}
-              onClick={() => setTint(swatch)}
-              style={{ background: swatch }}
-              className={`h-4 w-4 rounded-full transition-transform duration-150 ${
-                tint.toLowerCase() === swatch.toLowerCase()
-                  ? "scale-125 ring-1 ring-text ring-offset-2 ring-offset-bg"
-                  : "hover:scale-110"
-              }`}
-            />
-          ))}
-          <span className="mono ml-auto text-[10px] text-text-dim">{tint.toUpperCase()}</span>
-        </div>
-
-        <div className="mb-2">
-          <Slider
-            label="SIZE"
-            suffix="px"
-            min={32}
-            max={256}
-            step={8}
-            value={size}
-            onChange={setSize}
-          />
-        </div>
-
-        <Button full onClick={() => void done()}>
-          DONE
-        </Button>
+        <p className="text-center text-[11px] text-text-dim">
+          Pick one to set its colour and size.
+        </p>
       </div>
     </div>
   );
@@ -258,8 +201,6 @@ function Tile({
   pack,
   tint,
   tinted,
-  busy,
-  active,
   onEnter,
   onLeave,
   onClick,
@@ -268,8 +209,6 @@ function Tile({
   tint: string;
   /** Recolour this tile to the tint, rather than showing its own colours. */
   tinted: boolean;
-  busy: boolean;
-  active: boolean;
   onEnter: () => void;
   onLeave: () => void;
   onClick: () => void;
@@ -281,11 +220,7 @@ function Tile({
       onMouseLeave={onLeave}
       onClick={onClick}
       title={pack.name}
-      className={`group relative flex aspect-square flex-col items-center justify-center rounded-sm border bg-surface p-2 transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-        active
-          ? "border-accent glow"
-          : "border-border hover:-translate-y-px hover:border-border-hi hover:bg-elevated"
-      }`}
+      className="group relative flex aspect-square flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-px hover:border-accent hover:bg-elevated"
     >
       {pack.animated && (
         <span className="absolute top-1.5 right-1.5 text-accent-hi" title="Animated">
@@ -334,7 +269,6 @@ function Tile({
         {pack.name}
       </span>
 
-      {busy && <span className="absolute inset-x-2 bottom-1.5 h-px shimmer" />}
     </button>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * The CursorForge mark.
+ * The Cursed mark.
  *
  * The same geometry as `src-tauri/src/packs/brand.rs`, which renders the app
  * icon and the site favicon — a forge chamber with a pointer struck through it.

@@ -1,4 +1,4 @@
-//! The CursorForge mark, defined once.
+//! The Cursed mark, defined once.
 //!
 //! The app icon, the in-app logo and the website all draw the same geometry.
 //! Keeping it here — and rendering the icon through our own SVG rasteriser —

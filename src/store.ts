@@ -2,7 +2,14 @@ import { create } from "zustand";
 import * as ipc from "./lib/ipc";
 import type { ActiveState, PackSummary, Preset, Settings } from "./lib/types";
 
-export type View = "home" | "catalog" | "custom" | "saved" | "settings" | "about";
+export type View =
+  | "home"
+  | "catalog"
+  | "customise"
+  | "custom"
+  | "saved"
+  | "settings"
+  | "about";
 
 export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: true,
@@ -51,8 +58,11 @@ interface Store {
   active: ActiveState;
   packs: PackSummary[];
   presets: Preset[];
+  /** The cursor being worked on, set when one is picked from the catalog. */
+  selected: PackSummary | null;
 
   go: (view: View) => void;
+  select: (pack: PackSummary) => void;
   setError: (error: string | null) => void;
   setPreviewing: (previewing: boolean) => void;
 
@@ -72,8 +82,10 @@ export const useStore = create<Store>((set, get) => ({
   active: DEFAULT_ACTIVE,
   packs: [],
   presets: [],
+  selected: null,
 
   go: (view) => set({ view }),
+  select: (pack) => set({ selected: pack, view: "customise" }),
   setError: (error) => set({ error }),
   setPreviewing: (previewing) => set({ previewing }),
 

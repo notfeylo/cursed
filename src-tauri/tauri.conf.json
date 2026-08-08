@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CursorForge",
-  "version": "1.2.0",
-  "identifier": "dev.feylo.cursorforge",
+  "productName": "Cursed",
+  "version": "1.3.0",
+  "identifier": "dev.feylo.cursed",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CursorForge",
+        "title": "Cursed",
         "width": 420,
         "height": 660,
         "minWidth": 400,
@@ -49,8 +49,8 @@
     "publisher": "feylo",
     "copyright": "Copyright (c) 2026 feylo",
     "category": "Utility",
-    "shortDescription": "Give your dead cursor a new life.",
-    "longDescription": "CursorForge replaces every Windows pointer role with a crisp, multi-resolution cursor scheme, converts your own images into real .cur / .ani files, and keeps the result from being wiped by theme changes and updates. No administrator rights, no overlay, no added input latency.",
+    "shortDescription": "Your pointer. Possessed.",
+    "longDescription": "Cursed replaces every Windows pointer role with a crisp, multi-resolution cursor scheme, converts your own images into real .cur / .ani files, and keeps the result from being wiped by theme changes and updates. No administrator rights, no overlay, no added input latency.",
     "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
@@ -71,7 +71,7 @@
         "languages": ["English"],
         "compression": "lzma",
         "installerHooks": "installer-hooks.nsh",
-        "startMenuFolder": "CursorForge"
+        "startMenuFolder": "Cursed"
       }
     }
   },

@@ -3,7 +3,7 @@
 //! `SetSystemCursor` swaps the pointer for the current session with no registry
 //! write and no flicker, which is what makes catalog hover-preview feel instant.
 //!
-//! CursorForge never draws a cursor (PRD §3). Everything below hands a real
+//! Cursed never draws a cursor (PRD §3). Everything below hands a real
 //! `.cur` / `.ani` file to Windows and lets the GPU's hardware cursor plane do
 //! the drawing — which is why added input latency is zero by construction.
 
@@ -86,9 +86,18 @@ pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
     // SAFETY: `original` is a live cursor handle we own. `CopyIcon` returns an
     // independent handle; ownership of that copy transfers to `SetSystemCursor`,
     // and we destroy the original ourselves regardless of how the set went.
+    //
+    // `CopyIcon` gets the same treatment as `SetSystemCursor` rather than a `?`.
+    // Using `?` here returned early with a bare Win32 error, skipping the
+    // best-effort handling below — so a cursor Windows would not duplicate (some
+    // `.ani` files, and hand-made cursors from elsewhere) failed the whole apply
+    // with "Windows refused it without saying why", even for the three roles
+    // that are allowed to fail.
     let result = unsafe {
-        let copy = CopyIcon(HICON(original.0))?;
-        SetSystemCursor(HCURSOR(copy.0), SYSTEM_CURSOR_ID(role.ocr_id()))
+        match CopyIcon(HICON(original.0)) {
+            Ok(copy) => SetSystemCursor(HCURSOR(copy.0), SYSTEM_CURSOR_ID(role.ocr_id())),
+            Err(e) => Err(e),
+        }
     };
 
     // SAFETY: still ours, still valid — `SetSystemCursor` only consumed the copy.
@@ -154,7 +163,7 @@ mod tests {
     fn a_non_cursor_file_is_rejected() {
         let dir = std::env::temp_dir().join("cursorforge-tests");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("not-a-cursor.cur");
+        let path = dir.join("engine-not-a-cursor.cur");
         std::fs::write(&path, b"this is plainly not a cursor").unwrap();
         assert!(verify_loadable(&path).is_err());
         let _ = std::fs::remove_file(&path);

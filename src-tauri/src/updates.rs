@@ -32,7 +32,7 @@ const DOWNLOAD_HOST: &str = "github.com";
 pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursorforge/releases";
 
 /// GitHub requires a User-Agent and rejects requests without one.
-const AGENT: &str = "CursorForge-UpdateCheck";
+const AGENT: &str = "Cursed-UpdateCheck";
 /// A release payload is a few kilobytes; anything far larger is not our JSON.
 const MAX_JSON: usize = 256 * 1024;
 /// The installer is ~2 MB. 64 MB is generous headroom and still a hard ceiling.
@@ -101,6 +101,18 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// UTF-16 **without** a NUL terminator.
+///
+/// `WinHttpSendRequest` takes headers as a slice and uses its length as the
+/// header length. Passing a NUL-terminated buffer therefore declares one
+/// character too many, WinHTTP parses the NUL as part of a header, and the whole
+/// request is rejected with an invalid-parameter error that surfaces as "the
+/// request could not be sent". Every other call here wants the terminator; this
+/// one must not have it.
+fn wide_unterminated(text: &str) -> Vec<u16> {
+    text.encode_utf16().collect()
+}
+
 /// One HTTPS GET, returning the body.
 ///
 /// `follow_redirects` exists because release asset URLs redirect to a CDN, while
@@ -111,7 +123,8 @@ fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<
     let host_w = wide(host);
     let path_w = wide(path);
     let verb = wide("GET");
-    let headers = wide("User-Agent: CursorForge\r\nAccept: application/vnd.github+json\r\n");
+    let headers =
+        wide_unterminated("User-Agent: Cursed\r\nAccept: application/vnd.github+json");
 
     // SAFETY: every wide buffer outlives the call that borrows it, each handle
     // is owned by a `Handle` that closes it once, and the read loop is bounded
@@ -230,7 +243,7 @@ fn is_newer(latest: &str, current: &str) -> bool {
 /// must be a plain NSIS installer and nothing else. A release that starts
 /// shipping a `.bat` cannot talk this into running it.
 fn is_our_installer(name: &str) -> bool {
-    name.starts_with("CursorForge_")
+    name.starts_with("Cursed_")
         && name.ends_with("_x64-setup.exe")
         && !name.contains('/')
         && !name.contains('\\')
@@ -296,7 +309,7 @@ fn download_dir() -> AppResult<PathBuf> {
 /// Downloads the installer for `tag` and returns where it landed.
 pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
     if !is_our_installer(asset) {
-        return Err(AppError::invalid("that is not an installer CursorForge will run"));
+        return Err(AppError::invalid("that is not an installer Cursed will run"));
     }
     let tag = sanitise_tag(tag)?;
 
@@ -429,18 +442,22 @@ mod tests {
 
     #[test]
     fn only_our_own_installer_name_is_accepted() {
-        assert!(is_our_installer("CursorForge_1.0.0_x64-setup.exe"));
-        assert!(is_our_installer("CursorForge_10.2.34_x64-setup.exe"));
+        assert!(is_our_installer("Cursed_1.0.0_x64-setup.exe"));
+        assert!(is_our_installer("Cursed_10.2.34_x64-setup.exe"));
 
         // Anything that is not exactly our installer must be refused, because
         // the name becomes both a URL path segment and a file we execute.
         for bad in [
-            "CursorForge_1.0.0_x64-setup.bat",
+            "Cursed_1.0.0_x64-setup.bat",
             "evil.exe",
             "../../../windows/system32/cmd.exe",
-            "CursorForge_1.0.0_x64-setup.exe.bat",
-            "CursorForge_/../setup.exe",
-            "CursorForge_1.0.0_x64-setup exe",
+            "Cursed_1.0.0_x64-setup.exe.bat",
+            "Cursed_/../setup.exe",
+            // A space is not in the allowed character set, so this is not our
+            // installer even though it reads like one.
+            "Cursed_1.0.0_x64-setup exe",
+            // The previous product's installer is not this product's installer.
+            "CursorForge_1.0.0_x64-setup.exe",
             "",
         ] {
             assert!(!is_our_installer(bad), "should refuse {bad:?}");
@@ -475,7 +492,7 @@ mod tests {
 
     #[test]
     fn launching_without_a_downloaded_file_is_refused() {
-        assert!(verify_and_launch("1.0.0", "CursorForge_9.9.9_x64-setup.exe").is_err());
+        assert!(verify_and_launch("1.0.0", "Cursed_9.9.9_x64-setup.exe").is_err());
         assert!(verify_and_launch("1.0.0", "evil.exe").is_err());
     }
 }

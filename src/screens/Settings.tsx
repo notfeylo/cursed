@@ -105,7 +105,7 @@ export function SettingsScreen() {
         <SectionTitle>My cursors</SectionTitle>
         <Card>
           <p className="mb-2 text-[11px] text-text-muted">
-            Point CursorForge at a folder of cursors you already have.{" "}
+            Point Cursed at a folder of cursors you already have.{" "}
             <span className="mono">.cur</span>, <span className="mono">.ani</span>,{" "}
             <span className="mono">.png</span> and <span className="mono">.zip</span> all work,
             and files named <span className="mono">Name--cursor</span> /{" "}
@@ -178,7 +178,7 @@ export function SettingsScreen() {
 
           <p className="mt-2 text-[11px] text-text-dim">
             Imported cursors stay on this machine. They are never uploaded, and never bundled
-            into CursorForge itself.
+            into Cursed itself.
           </p>
         </Card>
 
@@ -210,7 +210,7 @@ export function SettingsScreen() {
             checked={settings.autoCheckUpdates}
             onChange={(v) => void patch({ autoCheckUpdates: v })}
             label="Check for updates automatically"
-            hint="The only network request CursorForge ever makes"
+            hint="The only network request Cursed ever makes"
           />
         </Card>
 
@@ -327,7 +327,7 @@ export function SettingsScreen() {
               onChange={(v) => void patch({ hotkeyToggle: v })}
             />
           </Field>
-          <Field label="Open CursorForge">
+          <Field label="Open Cursed">
             <TextInput
               mono
               value={settings.hotkeyOpen}
@@ -358,7 +358,7 @@ export function SettingsScreen() {
           <Field label="Storage location">
             <div className="flex items-center gap-2">
               <span className="mono min-w-0 flex-1 truncate text-[11px] text-text-dim">
-                {storageDir || "%APPDATA%\\CursorForge"}
+                {storageDir || "%APPDATA%\\Cursed"}
               </span>
               <button
                 type="button"
@@ -402,7 +402,7 @@ export function SettingsScreen() {
             {confirmRestore ? (
               <div className="space-y-2">
                 <p className="text-[11px] text-danger">
-                  This puts every pointer back exactly as it was before CursorForge was
+                  This puts every pointer back exactly as it was before Cursed was
                   installed. Your presets are kept.
                 </p>
                 <div className="grid grid-cols-2 gap-2">

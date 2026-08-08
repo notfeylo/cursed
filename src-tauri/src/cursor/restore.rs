@@ -1,6 +1,6 @@
 //! First-run safety snapshot and one-click restore (PRD §4.4).
 //!
-//! The rule this file enforces: CursorForge must never be the reason a machine
+//! The rule this file enforces: Cursed must never be the reason a machine
 //! ends up with a pointer nobody asked for. Before the first write, the entire
 //! pre-existing scheme is captured verbatim. Restore replays it exactly — and the
 //! uninstaller runs the same routine before deleting anything.
@@ -24,7 +24,7 @@ pub struct OriginalScheme {
 /// Captures the current scheme if — and only if — nothing has been captured yet.
 ///
 /// Deliberately idempotent. Re-capturing on a later launch would overwrite the
-/// user's real defaults with CursorForge's own scheme, which would turn "restore"
+/// user's real defaults with Cursed's own scheme, which would turn "restore"
 /// into a no-op and quietly break the product's central promise.
 pub fn capture_once() -> AppResult<OriginalScheme> {
     let file = paths::original_scheme_file()?;
@@ -62,7 +62,7 @@ pub fn snapshot_exists() -> bool {
         .unwrap_or(false)
 }
 
-/// Puts the machine back exactly as CursorForge found it.
+/// Puts the machine back exactly as Cursed found it.
 pub fn restore() -> AppResult<()> {
     let snapshot = read_snapshot()?;
     scheme::write_raw(
@@ -76,7 +76,7 @@ pub fn restore() -> AppResult<()> {
     Ok(())
 }
 
-/// Removes every scheme name CursorForge registered in the Schemes list, so an
+/// Removes every scheme name Cursed registered in the Schemes list, so an
 /// uninstall does not leave dropdown entries pointing at deleted files.
 pub fn deregister_our_schemes() -> AppResult<()> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
@@ -92,7 +92,10 @@ pub fn deregister_our_schemes() -> AppResult<()> {
         .enum_values()
         .filter_map(Result::ok)
         .map(|(name, _)| name)
-        .filter(|name| name.starts_with(crate::cursor::SCHEME_PREFIX))
+        .filter(|name| {
+            name.starts_with(crate::cursor::SCHEME_PREFIX)
+                || name.starts_with(crate::cursor::LEGACY_SCHEME_PREFIX)
+        })
         .collect();
 
     for name in ours {

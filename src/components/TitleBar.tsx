@@ -33,7 +33,7 @@ export function TitleBar() {
       <div data-tauri-drag-region className="flex items-center gap-2">
         <Mark size={15} id="tb" />
         <span data-tauri-drag-region className="display text-[10px] text-text-muted">
-          CURSORFORGE
+          CURSED
           {view !== "home" && <span className="text-text-dim"> / {view}</span>}
         </span>
       </div>

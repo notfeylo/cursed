@@ -14,16 +14,16 @@ pub enum AppError {
     #[error("Windows rejected the request: {0}")]
     Win32(String),
 
-    #[error("Could not read or write CursorForge's storage: {0}")]
+    #[error("Could not read or write Cursed's storage: {0}")]
     Storage(String),
 
-    #[error("That file isn't something CursorForge can use: {0}")]
+    #[error("That file isn't something Cursed can use: {0}")]
     Invalid(String),
 
-    #[error("{0} is not a cursor role CursorForge knows about.")]
+    #[error("{0} is not a cursor role Cursed knows about.")]
     UnknownRole(String),
 
-    #[error("That path is outside CursorForge's storage and was refused.")]
+    #[error("That path is outside Cursed's storage and was refused.")]
     PathEscape,
 
     #[error("The image is too large to process safely ({0}).")]

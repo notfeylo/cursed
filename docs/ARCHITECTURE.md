@@ -2,7 +2,7 @@
 
 ## The rule everything else follows
 
-> **CursorForge never draws a cursor. It only tells Windows which cursor to
+> **Cursed never draws a cursor. It only tells Windows which cursor to
 > draw.**
 
 This is the load-bearing decision, so it is worth stating why the obvious
@@ -21,7 +21,7 @@ rate, with no compositing step at all. It does not care whether the mouse is
 400 DPI or 32,000, whether it polls at 125 Hz or 8 kHz, or what the system is
 doing. And it is DPI-aware for free.
 
-So every cursor in CursorForge is a real `.cur` or `.ani` file registered with
+So every cursor in Cursed is a real `.cur` or `.ani` file registered with
 Windows. "Zero added input latency" is not a performance target that could
 regress — it is a property of handing off to the same code path Windows uses for
 its own arrow.
@@ -116,12 +116,12 @@ Two details worth knowing:
 ## Safety net
 
 `cursor/restore.rs` captures the complete pre-existing scheme to
-`%APPDATA%\CursorForge\backup\original_scheme.json` **before the first write**,
+`%APPDATA%\Cursed\backup\original_scheme.json` **before the first write**,
 and never re-captures — re-capturing on a later launch would overwrite the
 user's real defaults with ours and turn "restore" into a no-op.
 
 Settings → Restore Windows Default replays that snapshot. So does the
-uninstaller, via `CursorForge.exe --restore-defaults`, before it deletes
+uninstaller, via `Cursed.exe --restore-defaults`, before it deletes
 anything.
 
 ## Rendering
@@ -152,7 +152,7 @@ is a directory listing.
 
 ## Idle footprint
 
-CursorForge spends nearly all of its life hidden in the tray, so `idle.rs` calls
+Cursed spends nearly all of its life hidden in the tray, so `idle.rs` calls
 `SetProcessWorkingSetSize(-1, -1)` a couple of seconds after the window is
 hidden. That is the documented way to tell Windows "I am idle, reclaim what you
 like" — nothing is freed or invalidated, the pages simply stop being resident and

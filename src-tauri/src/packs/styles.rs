@@ -1,4 +1,4 @@
-//! The 64 catalog packs.
+//! The catalog packs.
 //!
 //! Each pack is a parameter set, not a folder of bitmaps. That is the whole
 //! trick behind PRD §7.1: the artwork is vector code, the colour is applied at
@@ -189,7 +189,6 @@ pub fn all() -> Vec<PackDef> {
         pack("animated-pulse", "PULSE", Animated, Builder::new().glow(0.7).round().reticle(DotRing).done(), "#2E8BFF"),
         pack("animated-orbit", "ORBIT", Animated, Builder::new().reticle(Circle).done(), "#2E8BFF"),
         pack("animated-ripple", "RIPPLE", Animated, Builder::new().glow(0.5).reticle(CircleCross).done(), "#8AE9FF"),
-        pack("animated-glitch", "GLITCH", Animated, Builder::new().form(Blade).reticle(Notch).done(), "#FF3DD8"),
         pack("animated-scanline", "SCANLINE", Animated, Builder::new().form(Pixel).reticle(ThinCross).done(), "#33D6A6"),
         pack("animated-spinner", "SPINNER", Animated, Builder::new().round().reticle(Plus).done(), "#2E8BFF"),
         pack("animated-breathe", "BREATHE", Animated, Builder::new().glow(0.8).round().reticle(Dot).done(), "#A24BFF"),
@@ -242,14 +241,7 @@ pub fn all() -> Vec<PackDef> {
         pack("retro-bevel", "BEVEL CRT", Retro, Builder::new().form(Wedge).fill(Outline).reticle(Hex).done(), "#EDF1F7"),
 
         // ── GAMING II ─────────────────────────────────────────
-        pack("gaming-scope", "SCOPE", Gaming, Builder::new().form(Slim).reticle(Rings).done(), "#33D6A6"),
-        pack("gaming-mark", "MARK", Gaming, Builder::new().form(Slim).reticle(Square).done(), "#2E8BFF"),
-        pack("gaming-flick", "FLICK", Gaming, Builder::new().form(Slim).reticle(Saltire).done(), "#FF4D5E"),
         pack("gaming-burst", "BURST", Gaming, Builder::new().form(Slim).reticle(Star).done(), "#FFD23D"),
-        pack("gaming-strafe", "STRAFE", Gaming, Builder::new().form(Slim).reticle(Caret).done(), "#A24BFF"),
-        pack("gaming-hold", "HOLD", Gaming, Builder::new().form(Slim).reticle(CornerDot).done(), "#33D6A6"),
-        pack("gaming-lane", "LANE", Gaming, Builder::new().form(Slim).reticle(Bar).done(), "#2E8BFF"),
-        pack("gaming-hexlock", "HEXLOCK", Gaming, Builder::new().form(Slim).reticle(Hex).done(), "#FF7A2E"),
         pack("gaming-arcshot", "ARCSHOT", Gaming, Builder::new().form(Blade).reticle(Arc).done(), "#7DFF3D"),
         pack("gaming-mesh", "MESH", Gaming, Builder::new().form(Blade).fill(Hairline).reticle(Grid).done(), "#8AE9FF"),
 
@@ -259,7 +251,6 @@ pub fn all() -> Vec<PackDef> {
         pack("animated-flicker", "FLICKER", Animated, Builder::new().form(Split).reticle(Bar).done(), "#FF3DD8"),
         pack("animated-beacon", "BEACON", Animated, Builder::new().form(Wedge).glow(0.8).reticle(Star).done(), "#FFD23D"),
         pack("animated-drift-x", "DRIFT X", Animated, Builder::new().form(Kite).glow(0.6).reticle(Caret).done(), "#A24BFF"),
-        pack("animated-lattice", "LATTICE", Animated, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
 
         // ── FUN II ────────────────────────────────────────────
         pack("fun-bubble", "BUBBLE", Fun, Builder::new().form(Round).round().weight(7.5).reticle(Rings).done(), "#5CB8FF"),
@@ -268,8 +259,6 @@ pub fn all() -> Vec<PackDef> {
         pack("fun-candy", "CANDY", Fun, Builder::new().form(Round).round().glow(0.5).reticle(Caret).done(), "#FF3DD8"),
         pack("fun-anvil", "ANVIL", Fun, Builder::new().form(Wedge).weight(6.0).reticle(Square).done(), "#EDF1F7"),
         pack("fun-prism-x", "PRISM X", Fun, Builder::new().form(Kite).glow(0.7).reticle(Saltire).done(), "#A24BFF"),
-        pack("fun-loop", "LOOP", Fun, Builder::new().form(Round).fill(Outline).reticle(Arc).done(), "#33D6A6"),
-        pack("fun-static", "STATIC", Fun, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
 
         // ── VOLUME — gradient bodies, so the pointer reads as a lit surface ──
         pack("vol-titan", "TITAN", Minimal, Builder::new().form(Wedge).treat(Treatment::Gradient).reticle(Hex).done(), "#8AE9FF"),
@@ -409,7 +398,49 @@ mod tests {
     fn the_catalog_meets_or_beats_the_target() {
         let count = all().len();
         assert!(count >= 64, "catalog shrank to {count}; the v1 floor is 64");
-        assert_eq!(count, 216, "update this when packs are added deliberately");
+        assert_eq!(count, 205, "update this when packs are added deliberately");
+    }
+
+    /// Colour is a setting, not a design.
+    ///
+    /// Two packs with identical geometry and different default tints are the
+    /// same cursor twice. Shipping both floods a category with what looks like
+    /// repetition and buries the designs that genuinely differ — the user can
+    /// already recolour anything, so the second entry earns nothing.
+    #[test]
+    fn no_two_packs_are_the_same_design_in_a_different_colour() {
+        use std::collections::HashMap;
+
+        let packs = all();
+        let mut seen: HashMap<String, &'static str> = HashMap::new();
+        let mut clashes = Vec::new();
+
+        for pack in &packs {
+            let s = &pack.style;
+            // Everything that changes a pixel, and nothing that does not.
+            let signature = format!(
+                "{:?}|{:?}|{:?}|{:?}|{:.2}|{:.2}|{}|{:.2}|{:.2}",
+                s.form,
+                s.fill,
+                s.reticle,
+                s.treatment,
+                s.weight,
+                s.glow,
+                s.round_joins,
+                s.opacity,
+                s.scale
+            );
+            if let Some(first) = seen.insert(signature.clone(), pack.name) {
+                clashes.push(format!("{} is {} in another colour", pack.name, first));
+            }
+        }
+
+        assert!(
+            clashes.is_empty(),
+            "{} colour-only duplicate(s):\n  {}",
+            clashes.len(),
+            clashes.join("\n  ")
+        );
     }
 
     #[test]

@@ -1,11 +1,11 @@
 //! Importing a folder of cursors the user already has.
 //!
-//! CursorForge ships original artwork only, but people collect cursors from all
+//! Cursed ships original artwork only, but people collect cursors from all
 //! over — downloaded packs, things they drew, files rescued from an old machine.
 //! This turns any folder of them into first-class entries in the catalog.
 //!
 //! Nothing imported here is redistributed. The files land in the user's own
-//! `%APPDATA%\CursorForge\imported` and are never bundled into the installer or
+//! `%APPDATA%\Cursed\imported` and are never bundled into the installer or
 //! the repository, which keeps someone else's artwork exactly where it belongs:
 //! on the machine of the person who obtained it.
 //!

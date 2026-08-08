@@ -1,7 +1,7 @@
 //! Layer B — the persistence layer (PRD §4.2).
 //!
 //! Writes the pointer scheme into `HKEY_CURRENT_USER\Control Panel\Cursors` so
-//! the cursor survives a reboot, survives CursorForge not running at all, and
+//! the cursor survives a reboot, survives Cursed not running at all, and
 //! shows up as a named scheme in Control Panel → Mouse → Pointers.
 //!
 //! HKCU only. No administrator rights are involved anywhere in this file.
@@ -37,7 +37,7 @@ impl CursorSet {
 
     /// Names the roles a pack forgot. The build script and `.cfpack` import both
     /// refuse an incomplete set — a half-applied scheme is exactly the failure
-    /// mode CursorForge exists to avoid (PRD §4.2).
+    /// mode Cursed exists to avoid (PRD §4.2).
     pub fn missing(&self) -> Vec<Role> {
         ALL_ROLES
             .into_iter()
@@ -166,7 +166,7 @@ pub fn read_scheme_name() -> AppResult<String> {
     Ok(key.get_value::<String, _>("").unwrap_or_default())
 }
 
-/// Snapshot of every value CursorForge is capable of changing.
+/// Snapshot of every value Cursed is capable of changing.
 pub fn read_all() -> AppResult<(BTreeMap<String, String>, Option<u32>, String)> {
     let key = cursors_key(KEY_READ)?;
     let mut values = BTreeMap::new();
@@ -328,8 +328,8 @@ mod tests {
         let Some(appdata) = std::env::var_os("APPDATA") else {
             return;
         };
-        let path = PathBuf::from(appdata).join("CursorForge").join("a.cur");
-        assert_eq!(to_expandable(&path), r"%APPDATA%\CursorForge\a.cur");
+        let path = PathBuf::from(appdata).join("Cursed").join("a.cur");
+        assert_eq!(to_expandable(&path), r"%APPDATA%\Cursed\a.cur");
     }
 
     /// A broadcast is a notification about a change that has already happened.
@@ -339,6 +339,17 @@ mod tests {
     fn broadcasting_never_fails_the_caller() {
         assert!(broadcast().is_ok());
         assert!(reload_from_registry().is_ok());
+    }
+
+    /// Same trap as the data folder: if the legacy prefix equals the current
+    /// one, an uninstall cleans up nothing from older versions.
+    #[test]
+    fn the_legacy_scheme_prefix_is_not_the_current_one() {
+        assert_ne!(
+            crate::cursor::SCHEME_PREFIX,
+            crate::cursor::LEGACY_SCHEME_PREFIX,
+            "old schemes would never be cleaned up"
+        );
     }
 
     #[test]

@@ -1,13 +1,13 @@
 # Contributing
 
-Thanks for looking. CursorForge is small on purpose, so contributions that keep
+Thanks for looking. Cursed is small on purpose, so contributions that keep
 it small are the most welcome kind.
 
 ## Before you write code
 
 Read [ARCHITECTURE.md](docs/ARCHITECTURE.md), and in particular this rule:
 
-> **CursorForge never draws a cursor. It only tells Windows which cursor to
+> **Cursed never draws a cursor. It only tells Windows which cursor to
 > draw.**
 
 A pull request that introduces an overlay window, a layered sprite, a mouse

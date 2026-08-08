@@ -1,18 +1,43 @@
-//! Everything CursorForge writes lives under one root, and nothing it is asked
+//! Everything Cursed writes lives under one root, and nothing it is asked
 //! to read may live outside it. This module is the only place that decides what
 //! a legal path is (PRD §13.4).
 
 use crate::error::{AppError, AppResult};
 use std::path::{Component, Path, PathBuf};
 
-const APP_DIR: &str = "CursorForge";
+const APP_DIR: &str = "Cursed";
+/// What the storage folder was called before the app was renamed.
+///
+/// Must stay the *old* name. If it ever equals `APP_DIR` the migration below
+/// silently does nothing and every existing user's settings, presets and
+/// imported cursors are stranded in a folder the app no longer looks at.
+const LEGACY_APP_DIR: &str = "CursorForge";
 
-/// `%APPDATA%\CursorForge`
+/// `%APPDATA%\Cursed`
+///
+/// Renaming the app must not cost anyone their settings, presets and imported
+/// cursors, so the first call after an upgrade moves the old folder across.
+/// Losing somebody's imported artwork because the product changed name would be
+/// a self-inflicted wound.
 pub fn root() -> AppResult<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .ok_or_else(|| AppError::storage("APPDATA is not set"))?;
     let dir = base.join(APP_DIR);
+
+    if !dir.exists() {
+        let legacy = base.join(LEGACY_APP_DIR);
+        if legacy.is_dir() {
+            // A rename is atomic and cheap. If it fails — the old folder is open
+            // in Explorer, say — fall through and start fresh rather than refuse
+            // to launch.
+            match std::fs::rename(&legacy, &dir) {
+                Ok(()) => log::info!("moved existing data from {LEGACY_APP_DIR} to {APP_DIR}"),
+                Err(e) => log::warn!("could not migrate {LEGACY_APP_DIR}: {e}"),
+            }
+        }
+    }
+
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -120,7 +145,7 @@ fn strip_verbatim(path: &Path) -> PathBuf {
 }
 
 /// Resolves an absolute path supplied from outside and asserts it is inside
-/// CursorForge's storage. Symlinks are followed *before* the check, so a link
+/// Cursed's storage. Symlinks are followed *before* the check, so a link
 /// planted inside the root cannot point out of it.
 pub fn ensure_inside_storage(candidate: &Path) -> AppResult<PathBuf> {
     let root = strip_verbatim(&root()?.canonicalize()?);
@@ -182,6 +207,17 @@ mod tests {
         for good in ["arrow.cur", "neon-plasma/Arrow.cur", "my logo.png", "a.b.c.cur"] {
             assert!(validate_relative(good).is_ok(), "should accept {good:?}");
         }
+    }
+
+    /// A blanket find-and-replace during the rename set this to the new name,
+    /// which would have quietly stranded every existing user's data. The two
+    /// must never be equal.
+    #[test]
+    fn the_legacy_data_folder_is_not_the_current_one() {
+        assert_ne!(
+            APP_DIR, LEGACY_APP_DIR,
+            "migration would be a no-op and existing data would be orphaned"
+        );
     }
 
     #[test]

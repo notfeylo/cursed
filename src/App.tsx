@@ -3,6 +3,7 @@ import { TitleBar } from "./components/TitleBar";
 import { Banner } from "./components/ui";
 import { Home } from "./screens/Home";
 import { Catalog } from "./screens/Catalog";
+import { Customise } from "./screens/Customise";
 import { CustomImport } from "./screens/CustomImport";
 import { Saved } from "./screens/Saved";
 import { SettingsScreen } from "./screens/Settings";
@@ -44,6 +45,8 @@ export default function App() {
           <Home />
         ) : view === "catalog" ? (
           <Catalog />
+        ) : view === "customise" ? (
+          <Customise />
         ) : view === "custom" ? (
           <CustomImport />
         ) : view === "saved" ? (

@@ -74,7 +74,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
 /// A never-shown tool window is a top-level window and does receive broadcasts,
 /// while staying out of the taskbar, Alt-Tab, and the Z-order.
 fn create_listener_window() -> Option<HWND> {
-    let class_name: Vec<u16> = "CursorForgeWatchdog\0".encode_utf16().collect();
+    let class_name: Vec<u16> = "CursedWatchdog\0".encode_utf16().collect();
 
     // SAFETY: the class name buffer is NUL-terminated and lives for the whole
     // call; `wndproc` has the exact signature Windows expects.

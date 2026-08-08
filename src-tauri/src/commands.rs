@@ -470,7 +470,7 @@ pub fn clear_update_downloads() -> AppResult<()> {
 ///
 /// The path comes from the native file dialog rather than from the webview, and
 /// the import only ever *reads* from it — everything created lands under
-/// CursorForge's own storage.
+/// Cursed's own storage.
 #[tauri::command]
 pub fn import_cursor_folder(folder: String) -> AppResult<crate::import::ImportReport> {
     crate::import::import_folder(&PathBuf::from(folder))
@@ -504,7 +504,7 @@ pub fn open_external(url: String) -> AppResult<()> {
         "https://github.com/notfeylo/cursorforge/releases",
     ];
     if !ALLOWED.contains(&url.as_str()) {
-        return Err(AppError::invalid("that link is not one CursorForge opens"));
+        return Err(AppError::invalid("that link is not one Cursed opens"));
     }
     crate::shell::open_url(&url)
 }

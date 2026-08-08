@@ -20,7 +20,16 @@ use std::sync::{Mutex, OnceLock};
 
 /// Every scheme we register is named with this prefix so an uninstall can find
 /// and remove exactly our entries and nobody else's.
-pub const SCHEME_PREFIX: &str = "CursorForge — ";
+pub const SCHEME_PREFIX: &str = "Cursed — ";
+
+/// The prefix used before the app was renamed.
+///
+/// Kept so an uninstall still cleans up schemes registered by an earlier
+/// version. Leaving those behind would put dead entries in the Windows Pointers
+/// dropdown pointing at files that no longer exist.
+///
+/// Must stay the *old* name — if it equals `SCHEME_PREFIX` it cleans up nothing.
+pub const LEGACY_SCHEME_PREFIX: &str = "CursorForge — ";
 
 /// What is currently committed. Held in memory so the watchdog knows what
 /// "correct" looks like without re-deriving it from disk every five seconds.
@@ -76,7 +85,13 @@ pub fn active_state() -> AppResult<ActiveState> {
             // back rather than showing a placeholder: the registry knows it is
             // "PLASMA", and telling the user anything vaguer is just noise.
             let name = scheme::read_scheme_name().unwrap_or_default();
-            match name.strip_prefix(SCHEME_PREFIX) {
+            // An older version's scheme is still ours, and still what the user
+            // is looking at, so the chip should name it rather than claim the
+            // pointer is stock.
+            let stripped = name
+                .strip_prefix(SCHEME_PREFIX)
+                .or_else(|| name.strip_prefix(LEGACY_SCHEME_PREFIX));
+            match stripped {
                 Some(pack_name) if !pack_name.is_empty() => ActiveState {
                     pack_id: None,
                     pack_name: Some(pack_name.to_owned()),
@@ -171,7 +186,7 @@ pub fn clear_preview() -> AppResult<()> {
     engine::revert_live()
 }
 
-/// Returns the machine to its pre-CursorForge state.
+/// Returns the machine to its pre-Cursed state.
 pub fn restore_default() -> AppResult<()> {
     restore::restore()?;
     set_applied(None);

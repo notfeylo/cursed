@@ -1,6 +1,6 @@
 //! The tray icon: what the app is, most of the time.
 //!
-//! CursorForge spends its life minimised. The tray menu therefore carries the
+//! Cursed spends its life minimised. The tray menu therefore carries the
 //! two actions that matter without opening the window — switch preset, and put
 //! Windows back the way it was — plus a genuine Quit, because a tray app that
 //! cannot be quit from its tray is a tray app people uninstall.
@@ -21,7 +21,7 @@ const PRESET_PREFIX: &str = "preset:";
 fn build_menu<R: Runtime>(app: &AppHandle<R>) -> AppResult<Menu<R>> {
     let map = |e: tauri::Error| AppError::msg(e.to_string());
 
-    let open = MenuItem::with_id(app, OPEN, "Open CursorForge", true, None::<&str>).map_err(map)?;
+    let open = MenuItem::with_id(app, OPEN, "Open Cursed", true, None::<&str>).map_err(map)?;
     let restore = MenuItem::with_id(app, RESTORE, "Restore Windows Default", true, None::<&str>)
         .map_err(map)?;
     let quit = MenuItem::with_id(app, QUIT, "Quit", true, None::<&str>).map_err(map)?;
@@ -117,11 +117,11 @@ pub fn refresh_menu(app: &AppHandle) {
 fn tooltip_text() -> String {
     match crate::cursor::active_state() {
         Ok(state) if !state.is_default => format!(
-            "CursorForge — {} · {}px",
+            "Cursed — {} · {}px",
             state.pack_name.unwrap_or_else(|| "CUSTOM".into()),
             state.size
         ),
-        _ => "CursorForge — Windows default".to_owned(),
+        _ => "Cursed — Windows default".to_owned(),
     }
 }
 

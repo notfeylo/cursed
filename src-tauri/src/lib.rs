@@ -1,7 +1,7 @@
-//! CursorForge — Windows pointer replacement.
+//! Cursed — Windows pointer replacement.
 //!
 //! The one architectural rule, restated here because every module depends on it:
-//! **CursorForge never draws a cursor. It only tells Windows which cursor to
+//! **Cursed never draws a cursor. It only tells Windows which cursor to
 //! draw.** No overlay window, no layered sprite, no hooking. Every pointer in
 //! this product is a real `.cur` or `.ani` file handed to the OS, so it is drawn
 //! by the GPU's hardware cursor plane — which is why added input latency is zero
@@ -199,8 +199,8 @@ pub fn run() {
 
     if let Err(e) = result {
         // The last thing a GUI app should do is vanish without explanation.
-        log::error!("CursorForge could not start: {e}");
-        eprintln!("CursorForge could not start: {e}");
+        log::error!("Cursed could not start: {e}");
+        eprintln!("Cursed could not start: {e}");
         std::process::exit(1);
     }
 }

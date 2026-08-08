@@ -1,6 +1,6 @@
 //! Giving memory back when the window is hidden (PRD §12).
 //!
-//! CursorForge spends nearly all of its life in the tray. While the window is
+//! Cursed spends nearly all of its life in the tray. While the window is
 //! open the WebView2 host legitimately needs its working set; once it is hidden,
 //! most of those pages are a rendering engine nobody is looking at.
 //!

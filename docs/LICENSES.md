@@ -1,6 +1,6 @@
 # Licences
 
-## CursorForge
+## Cursed
 
 MIT License — Copyright (c) 2026 feylo. See `LICENSE` in the repository root, or
 the summary under Settings → About.
@@ -34,7 +34,7 @@ under the **SIL Open Font License 1.1**:
 
 ## Third-party crates and packages
 
-CursorForge is built on open-source libraries, each under its own permissive
+Cursed is built on open-source libraries, each under its own permissive
 licence (MIT, Apache-2.0, BSD, MPL-2.0, or Zlib). The authoritative,
 version-exact list for any build is produced by `cargo deny list` and
 `npm ls --production` and is published with each release.
@@ -57,5 +57,5 @@ The principal ones:
 | `serde`              | Serialisation                        | MIT / Apache-2.0 |
 
 **No Windows or Microsoft trademark, logo, or asset is used, bundled, or
-implied.** CursorForge is not affiliated with, endorsed by, or sponsored by
+implied.** Cursed is not affiliated with, endorsed by, or sponsored by
 Microsoft.

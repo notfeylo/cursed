@@ -24,19 +24,19 @@ export function Home() {
         <HeroMark />
         <div className="text-center">
           <h1 className="display text-[26px] leading-[1.15] text-text">
-            ENHANCE
+            CURSE
             <br />
             YOUR CURSOR
           </h1>
           <p className="mt-2 text-[12px] text-text-muted">
-            Give your dead cursor a new life.
+            Your pointer. Possessed.
           </p>
         </div>
       </div>
 
       <div className="relative flex flex-col gap-3">
         <Button full onClick={() => go("catalog")}>
-          ENHANCE YOUR CURSOR
+          CURSE MY CURSOR
         </Button>
 
         <ActiveChip

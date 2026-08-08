@@ -136,7 +136,7 @@ export interface ActiveState {
 }
 
 export interface BuiltCursor {
-  /** Absolute path under %APPDATA%\CursorForge — opaque to the frontend. */
+  /** Absolute path under %APPDATA%\Cursed — opaque to the frontend. */
   id: string;
   name: string;
   animated: boolean;

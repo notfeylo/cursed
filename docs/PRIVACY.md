@@ -1,8 +1,8 @@
 # Privacy Policy
 
-**CursorForge** — last updated 2026-08-07.
+**Cursed** — last updated 2026-08-07.
 
-## CursorForge collects nothing
+## Cursed collects nothing
 
 No analytics. No telemetry. No crash reporting. No account. No identifiers.
 No profiling. Nothing about you or your computer is measured, stored remotely,
@@ -10,20 +10,20 @@ or transmitted.
 
 ## Network access
 
-CursorForge makes exactly one kind of network request, and only if you leave it
+Cursed makes exactly one kind of network request, and only if you leave it
 enabled:
 
 - **Update check** — a request to the GitHub Releases API for this project, to
   see whether a newer version exists. It sends nothing but the request itself.
 
 You can turn this off under **Settings → General → Check for updates
-automatically**. With it off, CursorForge makes no network requests at all and
+automatically**. With it off, Cursed makes no network requests at all and
 works fully offline, including its fonts, artwork, and these documents.
 
 ## Where your data lives
 
-Everything CursorForge creates stays on your computer, in
-`%APPDATA%\CursorForge`:
+Everything Cursed creates stays on your computer, in
+`%APPDATA%\Cursed`:
 
 | Path                            | Contents                                  |
 | ------------------------------- | ----------------------------------------- |

@@ -91,7 +91,7 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
               </Button>
               <p className="text-[11px] text-text-dim">
                 The download is checked against the checksum published with the release before
-                it runs. CursorForge closes so the installer can replace it.
+                it runs. Cursed closes so the installer can replace it.
               </p>
             </>
           ) : (

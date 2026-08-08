@@ -74,10 +74,41 @@ fn run_import(args: &[String]) -> ! {
     }
 }
 
+/// `genpacks --check-update` runs the real update check through the app's own
+/// WinHTTP code.
+///
+/// Added because the checksum chain was verified with curl while the code that
+/// actually performs the request was never run — and it turned out to be broken.
+/// Verifying the thing next to the thing is not verifying the thing.
+fn check_update() -> ! {
+    match cursorforge_lib::updates::check() {
+        Ok(status) => {
+            println!("current:   {}", status.current);
+            println!("latest:    {}", status.latest.as_deref().unwrap_or("(none)"));
+            println!("newer:     {}", status.newer_available);
+            println!(
+                "installer: {}",
+                status.installer.as_deref().unwrap_or("(none offered)")
+            );
+            if let Some(size) = status.size {
+                println!("size:      {:.2} MB", size as f64 / 1_048_576.0);
+            }
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("update check failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--icon") {
         render_icon(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--check-update") {
+        check_update();
     }
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);

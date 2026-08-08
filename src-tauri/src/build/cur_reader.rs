@@ -259,7 +259,7 @@ mod tests {
     fn a_file_that_is_not_a_cursor_is_refused() {
         let dir = std::env::temp_dir().join("cursorforge-tests");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("not-a-cursor.cur");
+        let path = dir.join("reader-not-a-cursor.cur");
         std::fs::write(&path, b"plainly not a cursor at all").unwrap();
 
         assert!(read(&path, 32).is_err());

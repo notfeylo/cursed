@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Least privilege for the main window: its own chrome, a file picker, global shortcuts, and CursorForge's own commands. Nothing else — no shell, no http, no filesystem access from the webview.",
+  "description": "Least privilege for the main window: its own chrome, a file picker, global shortcuts, and Cursed's own commands. Nothing else — no shell, no http, no filesystem access from the webview.",
   "windows": ["main"],
   "permissions": [
     "core:default",

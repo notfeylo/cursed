@@ -8,7 +8,7 @@ acknowledgement within a week.
 
 ## Threat model
 
-CursorForge is a local desktop application with three untrusted inputs:
+Cursed is a local desktop application with three untrusted inputs:
 
 1. **Images the user imports** — arbitrary bytes from anywhere.
 2. **`.cfpack` files** — archives that may have been authored by a stranger.
@@ -42,14 +42,14 @@ The frontend passes **values, never locations**:
 - A pack is a catalog id looked up in a fixed table.
 - An imported image is an opaque session token; the webview never learns a path.
 - Any path that does arrive is canonicalised and asserted to live under
-  `%APPDATA%\CursorForge`. `..`, absolute paths, UNC paths, alternate data
+  `%APPDATA%\Cursed`. `..`, absolute paths, UNC paths, alternate data
   streams (`name:stream`) and reserved device names (`CON`, `NUL`, `LPT1`, …)
   are refused.
 
 ### Capabilities
 
 `src-tauri/capabilities/default.json` grants the main window its own chrome, a
-file picker, global shortcuts, and CursorForge's own commands. `shell:*`,
+file picker, global shortcuts, and Cursed's own commands. `shell:*`,
 `http:*` and filesystem access from the webview are **not granted**. Opening the
 storage folder and opening a project link are Rust commands over a fixed
 allow-list, not a general-purpose launcher.
@@ -114,7 +114,7 @@ most dangerous thing the application does. It is treated accordingly.
   the author published, and a release asset can be replaced.
 - If a release publishes no checksum for the installer, **the update refuses to
   run** rather than falling back to trusting the download.
-- The asset name must match `CursorForge_<version>_x64-setup.exe` exactly, with
+- The asset name must match `Cursed_<version>_x64-setup.exe` exactly, with
   no path separators or traversal, because it becomes both a URL segment and a
   filename that gets executed. The release tag must parse as a version number
   for the same reason.

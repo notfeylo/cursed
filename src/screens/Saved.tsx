@@ -54,7 +54,7 @@ export function Saved() {
     guard(async () => {
       const picked = await open({
         multiple: false,
-        filters: [{ name: "CursorForge pack", extensions: ["cfpack"] }],
+        filters: [{ name: "Cursed pack", extensions: ["cfpack"] }],
       });
       if (typeof picked === "string") await ipc.importCfpack(picked);
     });
@@ -63,7 +63,7 @@ export function Saved() {
     guard(async () => {
       const destination = await save({
         defaultPath: `${preset.name.toLowerCase().replace(/\s+/g, "-")}.cfpack`,
-        filters: [{ name: "CursorForge pack", extensions: ["cfpack"] }],
+        filters: [{ name: "Cursed pack", extensions: ["cfpack"] }],
       });
       if (destination) await ipc.exportPreset(preset.id, destination);
     });

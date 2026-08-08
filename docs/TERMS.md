@@ -1,16 +1,16 @@
 # Terms & Conditions
 
-**CursorForge** — last updated 2026-08-07.
+**Cursed** — last updated 2026-08-07.
 
 ## 1. The software is free and provided as-is
 
-CursorForge is released free of charge under the MIT License. It comes with
+Cursed is released free of charge under the MIT License. It comes with
 **no warranty of any kind**, express or implied, including no warranty of
 merchantability or fitness for a particular purpose.
 
 ## 2. What it changes on your computer
 
-CursorForge modifies **only per-user Windows pointer settings**, stored under
+Cursed modifies **only per-user Windows pointer settings**, stored under
 `HKEY_CURRENT_USER\Control Panel\Cursors` — the same settings the Windows
 Settings app exposes under Mouse → Additional mouse settings → Pointers.
 
@@ -18,24 +18,24 @@ It requires **no administrator rights**, makes **no system-wide changes**, never
 writes to `HKEY_LOCAL_MACHINE`, never installs a driver or service, and never
 injects code into another process.
 
-Its own files live in `%APPDATA%\CursorForge`.
+Its own files live in `%APPDATA%\Cursed`.
 
 ## 3. Images you import
 
-You are solely responsible for any image you import into CursorForge, and you
-warrant that you hold the rights necessary to use it. CursorForge processes your
+You are solely responsible for any image you import into Cursed, and you
+warrant that you hold the rights necessary to use it. Cursed processes your
 images entirely on your own computer and never uploads them anywhere.
 
 ## 4. Acceptable use
 
-You may not use CursorForge to:
+You may not use Cursed to:
 
 - impersonate a system user-interface element for deceptive purposes, or
 - distribute malicious, deceptive, or infringing content via `.cfpack` files.
 
 ## 5. Bundled cursor artwork
 
-All cursor artwork bundled with CursorForge is original work, © 2026 feylo, and
+All cursor artwork bundled with Cursed is original work, © 2026 feylo, and
 is licensed under the MIT License alongside the source code. No bundled asset
 replicates a protected character, logo, or copyrighted design, and no pack is
 named after a third party's product or trademark.

@@ -1,10 +1,10 @@
 //! `.cfpack` — a preset and its custom artwork, in a zip.
 //!
-//! This is the one file format CursorForge accepts from strangers, so it is the
+//! This is the one file format Cursed accepts from strangers, so it is the
 //! one place that has to assume the sender is hostile. Everything in PRD §13.5
 //! is enforced here, in this order: schema first, then paths, then extensions,
 //! then budgets. A `.cfpack` can never carry an executable, never write outside
-//! CursorForge's storage, and never define a role by naming a registry key.
+//! Cursed's storage, and never define a role by naming a registry key.
 
 use crate::cursor::roles::Role;
 use crate::error::{AppError, AppResult};

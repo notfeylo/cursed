@@ -66,7 +66,7 @@ export function About() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <div className="flex flex-col items-center gap-2 pb-4">
           <Mark size={54} animated id="about" />
-          <span className="display text-[13px] text-text">CURSORFORGE</span>
+          <span className="display text-[13px] text-text">CURSED</span>
           <span className="mono text-[10px] text-text-dim">
             v{info.version} · {info.commit} · {info.target}
           </span>
@@ -120,7 +120,7 @@ export function About() {
             </Button>
           </div>
           <p className="mt-3 text-[11px] text-text-dim">
-            MIT licensed. © 2026 feylo. CursorForge changes only per-user pointer settings
+            MIT licensed. © 2026 feylo. Cursed changes only per-user pointer settings
             and is not affiliated with Microsoft.
           </p>
         </Card>
