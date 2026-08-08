@@ -1,0 +1,2 @@
+615a33fefa94222a0e7ea553100bbeb227264b9aa7466ff15ded58544ba1a77f  CursorForge_1.0.0_x64-setup.exe
+978122daf00d5dac38f997e56531812b99616032d890fb2b08f1af3f3e8fad58  CursorForge_1.0.0_x64_en-US.msi

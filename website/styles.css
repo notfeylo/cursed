@@ -1,0 +1,535 @@
+/* CursorForge — the same design tokens as the app (§10.2). */
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("fonts/chakra-petch-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --bg: #050507;
+  --surface: #0b0d12;
+  --elevated: #131722;
+  --border: #1e2532;
+  --border-strong: #2a3446;
+
+  --accent: #2e8bff;
+  --accent-hi: #5cb8ff;
+  --accent-dim: #0a2540;
+  --accent-glow: rgba(46, 139, 255, 0.28);
+
+  --text: #edf1f7;
+  --text-2: #8a94a6;
+  --text-3: #58606e;
+
+  --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
+
+  --shell: 1120px;
+  --gutter: 32px;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+
+  /* Desktop: the page itself never scrolls. Only About does. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------- masthead -- */
+
+.masthead {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 34px var(--gutter) 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
+  border: 1px solid var(--accent-dim);
+  box-shadow: 0 0 28px var(--accent-glow);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------- main -- */
+
+main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 48px;
+  align-items: start;
+  height: 100%;
+}
+
+/* About — the only scrolling region. */
+.about {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 14px;
+  scrollbar-gutter: stable;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 18px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
+}
+
+.about-inner {
+  padding-bottom: 34px;
+}
+
+/* Download — static, never scrolls away. */
+.download {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.download-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 22px 20px;
+}
+
+/* -------------------------------------------------------- content -- */
+
+.section-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-hi);
+  margin: 0 0 18px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 32px 0 10px;
+}
+
+p {
+  margin: 0 0 15px;
+}
+
+.lead {
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+a {
+  color: var(--accent-hi);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(92, 184, 255, 0.35);
+}
+
+a:hover {
+  border-bottom-color: var(--accent-hi);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--text);
+}
+
+.facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.facts li {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.facts .k {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-top: 3px;
+}
+
+/* ------------------------------------------------------- download -- */
+
+.download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 50px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 0 26px var(--accent-glow);
+  transition:
+    background 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.download-btn:hover {
+  background: var(--accent-hi);
+  border-bottom-color: transparent;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 36px rgba(46, 139, 255, 0.55);
+}
+
+.download-btn:active {
+  transform: scale(0.985);
+}
+
+.download-btn svg {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.download-btn:hover svg {
+  transform: translateY(2px);
+}
+
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+.trust span {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.price {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.spec {
+  margin: 20px 0 18px;
+  border-top: 1px solid var(--border);
+}
+
+.spec > div {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.spec dt {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-top: 2px;
+}
+
+.spec dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.note {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.note strong {
+  color: var(--text-2);
+}
+
+.note:last-child {
+  margin-bottom: 0;
+}
+
+.checksum {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  word-break: break-all;
+  user-select: all;
+}
+
+/* --------------------------------------------------------- footer -- */
+
+footer {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: var(--shell);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px var(--gutter) 26px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+footer span:first-child {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------ scrollbar -- */
+
+.about::-webkit-scrollbar {
+  width: 8px;
+}
+.about::-webkit-scrollbar-track {
+  background: transparent;
+}
+.about::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+.about::-webkit-scrollbar-thumb:hover {
+  background: #3a4560;
+}
+
+/* ----------------------------------------------------- responsive -- */
+
+@media (max-width: 900px) {
+  body {
+    overflow: auto;
+    display: block;
+  }
+  main {
+    display: block;
+    height: auto;
+    padding-bottom: 8px;
+  }
+  .about {
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+    mask-image: none;
+  }
+  .download {
+    position: static;
+    margin-top: 34px;
+  }
+  .masthead {
+    padding-top: 26px;
+    padding-bottom: 20px;
+  }
+  .wordmark {
+    font-size: 27px;
+  }
+  .mark {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --gutter: 20px;
+  }
+  .facts li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .lead {
+    font-size: 16px;
+  }
+}
+
+/* ---------------------------------------------------------- motion -- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.masthead {
+  animation: drop 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.about-inner {
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 120ms;
+}
+.download-inner {
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 220ms;
+}
+footer {
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 300ms;
+}
+
+/* The mark breathes, mirroring the app's HOME logo. Only the glow moves. */
+.mark {
+  animation: mark-glow 4s ease-in-out infinite;
+}
+.mark svg .logo-arrow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: logo-float 4s ease-in-out infinite;
+}
+@keyframes mark-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 22px rgba(46, 139, 255, 0.26);
+  }
+  50% {
+    box-shadow: 0 0 38px rgba(46, 139, 255, 0.6);
+  }
+}
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(1px, 1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
