@@ -409,6 +409,33 @@ pub fn check_for_updates() -> AppResult<updates::UpdateStatus> {
     updates::check()
 }
 
+/// Downloads the installer for an available update.
+///
+/// The frontend passes the version and asset name it was given by
+/// `check_for_updates`; both are re-validated here rather than trusted, because
+/// they end up in a URL and a filename.
+#[tauri::command]
+pub fn download_update(version: String, installer: String) -> AppResult<u64> {
+    let file = updates::download(&version, &installer)?;
+    Ok(std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0))
+}
+
+/// Verifies the downloaded installer against the checksum published with the
+/// release, then launches it. Refuses to run anything that does not match.
+#[tauri::command]
+pub fn install_update(app: AppHandle, version: String, installer: String) -> AppResult<()> {
+    updates::verify_and_launch(&version, &installer)?;
+    // The installer needs our files unlocked, and leaving a stale copy running
+    // behind a fresh install is how you get two tray icons.
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_update_downloads() -> AppResult<()> {
+    updates::clear_downloads()
+}
+
 /// Opens an external URL — but only one of ours.
 ///
 /// The allow-list is the point. A command that opened whatever URL it was given

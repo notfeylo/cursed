@@ -2,6 +2,10 @@ import { Minus, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktop } from "../lib/ipc";
 import { useStore } from "../store";
+import { Mark } from "./Mark";
+
+/** Re-exported so screens can pull the mark from either module. */
+export { Mark as CursorMark } from "./Mark";
 
 /**
  * Frameless chrome. The drag region is the whole bar minus the two buttons —
@@ -27,7 +31,7 @@ export function TitleBar() {
       className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-bg/80 pl-3 select-none"
     >
       <div data-tauri-drag-region className="flex items-center gap-2">
-        <CursorMark />
+        <Mark size={15} id="tb" />
         <span data-tauri-drag-region className="display text-[10px] text-text-muted">
           CURSORFORGE
           {view !== "home" && <span className="text-text-dim"> / {view}</span>}
@@ -55,23 +59,3 @@ export function TitleBar() {
   );
 }
 
-export function CursorMark({ size = 13 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      className="shrink-0"
-    >
-      <path
-        d="M5 3.2 19 12.4l-6.1 1.1 3.1 6.1-2.6 1.3-3.1-6.2L5 19.1Z"
-        fill="var(--color-accent)"
-        stroke="var(--color-accent-hi)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

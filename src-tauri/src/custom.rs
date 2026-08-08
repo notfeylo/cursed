@@ -158,6 +158,13 @@ pub fn build(
         outline,
     };
 
+    // Keep the normalised source as a real PNG next to the cursor, whatever it
+    // arrived as. A JPEG has no alpha and a GIF has one bit of it; both become a
+    // true RGBA PNG here. That is what makes the artwork re-editable later and
+    // what lets a preset carry its own image in a `.cfpack`.
+    let master_png = source.first()?.to_png(image::codecs::png::CompressionType::Best)?;
+    std::fs::write(dir.join("source.png"), &master_png)?;
+
     let animated = source.is_animated();
     match &source {
         Source::Static(master) => {
@@ -291,6 +298,47 @@ mod tests {
             .write_to(&mut IoCursor::new(&mut out), image::ImageFormat::Png)
             .unwrap();
         out
+    }
+
+    fn encoded(format: image::ImageFormat) -> Vec<u8> {
+        let mut buffer = image::RgbaImage::new(24, 24);
+        for y in 4..20u32 {
+            for x in 2..14u32 {
+                buffer.put_pixel(x, y, image::Rgba([200, 40, 90, 255]));
+            }
+        }
+        let mut out = Vec::new();
+        let image = image::DynamicImage::ImageRgba8(buffer);
+        // JPEG has no alpha channel, so it must be flattened before encoding.
+        let image = if format == image::ImageFormat::Jpeg {
+            image::DynamicImage::ImageRgb8(image.to_rgb8())
+        } else {
+            image
+        };
+        image
+            .write_to(&mut IoCursor::new(&mut out), format)
+            .unwrap();
+        out
+    }
+
+    /// The formats the import screen advertises must all survive the whole
+    /// staging path, not just PNG.
+    #[test]
+    fn every_advertised_input_format_stages_successfully() {
+        for format in [
+            image::ImageFormat::Png,
+            image::ImageFormat::Jpeg,
+            image::ImageFormat::Bmp,
+            image::ImageFormat::Gif,
+        ] {
+            let staged = stage(encoded(format))
+                .unwrap_or_else(|e| panic!("{format:?} failed to stage: {e}"));
+            assert!(
+                staged.data_uri.starts_with("data:image/png;base64,"),
+                "{format:?} should be normalised to PNG"
+            );
+            assert!(staged.width > 0 && staged.height > 0, "{format:?} lost its pixels");
+        }
     }
 
     #[test]

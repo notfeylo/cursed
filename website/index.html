@@ -15,7 +15,7 @@
     <meta property="og:title" content="CursorForge — Cursor replacement for Windows" />
     <meta
       property="og:description"
-      content="Give your dead cursor a new life. 116 full pointer schemes, all 17 roles, sharp at every DPI. Free, no account, no telemetry."
+      content="Give your dead cursor a new life. 216 full pointer schemes, all 17 roles, sharp at every DPI. Free, no account, no telemetry."
     />
     <meta property="og:type" content="website" />
   </head>
@@ -23,15 +23,48 @@
   <body>
     <header class="masthead">
       <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="30" height="30">
+        <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
+        <svg viewBox="0 0 64 64" width="38" height="38">
+          <defs>
+            <linearGradient id="hex" x1="0" y1="0" x2="0.6" y2="1">
+              <stop offset="0" stop-color="#5cb8ff" stop-opacity="0.95" />
+              <stop offset="1" stop-color="#2e8bff" stop-opacity="0.25" />
+            </linearGradient>
+            <linearGradient id="blade" x1="0.1" y1="0" x2="0.9" y2="1">
+              <stop offset="0" stop-color="#ffffff" />
+              <stop offset="0.42" stop-color="#5cb8ff" />
+              <stop offset="1" stop-color="#2e8bff" />
+            </linearGradient>
+            <radialGradient id="core" cx="0.5" cy="0.42" r="0.62">
+              <stop offset="0" stop-color="#5cb8ff" stop-opacity="0.5" />
+              <stop offset="1" stop-color="#2e8bff" stop-opacity="0" />
+            </radialGradient>
+          </defs>
           <path
-            class="logo-arrow"
-            d="M5 3.2 19 12.4l-6.1 1.1 3.1 6.1-2.6 1.3-3.1-6.2L5 19.1Z"
-            fill="#2E8BFF"
-            stroke="#5CB8FF"
-            stroke-width="0.9"
+            class="logo-hex"
+            d="M32 5 L54 17.5 L54 46.5 L32 59 L10 46.5 L10 17.5 Z"
+            fill="url(#core)"
+            stroke="url(#hex)"
+            stroke-width="2.4"
             stroke-linejoin="round"
           />
+          <path
+            class="logo-seam"
+            d="M14 40 L50 26"
+            stroke="#5cb8ff"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            opacity="0.5"
+          />
+          <path
+            class="logo-blade"
+            d="M23 15 L45 36 L33.5 37.2 L39.6 50 L34.2 52.4 L28.2 39.6 L23 45.4 Z"
+            fill="url(#blade)"
+            stroke="#ffffff"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+          />
+          <circle class="logo-spark" cx="47" cy="19" r="2.6" fill="#ffffff" opacity="0.92" />
         </svg>
       </span>
       <span class="wordmark">CursorForge</span>
@@ -118,7 +151,7 @@
             <li>
               <span class="k">Catalog</span>
               <span class="v"
-                >116 full schemes across seven categories — precision, neon, minimal, retro,
+                >216 full schemes across seven categories — precision, neon, minimal, retro,
                 gaming, animated and fun. Each one defines all seventeen pointer roles, so you
                 never end up with a neon arrow and a stock Windows hourglass.</span
               >
@@ -134,7 +167,7 @@
             <li>
               <span class="k">Any colour</span>
               <span class="v"
-                >Artwork ships as greyscale masters and is recoloured when you apply it, so 116
+                >Artwork ships as greyscale masters and is recoloured when you apply it, so 216
                 schemes times any colour you like costs the download nothing.</span
               >
             </li>
@@ -220,6 +253,7 @@
             class="download-btn"
             href="https://github.com/notfeylo/cursorforge/releases/download/v1.0.0/CursorForge_1.0.0_x64-setup.exe"
             download
+            rel="noopener noreferrer"
           >
             <span>Download for Windows</span>
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
@@ -248,7 +282,7 @@
             <div><dt>Size</dt><dd>2.2 MB</dd></div>
             <div><dt>Platform</dt><dd>Windows 10 / 11, x64</dd></div>
             <div><dt>Install</dt><dd>Per-user, no admin</dd></div>
-            <div><dt>Schemes</dt><dd>116 × 17 roles</dd></div>
+            <div><dt>Schemes</dt><dd>216 × 17 roles</dd></div>
             <div><dt>Licence</dt><dd>MIT</dd></div>
           </dl>
 
@@ -271,8 +305,8 @@
           </p>
 
           <p class="note">
-            <a href="https://github.com/notfeylo/cursorforge">Source on GitHub</a> ·
-            <a href="https://github.com/notfeylo/cursorforge/releases">All releases</a>
+            <a href="https://github.com/notfeylo/cursorforge" rel="noopener noreferrer">Source on GitHub</a> ·
+            <a href="https://github.com/notfeylo/cursorforge/releases" rel="noopener noreferrer">All releases</a>
           </p>
         </div>
       </aside>

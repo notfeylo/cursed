@@ -13,6 +13,7 @@ pub mod commands;
 pub mod cursor;
 pub mod custom;
 pub mod error;
+pub mod hash;
 pub mod hotkeys;
 pub mod idle;
 pub mod packs;
@@ -128,6 +129,9 @@ pub fn run() {
             commands::get_legal_doc,
             commands::get_build_info,
             commands::check_for_updates,
+            commands::download_update,
+            commands::install_update,
+            commands::clear_update_downloads,
             commands::open_external,
             commands::hide_to_tray,
             commands::quit_app,

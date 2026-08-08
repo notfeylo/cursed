@@ -2,6 +2,7 @@
 //! turns them into real cursor files.
 
 pub mod art;
+pub mod brand;
 pub mod catalog;
 pub mod cfpack;
 pub mod styles;

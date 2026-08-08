@@ -98,10 +98,15 @@ jobs:
       - name: npm audit
         run: npm audit --omit=dev --audit-level=high
 
+      # Fails on an actual advisory. Deliberately NOT `--deny warnings`: the
+      # dependency tree carries ~17 unmaintained/unsound notices for GTK and
+      # GLib crates, which Tauri pulls in for Linux and which never compile into
+      # a Windows build. Failing on those would train everyone to ignore this
+      # job, which is worse than not running it.
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked
-          cargo audit --file src-tauri/Cargo.lock --deny warnings
+          cargo audit --file src-tauri/Cargo.lock
 
       - name: cargo deny
         run: |

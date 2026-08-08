@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "generate:packs": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- assets/packs",
+    "generate:icon": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --icon src-tauri/icons/source.png 1024",
     "lint:types": "tsc --noEmit"
   },
   "dependencies": {

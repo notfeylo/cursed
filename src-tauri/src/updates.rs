@@ -1,27 +1,43 @@
-//! The one network request CursorForge ever makes (PRD §15.2).
+//! The update path: check, download, verify, install.
 //!
 //! Implemented on WinHTTP rather than an HTTP crate. That is not austerity for
 //! its own sake: WinHTTP uses the OS certificate store and proxy configuration,
 //! it is already resident, and it keeps roughly two megabytes of TLS stack out
 //! of a binary whose entire budget is twelve.
 //!
-//! It sends nothing but the request. No identifiers, no telemetry, no body.
+//! **Nothing downloaded is trusted.** An installer is an executable we are about
+//! to run, so before it is launched it must match the SHA-256 published in the
+//! release's own `SHA256SUMS.txt`. If the hash is missing or does not match, the
+//! file is deleted and the update fails loudly. That check is the whole reason
+//! this module is allowed to exist — see [`verify_and_launch`].
+//!
+//! The check itself sends nothing but the request: no identifiers, no telemetry.
 
 use crate::error::{AppError, AppResult};
+use crate::paths;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use windows::core::PCWSTR;
 use windows::Win32::Networking::WinHttp::{
     WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryDataAvailable,
-    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
-    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE,
+    WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
+    WinHttpSetOption, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE,
+    WINHTTP_OPTION_REDIRECT_POLICY, WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS,
+    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
 };
 
-const HOST: &str = "api.github.com";
-const PATH: &str = "/repos/notfeylo/cursorforge/releases/latest";
+const API_HOST: &str = "api.github.com";
+const RELEASE_PATH: &str = "/repos/notfeylo/cursorforge/releases/latest";
+const DOWNLOAD_HOST: &str = "github.com";
+pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursorforge/releases";
+
 /// GitHub requires a User-Agent and rejects requests without one.
 const AGENT: &str = "CursorForge-UpdateCheck";
 /// A release payload is a few kilobytes; anything far larger is not our JSON.
-const MAX_RESPONSE: usize = 256 * 1024;
+const MAX_JSON: usize = 256 * 1024;
+/// The installer is ~2 MB. 64 MB is generous headroom and still a hard ceiling.
+const MAX_DOWNLOAD: usize = 64 * 1024 * 1024;
+const MAX_SUMS: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,7 +45,11 @@ pub struct UpdateStatus {
     pub current: String,
     pub latest: Option<String>,
     pub newer_available: bool,
-    /// Always the project's releases page — never a URL taken from the response.
+    /// Present only when a newer release ships an installer we can verify.
+    pub installer: Option<String>,
+    pub size: Option<u64>,
+    pub notes: Option<String>,
+    /// Always the project's own releases page — never a URL from the response.
     pub url: &'static str,
 }
 
@@ -40,6 +60,17 @@ struct Release {
     draft: bool,
     #[serde(default)]
     prerelease: bool,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
+    assets: Vec<Asset>,
+}
+
+#[derive(Deserialize, Clone)]
+struct Asset {
+    name: String,
+    #[serde(default)]
+    size: u64,
 }
 
 /// A handle that closes itself, so no early return can leak a WinHTTP handle.
@@ -48,7 +79,7 @@ struct Handle(*mut std::ffi::c_void);
 impl Drop for Handle {
     fn drop(&mut self) {
         if !self.0.is_null() {
-            // SAFETY: the handle was returned by WinHttp* and is closed once.
+            // SAFETY: the handle came from WinHttp* and is closed exactly once.
             unsafe {
                 let _ = WinHttpCloseHandle(self.0);
             }
@@ -59,7 +90,7 @@ impl Drop for Handle {
 impl Handle {
     fn new(raw: *mut std::ffi::c_void, what: &str) -> AppResult<Self> {
         if raw.is_null() {
-            Err(AppError::msg(format!("could not reach the update service ({what})")))
+            Err(AppError::msg(format!("could not reach GitHub ({what})")))
         } else {
             Ok(Self(raw))
         }
@@ -70,16 +101,21 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-fn fetch_latest_release() -> AppResult<String> {
+/// One HTTPS GET, returning the body.
+///
+/// `follow_redirects` exists because release asset URLs redirect to a CDN, while
+/// the API does not need to. Redirects stay within HTTPS — WinHTTP will not
+/// downgrade to plaintext under `WINHTTP_FLAG_SECURE`.
+fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<Vec<u8>> {
     let agent = wide(AGENT);
-    let host = wide(HOST);
-    let path = wide(PATH);
+    let host_w = wide(host);
+    let path_w = wide(path);
     let verb = wide("GET");
     let headers = wide("User-Agent: CursorForge\r\nAccept: application/vnd.github+json\r\n");
 
     // SAFETY: every wide buffer outlives the call that borrows it, each handle
-    // is owned by a `Handle` that closes it exactly once, and the read loop is
-    // bounded by both `available` and MAX_RESPONSE.
+    // is owned by a `Handle` that closes it once, and the read loop is bounded
+    // by both the reported availability and `cap`.
     unsafe {
         let session = Handle::new(
             WinHttpOpen(
@@ -92,8 +128,20 @@ fn fetch_latest_release() -> AppResult<String> {
             "session",
         )?;
 
+        if follow_redirects {
+            let policy: u32 = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+            let _ = WinHttpSetOption(
+                Some(session.0),
+                WINHTTP_OPTION_REDIRECT_POLICY,
+                Some(std::slice::from_raw_parts(
+                    (&policy as *const u32).cast::<u8>(),
+                    std::mem::size_of::<u32>(),
+                )),
+            );
+        }
+
         let connection = Handle::new(
-            WinHttpConnect(session.0, PCWSTR(host.as_ptr()), 443, 0),
+            WinHttpConnect(session.0, PCWSTR(host_w.as_ptr()), 443, 0),
             "connection",
         )?;
 
@@ -101,7 +149,7 @@ fn fetch_latest_release() -> AppResult<String> {
             WinHttpOpenRequest(
                 connection.0,
                 PCWSTR(verb.as_ptr()),
-                PCWSTR(path.as_ptr()),
+                PCWSTR(path_w.as_ptr()),
                 PCWSTR::null(),
                 PCWSTR::null(),
                 std::ptr::null(),
@@ -111,9 +159,25 @@ fn fetch_latest_release() -> AppResult<String> {
         )?;
 
         WinHttpSendRequest(request.0, Some(&headers), None, 0, 0, 0)
-            .map_err(|_| AppError::msg("the update check could not be sent"))?;
+            .map_err(|_| AppError::msg("the request could not be sent"))?;
         WinHttpReceiveResponse(request.0, std::ptr::null_mut())
-            .map_err(|_| AppError::msg("the update service did not respond"))?;
+            .map_err(|_| AppError::msg("GitHub did not respond"))?;
+
+        // A 404 body is still a body; without this an error page would be
+        // treated as a download and hashed into a confusing mismatch.
+        let mut status: u32 = 0;
+        let mut len = std::mem::size_of::<u32>() as u32;
+        let _ = WinHttpQueryHeaders(
+            request.0,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            PCWSTR::null(),
+            Some((&mut status as *mut u32).cast()),
+            &mut len,
+            std::ptr::null_mut(),
+        );
+        if status != 0 && !(200..300).contains(&status) {
+            return Err(AppError::msg(format!("GitHub replied with status {status}")));
+        }
 
         let mut body = Vec::new();
         loop {
@@ -121,32 +185,21 @@ fn fetch_latest_release() -> AppResult<String> {
             if WinHttpQueryDataAvailable(request.0, &mut available).is_err() || available == 0 {
                 break;
             }
-            let take = (available as usize).min(MAX_RESPONSE - body.len());
+            let take = (available as usize).min(cap.saturating_sub(body.len()));
             if take == 0 {
-                break;
+                return Err(AppError::msg("the download was larger than expected"));
             }
             let mut chunk = vec![0u8; take];
             let mut read: u32 = 0;
-            if WinHttpReadData(
-                request.0,
-                chunk.as_mut_ptr().cast(),
-                take as u32,
-                &mut read,
-            )
-            .is_err()
+            if WinHttpReadData(request.0, chunk.as_mut_ptr().cast(), take as u32, &mut read).is_err()
                 || read == 0
             {
                 break;
             }
             chunk.truncate(read as usize);
             body.extend_from_slice(&chunk);
-            if body.len() >= MAX_RESPONSE {
-                break;
-            }
         }
-
-        String::from_utf8(body)
-            .map_err(|_| AppError::msg("the update service returned something unreadable"))
+        Ok(body)
     }
 }
 
@@ -171,27 +224,175 @@ fn is_newer(latest: &str, current: &str) -> bool {
     false
 }
 
+/// An asset name we are willing to download and run.
+///
+/// Deliberately strict: the name is used to build a URL and a filename, so it
+/// must be a plain NSIS installer and nothing else. A release that starts
+/// shipping a `.bat` cannot talk this into running it.
+fn is_our_installer(name: &str) -> bool {
+    name.starts_with("CursorForge_")
+        && name.ends_with("_x64-setup.exe")
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+}
+
 pub fn check() -> AppResult<UpdateStatus> {
     let current = env!("CARGO_PKG_VERSION").to_owned();
-    let body = fetch_latest_release()?;
+    let body = get(API_HOST, RELEASE_PATH, MAX_JSON, false)?;
+    let text = String::from_utf8(body)
+        .map_err(|_| AppError::msg("GitHub returned something unreadable"))?;
 
-    // The response is data. Nothing in it becomes a path, a command, or a URL
-    // we open — only a version string we compare (PRD §13.6).
-    let release: Release = serde_json::from_str(&body)
-        .map_err(|_| AppError::msg("the update service returned an unexpected answer"))?;
+    // The response is data. Nothing in it becomes a path or a command — only a
+    // version string we compare and an asset name we re-validate (PRD §13.6).
+    let release: Release = serde_json::from_str(&text)
+        .map_err(|_| AppError::msg("GitHub returned an unexpected answer"))?;
 
-    let usable = !release.draft && !release.prerelease;
-    let latest = usable.then(|| release.tag_name.trim_start_matches('v').to_owned());
-    let newer_available = latest
-        .as_deref()
-        .is_some_and(|tag| is_newer(tag, &current));
+    if release.draft || release.prerelease {
+        return Ok(UpdateStatus {
+            current,
+            latest: None,
+            newer_available: false,
+            installer: None,
+            size: None,
+            notes: None,
+            url: RELEASES_URL,
+        });
+    }
+
+    let tag = release.tag_name.trim_start_matches('v').to_owned();
+    let newer = is_newer(&tag, &current);
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| is_our_installer(&a.name))
+        .cloned();
 
     Ok(UpdateStatus {
         current,
-        latest,
-        newer_available,
-        url: "https://github.com/notfeylo/cursorforge/releases",
+        latest: Some(tag),
+        newer_available: newer && asset.is_some(),
+        installer: newer.then(|| asset.as_ref().map(|a| a.name.clone())).flatten(),
+        size: asset.as_ref().map(|a| a.size),
+        // Trimmed hard: release notes are author-controlled text shown in a UI,
+        // so they are treated as a short plain-text blurb, never as markup.
+        notes: release.body.map(|b| {
+            b.chars()
+                .filter(|c| !c.is_control() || *c == '\n')
+                .take(600)
+                .collect()
+        }),
+        url: RELEASES_URL,
     })
+}
+
+fn download_dir() -> AppResult<PathBuf> {
+    let dir = paths::root()?.join("updates");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+/// Downloads the installer for `tag` and returns where it landed.
+pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
+    if !is_our_installer(asset) {
+        return Err(AppError::invalid("that is not an installer CursorForge will run"));
+    }
+    let tag = sanitise_tag(tag)?;
+
+    let path = format!("/notfeylo/cursorforge/releases/download/v{tag}/{asset}");
+    let bytes = get(DOWNLOAD_HOST, &path, MAX_DOWNLOAD, true)?;
+    if bytes.len() < 512 * 1024 {
+        return Err(AppError::msg("the download looks truncated"));
+    }
+
+    // MZ: if this is not a Windows executable, nothing below should touch it.
+    if !bytes.starts_with(b"MZ") {
+        return Err(AppError::msg("the download is not a Windows installer"));
+    }
+
+    let file = download_dir()?.join(asset);
+    std::fs::write(&file, &bytes)?;
+    Ok(file)
+}
+
+/// A release tag is interpolated into a URL, so it may only be a version.
+fn sanitise_tag(tag: &str) -> AppResult<String> {
+    let tag = tag.trim().trim_start_matches(['v', 'V']);
+    if tag.is_empty()
+        || tag.len() > 32
+        || !tag.chars().all(|c| c.is_ascii_digit() || c == '.')
+    {
+        return Err(AppError::invalid("that release tag is not a version number"));
+    }
+    Ok(tag.to_owned())
+}
+
+/// SHA-256 of a file, as lowercase hex.
+fn sha256_file(path: &Path) -> AppResult<String> {
+    let bytes = std::fs::read(path)?;
+    Ok(crate::hash::sha256_hex(&bytes))
+}
+
+/// Fetches the release's own `SHA256SUMS.txt` and returns the hash for `asset`.
+fn published_hash(tag: &str, asset: &str) -> AppResult<String> {
+    let tag = sanitise_tag(tag)?;
+    let path = format!("/notfeylo/cursorforge/releases/download/v{tag}/SHA256SUMS.txt");
+    let bytes = get(DOWNLOAD_HOST, &path, MAX_SUMS, true)?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| AppError::msg("the checksum file is not readable"))?;
+
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        let (Some(hash), Some(name)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if name.trim_start_matches('*') == asset {
+            let hash = hash.to_ascii_lowercase();
+            if hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(hash);
+            }
+        }
+    }
+    Err(AppError::msg(
+        "this release does not publish a checksum for that installer, so it will not be run",
+    ))
+}
+
+/// Verifies a downloaded installer against the published checksum and launches
+/// it. **This is the security boundary of the whole update feature.**
+///
+/// An installer is an executable about to run with the user's privileges. TLS
+/// proves who served the bytes, not that the bytes are the ones the author
+/// published, and a release asset can be replaced. So the file is hashed and
+/// compared against `SHA256SUMS.txt` from the same release; a mismatch deletes
+/// the file rather than leaving an unverified executable on disk.
+pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
+    let file = download_dir()?.join(asset);
+    if !is_our_installer(asset) || !file.exists() {
+        return Err(AppError::invalid("there is no downloaded installer to run"));
+    }
+
+    let expected = published_hash(tag, asset)?;
+    let actual = sha256_file(&file)?;
+    if !crate::hash::hex_eq(&actual, &expected) {
+        let _ = std::fs::remove_file(&file);
+        return Err(AppError::msg(
+            "the downloaded installer does not match the checksum published with the release, so it was deleted",
+        ));
+    }
+
+    crate::shell::open_path(&file)?;
+    Ok(())
+}
+
+/// Removes anything left in the update staging directory.
+pub fn clear_downloads() -> AppResult<()> {
+    let dir = download_dir()?;
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)?;
+    }
+    Ok(())
 }
 
 /// Runs a check in the background at startup, if the user left it enabled.
@@ -227,11 +428,54 @@ mod tests {
     }
 
     #[test]
+    fn only_our_own_installer_name_is_accepted() {
+        assert!(is_our_installer("CursorForge_1.0.0_x64-setup.exe"));
+        assert!(is_our_installer("CursorForge_10.2.34_x64-setup.exe"));
+
+        // Anything that is not exactly our installer must be refused, because
+        // the name becomes both a URL path segment and a file we execute.
+        for bad in [
+            "CursorForge_1.0.0_x64-setup.bat",
+            "evil.exe",
+            "../../../windows/system32/cmd.exe",
+            "CursorForge_1.0.0_x64-setup.exe.bat",
+            "CursorForge_/../setup.exe",
+            "CursorForge_1.0.0_x64-setup exe",
+            "",
+        ] {
+            assert!(!is_our_installer(bad), "should refuse {bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_release_tag_may_only_be_a_version() {
+        assert_eq!(sanitise_tag("v1.2.3").unwrap(), "1.2.3");
+        assert_eq!(sanitise_tag("1.2.3").unwrap(), "1.2.3");
+
+        for bad in [
+            "1.2.3/../../evil",
+            "latest",
+            "1.2.3?x=1",
+            "../../../",
+            "",
+            "1.2.3 && calc",
+        ] {
+            assert!(sanitise_tag(bad).is_err(), "should refuse {bad:?}");
+        }
+    }
+
+    #[test]
     fn drafts_and_prereleases_are_not_offered() {
         let draft: Release = serde_json::from_str(r#"{"tag_name":"v9.9.9","draft":true}"#).unwrap();
         assert!(draft.draft);
         let pre: Release =
             serde_json::from_str(r#"{"tag_name":"v9.9.9","prerelease":true}"#).unwrap();
         assert!(pre.prerelease);
+    }
+
+    #[test]
+    fn launching_without_a_downloaded_file_is_refused() {
+        assert!(verify_and_launch("1.0.0", "CursorForge_9.9.9_x64-setup.exe").is_err());
+        assert!(verify_and_launch("1.0.0", "evil.exe").is_err());
     }
 }

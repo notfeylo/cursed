@@ -1,5 +1,6 @@
 import { useStore } from "../store";
 import { Button } from "../components/ui";
+import { Mark } from "../components/Mark";
 
 /** The whole product in one screen: one verb, one button. */
 export function Home() {
@@ -7,8 +8,19 @@ export function Home() {
   const active = useStore((s) => s.active);
 
   return (
-    <div className="screen-in flex h-full flex-col justify-center px-6 pb-6">
-      <div className="flex flex-1 flex-col items-center justify-center gap-6">
+    <div className="screen-in relative flex h-full flex-col justify-center px-6 pb-6">
+      {/* The grid sits behind everything and never scrolls — the surface the
+          app rests on, not part of the content. */}
+      <div className="circuit pointer-events-none absolute inset-0 opacity-60" />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-56"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 100% at 50% 0%, var(--accent-glow), transparent 70%)",
+        }}
+      />
+
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6">
         <HeroMark />
         <div className="text-center">
           <h1 className="display text-[26px] leading-[1.15] text-text">
@@ -22,7 +34,7 @@ export function Home() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="relative flex flex-col gap-3">
         <Button full onClick={() => go("catalog")}>
           ENHANCE YOUR CURSOR
         </Button>
@@ -84,25 +96,20 @@ function ActiveChip({
 }
 
 /**
- * The mark: a pointer over a slowly breathing glow.
+ * The forge mark, breathing slowly over its own bloom.
  *
- * Only the glow moves, and slowly. The mark sits directly above the button that
- * changes the real cursor, so anything livelier would compete with the thing the
- * user is here to look at. The global `prefers-reduced-motion` rule stops it.
+ * The motion is deliberately small: this sits directly above the button that
+ * changes the real cursor, so anything livelier competes with the thing the user
+ * came here to look at. The global `prefers-reduced-motion` rule stops it, and
+ * the `no-motion` class freezes it while a live cursor preview is on screen.
  */
 function HeroMark() {
   return (
-    <div className="relative grid h-20 w-20 place-items-center">
-      <div className="absolute inset-0 animate-[breathe_4s_ease-in-out_infinite] rounded-full bg-[var(--accent-glow)] blur-xl" />
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" className="relative">
-        <path
-          d="M5 3.2 19 12.4l-6.1 1.1 3.1 6.1-2.6 1.3-3.1-6.2L5 19.1Z"
-          fill="var(--color-accent)"
-          stroke="var(--color-accent-hi)"
-          strokeWidth="0.9"
-          strokeLinejoin="round"
-        />
-      </svg>
+    <div className="relative grid h-24 w-24 place-items-center">
+      <div className="absolute inset-2 animate-[breathe_5s_ease-in-out_infinite] rounded-full bg-[var(--accent-glow)] blur-2xl" />
+      <div className="relative">
+        <Mark size={78} animated id="hero" />
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button, Card, SectionTitle } from "../components/ui";
-import { CursorMark } from "../components/TitleBar";
+import { Mark } from "../components/Mark";
 import * as ipc from "../lib/ipc";
 
 type Doc = "terms" | "privacy" | "licenses";
@@ -12,11 +12,16 @@ const DOC_TITLES: Record<Doc, string> = {
   licenses: "LICENCES",
 };
 
+type Phase = "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "failed";
+
 export function About() {
   const [info, setInfo] = useState({ version: "1.0.0", commit: "local", target: "x86_64" });
   const [doc, setDoc] = useState<Doc | null>(null);
   const [text, setText] = useState("");
-  const [update, setUpdate] = useState<string | null>(null);
+
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [status, setStatus] = useState<ipc.UpdateStatus | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ipc.isDesktop()) return;
@@ -33,16 +38,41 @@ export function About() {
   }, [doc]);
 
   const check = async () => {
-    setUpdate("Checking…");
+    setPhase("checking");
+    setMessage(null);
     try {
-      const status = await ipc.checkForUpdates();
-      setUpdate(
-        status.newerAvailable
-          ? `Version ${status.latest} is available.`
-          : "You're on the latest version.",
-      );
-    } catch {
-      setUpdate("Couldn't reach the update service.");
+      const next = await ipc.checkForUpdates();
+      setStatus(next);
+      setPhase(next.newerAvailable ? "available" : "current");
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "Couldn't reach GitHub.");
+    }
+  };
+
+  const download = async () => {
+    if (!status?.latest || !status.installer) return;
+    setPhase("downloading");
+    setMessage(null);
+    try {
+      await ipc.downloadUpdate(status.latest, status.installer);
+      setPhase("ready");
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "The download failed.");
+    }
+  };
+
+  const install = async () => {
+    if (!status?.latest || !status.installer) return;
+    setMessage(null);
+    try {
+      // Verifies the download against the checksum published with the release
+      // before running it, then closes the app so the installer can replace it.
+      await ipc.installUpdate(status.latest, status.installer);
+    } catch (e) {
+      setPhase("failed");
+      setMessage(e instanceof Error ? e.message : "The installer could not be verified.");
     }
   };
 
@@ -76,7 +106,7 @@ export function About() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <div className="flex flex-col items-center gap-2 pb-4">
-          <CursorMark size={28} />
+          <Mark size={54} animated id="about" />
           <span className="display text-[13px] text-text">CURSORFORGE</span>
           <span className="mono text-[10px] text-text-dim">
             v{info.version} · {info.commit} · {info.target}
@@ -85,11 +115,60 @@ export function About() {
         </div>
 
         <Card>
-          <Button full variant="ghost" onClick={() => void check()}>
-            CHECK FOR UPDATES
-          </Button>
-          {update && (
-            <p className="mt-2 text-center text-[11px] text-text-dim">{update}</p>
+          {phase === "available" || phase === "downloading" || phase === "ready" ? (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="display text-[11px] text-accent-hi">
+                  VERSION {status?.latest} AVAILABLE
+                </span>
+                {status?.size ? (
+                  <span className="mono text-[10px] text-text-dim">
+                    {(status.size / 1_048_576).toFixed(1)} MB
+                  </span>
+                ) : null}
+              </div>
+
+              {status?.notes && (
+                <p className="max-h-24 overflow-y-auto text-[11px] whitespace-pre-line text-text-muted">
+                  {status.notes}
+                </p>
+              )}
+
+              {phase === "ready" ? (
+                <>
+                  <Button full onClick={() => void install()}>
+                    INSTALL & RESTART
+                  </Button>
+                  <p className="text-[11px] text-text-dim">
+                    The download is checked against the checksum published with the release
+                    before it runs. CursorForge will close so the installer can replace it.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Button full onClick={() => void download()} disabled={phase === "downloading"}>
+                    {phase === "downloading" ? "DOWNLOADING" : "DOWNLOAD UPDATE"}
+                  </Button>
+                  {phase === "downloading" && <div className="h-px w-full shimmer" />}
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              <Button full variant="ghost" onClick={() => void check()} disabled={phase === "checking"}>
+                {phase === "checking" ? "CHECKING" : "CHECK FOR UPDATES"}
+              </Button>
+              {phase === "checking" && <div className="mt-2 h-px w-full shimmer" />}
+              {phase === "current" && (
+                <p className="mt-2 text-center text-[11px] text-success">
+                  You're on the latest version.
+                </p>
+              )}
+            </>
+          )}
+
+          {message && (
+            <p className="mt-2 text-center text-[11px] text-danger">{message}</p>
           )}
         </Card>
 

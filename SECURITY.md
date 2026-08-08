@@ -100,6 +100,33 @@ than in a future changelog:
 4. No API key ships in the binary. Any key is supplied by the user and stored in
    Windows Credential Manager — never in `settings.json`, never in the repo.
 
+## Updates
+
+The in-app updater downloads an installer and runs it, which makes it the single
+most dangerous thing the application does. It is treated accordingly.
+
+- The release is read from the GitHub API over TLS, using the OS certificate
+  store and proxy configuration via WinHTTP.
+- **The downloaded installer is never trusted.** Before it is launched, its
+  SHA-256 is computed with Windows CNG and compared against the checksum in the
+  `SHA256SUMS.txt` published with that same release. A mismatch deletes the file
+  and fails loudly. TLS proves who served the bytes, not that they are the bytes
+  the author published, and a release asset can be replaced.
+- If a release publishes no checksum for the installer, **the update refuses to
+  run** rather than falling back to trusting the download.
+- The asset name must match `CursorForge_<version>_x64-setup.exe` exactly, with
+  no path separators or traversal, because it becomes both a URL segment and a
+  filename that gets executed. The release tag must parse as a version number
+  for the same reason.
+- The download must begin with `MZ` and be a plausible size, so an error page or
+  a truncated transfer is never written out as an executable.
+- Release notes are author-controlled text rendered in the UI. They are stripped
+  of control characters, capped, and displayed as plain text — never as markup.
+
+Until the installer is code-signed, this checksum chain is what stands between a
+compromised release asset and code execution. It is not optional and should not
+be relaxed.
+
 ## Supply chain
 
 `cargo audit` and `npm audit` run in CI on every push and pull request, and the

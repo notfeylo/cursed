@@ -21,15 +21,17 @@ export function Button({
   title?: string;
 }) {
   const base =
-    "display text-[11px] px-4 h-9 rounded-sm transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-40 disabled:pointer-events-none inline-flex items-center justify-center gap-2";
+    "display relative overflow-hidden text-[11px] px-4 h-9 rounded-sm transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-40 disabled:pointer-events-none inline-flex items-center justify-center gap-2 active:scale-[0.985]";
   const kind =
     variant === "primary"
-      ? "bg-accent text-white hover:bg-accent-hi hover:-translate-y-px hover:glow"
+      ? // A gradient plus a top rim reads as a lit surface rather than a
+        // rectangle of colour, which is most of what makes a button feel solid.
+        "bg-gradient-to-b from-accent-hi to-accent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:-translate-y-px hover:glow"
       : variant === "danger"
         ? "border border-danger/40 text-danger hover:bg-danger/10 hover:border-danger"
         : variant === "quiet"
           ? "text-text-muted hover:text-text"
-          : "border border-border text-text-muted hover:border-border-hi hover:text-text";
+          : "panel border border-border text-text-muted hover:border-border-hi hover:text-text hover:-translate-y-px";
   return (
     <button
       type="button"
@@ -207,9 +209,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cx("rounded-sm border border-border bg-surface p-3", className)}>
-      {children}
-    </div>
+    <div className={cx("panel rounded-sm border border-border p-3", className)}>{children}</div>
   );
 }
 

@@ -506,31 +506,65 @@ footer {
   animation-delay: 300ms;
 }
 
-/* The mark breathes, mirroring the app's HOME logo. Only the glow moves. */
+/* The mark breathes, mirroring the app's HOME logo exactly: the chamber pulses,
+   the seam glows as if something inside it is hot, and the spark flares. Slow
+   enough to be atmosphere rather than a distraction. */
 .mark {
-  animation: mark-glow 4s ease-in-out infinite;
+  animation: mark-glow 5s ease-in-out infinite;
 }
-.mark svg .logo-arrow {
+.mark svg .logo-hex,
+.mark svg .logo-spark {
   transform-box: fill-box;
   transform-origin: center;
-  animation: logo-float 4s ease-in-out infinite;
 }
+.mark svg .logo-hex {
+  animation: logo-breathe 5s ease-in-out infinite;
+}
+.mark svg .logo-seam {
+  animation: logo-seam 5s ease-in-out infinite;
+}
+.mark svg .logo-spark {
+  animation: logo-spark 5s ease-in-out infinite;
+}
+
 @keyframes mark-glow {
   0%,
   100% {
     box-shadow: 0 0 22px rgba(46, 139, 255, 0.26);
   }
   50% {
-    box-shadow: 0 0 38px rgba(46, 139, 255, 0.6);
+    box-shadow: 0 0 40px rgba(46, 139, 255, 0.62);
   }
 }
-@keyframes logo-float {
+@keyframes logo-breathe {
   0%,
   100% {
-    transform: translate(0, 0);
+    transform: scale(1);
+    opacity: 0.9;
   }
   50% {
-    transform: translate(1px, 1px);
+    transform: scale(1.045);
+    opacity: 1;
+  }
+}
+@keyframes logo-seam {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+@keyframes logo-spark {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  45% {
+    transform: scale(1.55);
+    opacity: 1;
   }
 }
 

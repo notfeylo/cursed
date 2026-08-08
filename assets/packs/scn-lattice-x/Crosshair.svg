@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><defs><pattern id="t" width="6" height="6" patternUnits="userSpaceOnUse">
+<rect width="6" height="3" fill="#ffffff"/><rect y="3" width="6" height="3" fill="#8a8a8a"/>
+</pattern></defs><g opacity="1.00"><path d="M34 16 L34 84 M66 16 L66 84 M16 34 L84 34 M16 66 L84 66" stroke="#ffffff" stroke-width="2.8"/></g></svg>

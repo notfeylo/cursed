@@ -1,7 +1,7 @@
 //! Catalog artwork, as parametric vectors.
 //!
 //! Every glyph is drawn in a 100x100 box, in white and grey only. Colour is
-//! applied later by the tint pass, which is what turns 116 packs into an
+//! applied later by the tint pass, which is what turns 216 packs into an
 //! effectively unbounded catalog from a payload of roughly nothing (PRD §7.1).
 //!
 //! Greys are not decoration: the tint multiplies the master's luminance, so a
@@ -37,6 +37,26 @@ pub enum Form {
     Wedge,
     /// A drawn arrow: shaft plus a separate head.
     Kite,
+    /// A lightning bolt — angular and asymmetric.
+    Bolt,
+    /// Very fine, almost a line, for surgical work.
+    Needle,
+    /// Curved inward like a claw.
+    Fang,
+    /// A narrow beam with a flared base.
+    Beam,
+    /// Faceted, like a cut gem.
+    Prism,
+    /// A crescent sweep.
+    Crescent,
+    /// Two stacked chevrons and no body.
+    Stack,
+    /// Broken into separate shards.
+    Shard,
+    /// A pen nib.
+    Nib,
+    /// A sigil with an enclosed counter.
+    Sigil,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,11 +109,42 @@ pub enum Reticle {
     Hex,
 }
 
+/// A surface treatment layered over the form.
+///
+/// This is the axis that makes a large catalog worth having. Form and reticle
+/// change *what* the pointer is; a treatment changes what it is made of — and
+/// because everything is drawn in greys and tinted at apply time, a grey
+/// gradient becomes a gradient in the user's own colour rather than a flat fill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Treatment {
+    /// Flat body. The original look.
+    Flat,
+    /// Shaded body, so it reads as a surface catching light rather than a fill.
+    Gradient,
+    /// An offset silhouette behind the glyph — depth without a bitmap.
+    Depth,
+    /// A ring sitting behind the glyph.
+    Halo,
+    /// Horizontal bands across the body, clipped to its shape.
+    Scan,
+    /// A motion streak trailing away from the tip.
+    Trail,
+    /// Dashed outline.
+    Dashed,
+    /// A bright lit edge down one side, like a bevel.
+    Rim,
+    /// Body broken into facets by thin cuts.
+    Facet,
+    /// Hollow core with a solid border, like an inlay.
+    Inlay,
+}
+
 #[derive(Debug, Clone)]
 pub struct Style {
     pub form: Form,
     pub fill: Fill,
     pub reticle: Reticle,
+    pub treatment: Treatment,
     /// Stroke weight in viewBox units.
     pub weight: f32,
     /// Outer glow opacity; 0 disables the glow pass entirely.
@@ -112,6 +163,7 @@ impl Default for Style {
             form: Form::Classic,
             fill: Fill::Solid,
             reticle: Reticle::Plus,
+            treatment: Treatment::Flat,
             weight: 5.0,
             glow: 0.0,
             round_joins: false,
@@ -176,16 +228,89 @@ fn document(style: &Style, role: Role, body: String) -> String {
         String::new()
     };
 
-    let defs = if style.glow > 0.0 {
-        r#"<defs><filter id="g" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>"#
-    } else {
-        ""
-    };
+    let mut defs = String::from("<defs>");
+    if style.glow > 0.0 {
+        defs.push_str(
+            r#"<filter id="g" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4"/></filter>"#,
+        );
+    }
+    defs.push_str(&treatment_defs(style));
+    defs.push_str("</defs>");
 
     format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">{defs}<g opacity="{:.2}"{transform}>{glow}{body}</g></svg>"#,
         style.opacity.clamp(0.05, 1.0)
     )
+}
+
+/// Definitions a treatment needs. Gradients are written in greys so the tint
+/// pass turns them into shades of the user's own colour.
+fn treatment_defs(style: &Style) -> String {
+    match style.treatment {
+        Treatment::Gradient | Treatment::Rim | Treatment::Inlay => format!(
+            r#"<linearGradient id="t" x1="0" y1="0" x2="0.85" y2="1">
+<stop offset="0" stop-color="{EDGE}"/><stop offset="0.55" stop-color="{BODY}"/><stop offset="1" stop-color="{DEEP}"/>
+</linearGradient>"#
+        ),
+        Treatment::Scan => format!(
+            r#"<pattern id="t" width="6" height="6" patternUnits="userSpaceOnUse">
+<rect width="6" height="3" fill="{EDGE}"/><rect y="3" width="6" height="3" fill="{DEEP}"/>
+</pattern>"#
+        ),
+        _ => String::new(),
+    }
+}
+
+/// The paint used for a glyph's body under the current treatment.
+fn body_paint(style: &Style) -> &'static str {
+    match style.treatment {
+        Treatment::Gradient | Treatment::Rim | Treatment::Inlay => "url(#t)",
+        Treatment::Scan => "url(#t)",
+        _ => BODY,
+    }
+}
+
+/// Extra geometry drawn *behind* the glyph.
+fn treatment_backdrop(style: &Style, d: &str) -> String {
+    match style.treatment {
+        Treatment::Depth => format!(
+            r#"<path d="{d}" fill="{DEEP}" opacity="0.55" transform="translate(5 5)"/>"#
+        ),
+        Treatment::Halo => format!(
+            r#"<circle cx="42" cy="42" r="34" fill="none" stroke="{DEEP}" stroke-width="3" opacity="0.8"/>"#
+        ),
+        Treatment::Trail => format!(
+            r#"<path d="{d}" fill="{DEEP}" opacity="0.42" transform="translate(11 11) scale(0.94)"/>
+<path d="{d}" fill="{DEEP}" opacity="0.2" transform="translate(20 20) scale(0.88)"/>"#
+        ),
+        _ => String::new(),
+    }
+}
+
+/// Extra geometry drawn *over* the glyph, clipped to its silhouette.
+fn treatment_overlay(style: &Style, d: &str) -> String {
+    match style.treatment {
+        Treatment::Rim => format!(
+            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="2.4" stroke-linejoin="round" opacity="0.95"/>"#
+        ),
+        Treatment::Facet => format!(
+            r#"<clipPath id="c"><path d="{d}"/></clipPath>
+<g clip-path="url(#c)"><path d="M-10 40 L110 10 M-10 66 L110 36 M-10 92 L110 62" stroke="{DEEP}" stroke-width="2.4" fill="none" opacity="0.9"/></g>"#
+        ),
+        Treatment::Inlay => format!(
+            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="5" stroke-linejoin="round"/>"#
+        ),
+        _ => String::new(),
+    }
+}
+
+/// Stroke dashing, when the treatment calls for it.
+fn dash(style: &Style) -> &'static str {
+    if style.treatment == Treatment::Dashed {
+        r#" stroke-dasharray="7 5""#
+    } else {
+        ""
+    }
 }
 
 /// The arrow silhouette for a form, as a path `d` attribute.
@@ -210,27 +335,48 @@ fn arrow_d(form: Form) -> &'static str {
         Form::Wedge => "M6 4 L70 44 L40 50 L54 80 L40 88 L26 58 L6 70 Z",
         // A shaft with a discrete head, rather than one silhouette.
         Form::Kite => "M6 4 L34 32 L26 40 Z M30 36 L38 28 L86 76 L78 84 Z",
+        Form::Bolt => "M6 4 L46 38 L28 42 L62 74 L52 90 L20 52 L34 48 L6 22 Z",
+        Form::Needle => "M6 4 L38 74 L30 72 L32 92 L24 92 L22 70 L14 72 Z",
+        Form::Fang => "M6 4 Q40 26 52 62 Q40 56 30 58 L38 88 L28 90 L20 60 Q12 44 6 34 Z",
+        Form::Beam => "M6 4 L30 30 L24 36 L44 84 L26 90 L12 40 L4 34 Z M10 46 L20 44 L30 82 L22 86 Z",
+        Form::Prism => "M6 4 L52 44 L34 48 L30 30 Z M30 30 L34 48 L48 84 L36 90 L20 52 Z M34 48 L52 44 L48 84 Z",
+        Form::Crescent => "M6 4 Q54 30 60 78 Q44 52 22 40 Q34 62 30 88 L20 86 Q26 46 6 20 Z",
+        Form::Stack => "M8 6 L40 34 L32 42 L8 20 Z M12 44 L44 72 L36 80 L12 58 Z",
+        Form::Shard => "M6 4 L30 24 L22 32 Z M28 32 L44 46 L34 54 Z M40 56 L56 82 L44 88 L34 62 Z",
+        Form::Nib => "M6 4 L36 30 L30 40 L44 88 L32 92 L20 44 L12 38 Z M18 20 L26 27 L22 33 Z",
+        Form::Sigil => {
+            "M6 4 L52 42 L32 46 L46 86 L34 90 L22 52 L6 66 Z M16 22 L16 46 L26 38 Z"
+        }
     }
 }
 
-/// Arrow body plus rim, honouring the fill mode.
+/// Arrow body plus rim, honouring the fill mode and surface treatment.
 fn arrow(style: &Style) -> String {
     let d = arrow_d(style.form);
     let linejoin = join(style);
-    match style.fill {
+    let paint = body_paint(style);
+    let dashes = dash(style);
+
+    let core = match style.fill {
         Fill::Solid => format!(
-            r#"<path d="{d}" fill="{BODY}" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}"/>"#,
+            r#"<path d="{d}" fill="{paint}" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}"{dashes}/>"#,
             style.weight * 0.55
         ),
         Fill::Outline => format!(
-            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}" stroke-linecap="round"/>"#,
+            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}" stroke-linecap="round"{dashes}/>"#,
             style.weight
         ),
         Fill::Hairline => format!(
-            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}" stroke-linecap="round"/>"#,
+            r#"<path d="{d}" fill="none" stroke="{EDGE}" stroke-width="{:.1}" stroke-linejoin="{linejoin}" stroke-linecap="round"{dashes}/>"#,
             (style.weight * 0.45).max(1.6)
         ),
-    }
+    };
+
+    format!(
+        "{}{core}{}",
+        treatment_backdrop(style, d),
+        treatment_overlay(style, d)
+    )
 }
 
 /// A small mark riding on the arrow's shoulder, used by Help, AppStarting, Pin
@@ -273,7 +419,27 @@ fn person_badge() -> String {
     )
 }
 
+/// The precision-select glyph, plus whatever the treatment adds around it.
 fn reticle(style: &Style) -> String {
+    let core = reticle_core(style);
+    let backdrop = match style.treatment {
+        Treatment::Halo => format!(
+            r#"<circle cx="50" cy="50" r="38" fill="none" stroke="{DEEP}" stroke-width="2.6" opacity="0.75"/>"#
+        ),
+        Treatment::Depth => format!(
+            r#"<g opacity="0.45" transform="translate(3 3)">{}</g>"#,
+            reticle_core(style)
+        ),
+        Treatment::Trail => format!(
+            r#"<g opacity="0.3" transform="translate(6 6)">{}</g>"#,
+            reticle_core(style)
+        ),
+        _ => String::new(),
+    };
+    format!("{backdrop}{core}")
+}
+
+fn reticle_core(style: &Style) -> String {
     let w = style.weight.max(2.0);
     let thin = (w * 0.55).max(1.4);
     match style.reticle {
@@ -477,7 +643,7 @@ mod tests {
     /// Every form the catalog can reference. Kept here so adding a variant
     /// without exercising it fails the build rather than shipping a blank
     /// cursor.
-    const ALL_FORMS: [Form; 10] = [
+    const ALL_FORMS: [Form; 20] = [
         Form::Classic,
         Form::Triangle,
         Form::Chevron,
@@ -488,6 +654,29 @@ mod tests {
         Form::Split,
         Form::Wedge,
         Form::Kite,
+        Form::Bolt,
+        Form::Needle,
+        Form::Fang,
+        Form::Beam,
+        Form::Prism,
+        Form::Crescent,
+        Form::Stack,
+        Form::Shard,
+        Form::Nib,
+        Form::Sigil,
+    ];
+
+    const ALL_TREATMENTS: [Treatment; 10] = [
+        Treatment::Flat,
+        Treatment::Gradient,
+        Treatment::Depth,
+        Treatment::Halo,
+        Treatment::Scan,
+        Treatment::Trail,
+        Treatment::Dashed,
+        Treatment::Rim,
+        Treatment::Facet,
+        Treatment::Inlay,
     ];
 
     const ALL_RETICLES: [Reticle; 24] = [
@@ -545,6 +734,28 @@ mod tests {
             let svg = render_role(&style, Role::Crosshair, 0.0);
             let bitmap = crate::build::svg::render(&svg, 64).unwrap();
             assert!(!bitmap.is_empty(), "{reticle_variant:?} rendered blank");
+        }
+    }
+
+    /// Treatments add geometry and paints; a broken one would silently render a
+    /// blank or a black box, which is exactly the sort of thing that ships.
+    #[test]
+    fn every_treatment_renders_on_every_form() {
+        for treatment in ALL_TREATMENTS {
+            for form in ALL_FORMS {
+                let style = Style {
+                    form,
+                    treatment,
+                    ..Style::default()
+                };
+                for role in [Role::Arrow, Role::Crosshair] {
+                    let svg = render_role(&style, role, 0.0);
+                    let bitmap = crate::build::svg::render(&svg, 64).unwrap_or_else(|e| {
+                        panic!("{treatment:?}/{form:?}/{role} failed to render: {e}")
+                    });
+                    assert!(!bitmap.is_empty(), "{treatment:?}/{form:?}/{role} was blank");
+                }
+            }
         }
     }
 

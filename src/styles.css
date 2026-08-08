@@ -75,7 +75,31 @@
 :root {
   --accent-glow: rgba(46, 139, 255, 0.28);
   --shadow-glow: 0 0 24px var(--accent-glow);
+
+  /* Depth. Real interfaces have a light source; a flat dark theme just looks
+     unfinished, and these are what separate "dark" from "dimensional". */
+  --sheen: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 55%);
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --lift: 0 6px 20px -8px rgba(0, 0, 0, 0.8);
+
   color-scheme: dark;
+}
+
+/* A faint grid, far enough back to read as texture rather than decoration.
+   Fixed attachment so it stays put while content scrolls over it — the surface
+   the app sits on, not part of the content. */
+@utility circuit {
+  background-image:
+    linear-gradient(rgba(46, 139, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 139, 255, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: center;
+}
+
+@utility panel {
+  background-color: var(--color-surface);
+  background-image: var(--sheen);
+  box-shadow: var(--rim);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -221,6 +245,82 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.1s linear infinite;
+}
+
+/* ────────────────────────────────────────────────────────────
+   The mark's idle motion.
+
+   Slow and small on purpose. It sits above the button that changes the real
+   cursor, so anything livelier competes with the thing the user came to look at.
+   ──────────────────────────────────────────────────────────── */
+.mark-live .mark-hex {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mark-breathe 5s ease-in-out infinite;
+}
+.mark-live .mark-seam {
+  animation: mark-seam 5s ease-in-out infinite;
+}
+.mark-live .mark-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mark-spark 5s ease-in-out infinite;
+}
+
+@keyframes mark-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.045);
+    opacity: 1;
+  }
+}
+@keyframes mark-seam {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+@keyframes mark-spark {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  45% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+}
+
+/* A slow sweep of light across a surface. Used sparingly — the hero panel. */
+@keyframes sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(92, 184, 255, 0.09) 50%,
+    transparent 65%
+  );
+  animation: sweep 7s ease-in-out infinite;
 }
 
 /* Motion is a garnish, never a requirement. */

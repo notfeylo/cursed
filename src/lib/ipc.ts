@@ -127,13 +127,31 @@ export const getLegalDoc = (kind: "terms" | "privacy" | "licenses") =>
   call<string>("get_legal_doc", { kind });
 export const getBuildInfo = () =>
   call<{ version: string; commit: string; target: string }>("get_build_info");
-export const checkForUpdates = () =>
-  call<{
-    current: string;
-    latest: string | null;
-    newerAvailable: boolean;
-    url: string;
-  }>("check_for_updates");
+export interface UpdateStatus {
+  current: string;
+  latest: string | null;
+  newerAvailable: boolean;
+  /** Present only when the release ships an installer we can verify. */
+  installer: string | null;
+  size: number | null;
+  notes: string | null;
+  url: string;
+}
+
+export const checkForUpdates = () => call<UpdateStatus>("check_for_updates");
+
+export const downloadUpdate = (version: string, installer: string) =>
+  call<number>("download_update", { version, installer });
+
+/**
+ * Verifies the downloaded installer against the checksum published with the
+ * release, then launches it and exits. Throws rather than running anything
+ * whose hash does not match.
+ */
+export const installUpdate = (version: string, installer: string) =>
+  call<void>("install_update", { version, installer });
+
+export const clearUpdateDownloads = () => call<void>("clear_update_downloads");
 export const openExternal = (url: string) => call<void>("open_external", { url });
 export const quitApp = () => call<void>("quit_app");
 export const hideToTray = () => call<void>("hide_to_tray");

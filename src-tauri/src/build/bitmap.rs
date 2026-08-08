@@ -266,25 +266,33 @@ impl Bitmap {
         Ok(out)
     }
 
+    /// Encodes as a real PNG.
+    ///
+    /// Every imported image ends up here regardless of what it arrived as, so a
+    /// JPEG, WebP, BMP or GIF frame becomes a genuine PNG with a true alpha
+    /// channel rather than whatever lossy, palette-limited thing it started as.
+    pub fn to_png(&self, compression: image::codecs::png::CompressionType) -> AppResult<Vec<u8>> {
+        let mut png = Vec::new();
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            &mut png,
+            compression,
+            image::codecs::png::FilterType::Adaptive,
+        );
+        image::ImageEncoder::write_image(
+            encoder,
+            &self.pixels,
+            self.width,
+            self.height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|e| AppError::msg(format!("PNG encoding failed: {e}")))?;
+        Ok(png)
+    }
+
     /// A `data:` URI for the hotspot picker and catalog tiles. Encoding a real
     /// PNG keeps the frontend free of any filesystem or asset-protocol access.
     pub fn to_png_data_uri(&self) -> AppResult<String> {
-        let mut png = Vec::new();
-        {
-            let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                &mut png,
-                image::codecs::png::CompressionType::Fast,
-                image::codecs::png::FilterType::Adaptive,
-            );
-            image::ImageEncoder::write_image(
-                encoder,
-                &self.pixels,
-                self.width,
-                self.height,
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| AppError::msg(format!("preview encoding failed: {e}")))?;
-        }
+        let png = self.to_png(image::codecs::png::CompressionType::Fast)?;
         Ok(format!("data:image/png;base64,{}", base64(&png)))
     }
 }

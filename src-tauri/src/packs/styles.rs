@@ -8,7 +8,7 @@
 //! game or company — PRD §15.3 rules out third-party marks, and "the retro one"
 //! does not need somebody else's trademark to read as retro.
 
-use crate::packs::art::{Fill, Form, Reticle, Style};
+use crate::packs::art::{Fill, Form, Reticle, Style, Treatment};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +89,10 @@ impl Builder {
     }
     fn scale(mut self, scale: f32) -> Self {
         self.style.scale = scale;
+        self
+    }
+    fn treat(mut self, treatment: Treatment) -> Self {
+        self.style.treatment = treatment;
         self
     }
     fn done(self) -> Style {
@@ -266,6 +270,126 @@ pub fn all() -> Vec<PackDef> {
         pack("fun-prism-x", "PRISM X", Fun, Builder::new().form(Kite).glow(0.7).reticle(Saltire).done(), "#A24BFF"),
         pack("fun-loop", "LOOP", Fun, Builder::new().form(Round).fill(Outline).reticle(Arc).done(), "#33D6A6"),
         pack("fun-static", "STATIC", Fun, Builder::new().form(Pixel).reticle(Grid).done(), "#8AE9FF"),
+
+        // ── VOLUME — gradient bodies, so the pointer reads as a lit surface ──
+        pack("vol-titan", "TITAN", Minimal, Builder::new().form(Wedge).treat(Treatment::Gradient).reticle(Hex).done(), "#8AE9FF"),
+        pack("vol-obsidian", "OBSIDIAN", Minimal, Builder::new().form(Prism).treat(Treatment::Gradient).reticle(Diamond).done(), "#A24BFF"),
+        pack("vol-chrome", "CHROME", Minimal, Builder::new().form(Classic).treat(Treatment::Gradient).reticle(Rings).done(), "#EDF1F7"),
+        pack("vol-cobalt", "COBALT", Neon, Builder::new().form(Slim).treat(Treatment::Gradient).glow(0.7).reticle(CircleCross).done(), "#2E8BFF"),
+        pack("vol-magma", "MAGMA", Neon, Builder::new().form(Bolt).treat(Treatment::Gradient).glow(0.85).reticle(Star).done(), "#FF7A2E"),
+        pack("vol-aurora", "AURORA", Neon, Builder::new().form(Crescent).treat(Treatment::Gradient).glow(0.8).reticle(Arc).done(), "#33D6A6"),
+        pack("vol-nebula", "NEBULA", Neon, Builder::new().form(Round).treat(Treatment::Gradient).glow(0.9).round().reticle(Rings).done(), "#A24BFF"),
+        pack("vol-quartz", "QUARTZ", Minimal, Builder::new().form(Prism).treat(Treatment::Gradient).reticle(Hex).done(), "#EDF1F7"),
+        pack("vol-onyx", "ONYX", Minimal, Builder::new().form(Fang).treat(Treatment::Gradient).reticle(Saltire).done(), "#8A94A6"),
+        pack("vol-solar", "SOLAR", Neon, Builder::new().form(Beam).treat(Treatment::Gradient).glow(0.85).reticle(Star).done(), "#FFD23D"),
+        pack("vol-abyss", "ABYSS", Minimal, Builder::new().form(Needle).treat(Treatment::Gradient).reticle(Bar).done(), "#5CB8FF"),
+        pack("vol-ember-x", "EMBER X", Neon, Builder::new().form(Shard).treat(Treatment::Gradient).glow(0.8).reticle(Caret).done(), "#FF4D5E"),
+
+        // ── DEPTH — an offset silhouette behind, for weight ──────────
+        pack("dep-monolith", "MONOLITH", Minimal, Builder::new().form(Wedge).treat(Treatment::Depth).reticle(Square).done(), "#EDF1F7"),
+        pack("dep-riser", "RISER", Minimal, Builder::new().form(Classic).treat(Treatment::Depth).reticle(Plus).done(), "#5CB8FF"),
+        pack("dep-strata", "STRATA", Retro, Builder::new().form(Pixel).treat(Treatment::Depth).reticle(Grid).done(), "#33D6A6"),
+        pack("dep-cast", "CAST", Fun, Builder::new().form(Round).treat(Treatment::Depth).round().reticle(Dot).done(), "#FF7A2E"),
+        pack("dep-relief", "RELIEF", Minimal, Builder::new().form(Sigil).treat(Treatment::Depth).reticle(Hex).done(), "#A24BFF"),
+        pack("dep-anvil-x", "ANVIL X", Gaming, Builder::new().form(Wedge).treat(Treatment::Depth).reticle(CornerDot).done(), "#FF4D5E"),
+        pack("dep-slate", "SLATE", Minimal, Builder::new().form(Beam).treat(Treatment::Depth).reticle(Bar).done(), "#8A94A6"),
+        pack("dep-echo", "ECHO", Neon, Builder::new().form(Stack).treat(Treatment::Depth).glow(0.6).reticle(ChevronPair).done(), "#2E8BFF"),
+        pack("dep-vault", "VAULT", Precision, Builder::new().form(Prism).treat(Treatment::Depth).reticle(Rings).done(), "#EDF1F7"),
+        pack("dep-tower", "TOWER", Retro, Builder::new().form(Nib).treat(Treatment::Depth).reticle(Notch).done(), "#FFD23D"),
+
+        // ── ORBIT — a ring behind the glyph ──────────────────────────
+        pack("orb-eclipse", "ECLIPSE", Neon, Builder::new().form(Crescent).treat(Treatment::Halo).glow(0.85).reticle(Rings).done(), "#A24BFF"),
+        pack("orb-satellite", "SATELLITE", Precision, Builder::new().form(Needle).treat(Treatment::Halo).reticle(Circle).done(), "#8AE9FF"),
+        pack("orb-corona", "CORONA", Neon, Builder::new().form(Beam).treat(Treatment::Halo).glow(0.9).reticle(Star).done(), "#FFD23D"),
+        pack("orb-lagrange", "LAGRANGE", Precision, Builder::new().form(Slim).treat(Treatment::Halo).reticle(DotRing).done(), "#EDF1F7"),
+        pack("orb-perigee", "PERIGEE", Gaming, Builder::new().form(Blade).treat(Treatment::Halo).reticle(CircleCross).done(), "#33D6A6"),
+        pack("orb-halo-x", "HALO X", Fun, Builder::new().form(Round).treat(Treatment::Halo).round().glow(0.7).reticle(Arc).done(), "#5CB8FF"),
+        pack("orb-vector-x", "VECTOR X", Gaming, Builder::new().form(Kite).treat(Treatment::Halo).reticle(Saltire).done(), "#2E8BFF"),
+        pack("orb-pulsar", "PULSAR", Animated, Builder::new().form(Needle).treat(Treatment::Halo).glow(0.8).reticle(Rings).done(), "#FF3DD8"),
+        pack("orb-quasar", "QUASAR", Animated, Builder::new().form(Bolt).treat(Treatment::Halo).glow(0.9).reticle(Star).done(), "#8AE9FF"),
+        pack("orb-ringlet", "RINGLET", Minimal, Builder::new().form(Slim).treat(Treatment::Halo).fill(Hairline).reticle(Circle).done(), "#EDF1F7"),
+
+        // ── SCAN — banded surfaces, deliberately synthetic ───────────
+        pack("scn-hologram", "HOLOGRAM", Neon, Builder::new().form(Classic).treat(Treatment::Scan).glow(0.8).reticle(Grid).done(), "#8AE9FF"),
+        pack("scn-lattice-x", "LATTICE X", Retro, Builder::new().form(Pixel).treat(Treatment::Scan).reticle(Grid).done(), "#33D6A6"),
+        pack("scn-interlace", "INTERLACE", Retro, Builder::new().form(Wedge).treat(Treatment::Scan).reticle(Bar).done(), "#FFD23D"),
+        pack("scn-signal-x", "SIGNAL X", Neon, Builder::new().form(Beam).treat(Treatment::Scan).glow(0.75).reticle(ThinCross).done(), "#2E8BFF"),
+        pack("scn-static-x", "STATIC X", Retro, Builder::new().form(Shard).treat(Treatment::Scan).reticle(Notch).done(), "#FF3DD8"),
+        pack("scn-raster", "RASTER", Retro, Builder::new().form(Prism).treat(Treatment::Scan).reticle(Square).done(), "#8AE9FF"),
+        pack("scn-vhs", "VHS", Retro, Builder::new().form(Classic).treat(Treatment::Scan).reticle(TripleTick).done(), "#FF7A2E"),
+        pack("scn-tape-x", "TAPE X", Retro, Builder::new().form(Nib).treat(Treatment::Scan).reticle(Caret).done(), "#A24BFF"),
+        pack("scn-glitch-x", "GLITCH X", Animated, Builder::new().form(Shard).treat(Treatment::Scan).reticle(Saltire).done(), "#FF3DD8"),
+        pack("scn-matrix", "MATRIX", Animated, Builder::new().form(Needle).treat(Treatment::Scan).glow(0.6).reticle(Grid).done(), "#33D6A6"),
+
+        // ── TRAIL — motion frozen into the shape ─────────────────────
+        pack("trl-hyperdrive", "HYPERDRIVE", Neon, Builder::new().form(Kite).treat(Treatment::Trail).glow(0.85).reticle(ChevronPair).done(), "#2E8BFF"),
+        pack("trl-afterburn", "AFTERBURN", Neon, Builder::new().form(Bolt).treat(Treatment::Trail).glow(0.9).reticle(Star).done(), "#FF7A2E"),
+        pack("trl-slipstream", "SLIPSTREAM", Gaming, Builder::new().form(Blade).treat(Treatment::Trail).reticle(Caret).done(), "#33D6A6"),
+        pack("trl-warp", "WARP", Animated, Builder::new().form(Beam).treat(Treatment::Trail).glow(0.8).reticle(Arc).done(), "#A24BFF"),
+        pack("trl-drift-y", "DRIFT Y", Gaming, Builder::new().form(Slim).treat(Treatment::Trail).reticle(Bar).done(), "#FF4D5E"),
+        pack("trl-phase", "PHASE", Animated, Builder::new().form(Crescent).treat(Treatment::Trail).glow(0.7).reticle(Rings).done(), "#8AE9FF"),
+        pack("trl-boost", "BOOST", Gaming, Builder::new().form(Stack).treat(Treatment::Trail).reticle(ChevronPair).done(), "#FFD23D"),
+        pack("trl-streak", "STREAK", Fun, Builder::new().form(Needle).treat(Treatment::Trail).reticle(TripleTick).done(), "#FF3DD8"),
+        pack("trl-comet-y", "COMET Y", Fun, Builder::new().form(Fang).treat(Treatment::Trail).glow(0.8).reticle(Dot).done(), "#FF7A2E"),
+        pack("trl-mach", "MACH", Precision, Builder::new().form(Needle).treat(Treatment::Trail).reticle(ThinCross).done(), "#EDF1F7"),
+
+        // ── OUTLINE — dashed, technical, drafting-table ──────────────
+        pack("out-blueprint", "BLUEPRINT", Precision, Builder::new().form(Classic).treat(Treatment::Dashed).fill(Outline).reticle(Grid).done(), "#5CB8FF"),
+        pack("out-schematic", "SCHEMATIC", Precision, Builder::new().form(Wedge).treat(Treatment::Dashed).fill(Outline).reticle(Square).done(), "#8AE9FF"),
+        pack("out-marquee", "MARQUEE", Minimal, Builder::new().form(Triangle).treat(Treatment::Dashed).fill(Outline).reticle(CornerDot).done(), "#EDF1F7"),
+        pack("out-stencil", "STENCIL", Minimal, Builder::new().form(Split).treat(Treatment::Dashed).fill(Outline).reticle(Bracket).done(), "#EDF1F7"),
+        pack("out-draft", "DRAFT", Precision, Builder::new().form(Nib).treat(Treatment::Dashed).fill(Outline).reticle(Saltire).done(), "#33D6A6"),
+        pack("out-contour", "CONTOUR", Minimal, Builder::new().form(Round).treat(Treatment::Dashed).fill(Outline).round().reticle(Circle).done(), "#EDF1F7"),
+        pack("out-grid-x", "GRID X", Precision, Builder::new().form(Prism).treat(Treatment::Dashed).fill(Outline).reticle(Grid).done(), "#8AE9FF"),
+        pack("out-perf", "PERFORATE", Fun, Builder::new().form(Sigil).treat(Treatment::Dashed).fill(Outline).reticle(Hex).done(), "#A24BFF"),
+
+        // ── RIM — a lit edge, the most "3D" of the treatments ────────
+        pack("rim-bevel-x", "BEVEL X", Minimal, Builder::new().form(Classic).treat(Treatment::Rim).reticle(Diamond).done(), "#EDF1F7"),
+        pack("rim-forged", "FORGED", Gaming, Builder::new().form(Blade).treat(Treatment::Rim).reticle(Saltire).done(), "#FF7A2E"),
+        pack("rim-alloy", "ALLOY", Minimal, Builder::new().form(Wedge).treat(Treatment::Rim).reticle(Hex).done(), "#8A94A6"),
+        pack("rim-plated", "PLATED", Minimal, Builder::new().form(Prism).treat(Treatment::Rim).reticle(Square).done(), "#5CB8FF"),
+        pack("rim-lumen", "LUMEN", Neon, Builder::new().form(Round).treat(Treatment::Rim).glow(0.8).round().reticle(Rings).done(), "#8AE9FF"),
+        pack("rim-halcyon", "HALCYON", Neon, Builder::new().form(Crescent).treat(Treatment::Rim).glow(0.75).reticle(Arc).done(), "#33D6A6"),
+        pack("rim-edge", "EDGE", Gaming, Builder::new().form(Fang).treat(Treatment::Rim).reticle(CornerDot).done(), "#FF4D5E"),
+        pack("rim-gilded", "GILDED", Fun, Builder::new().form(Sigil).treat(Treatment::Rim).glow(0.6).reticle(Star).done(), "#FFD23D"),
+        pack("rim-frost", "FROST", Minimal, Builder::new().form(Shard).treat(Treatment::Rim).reticle(Diamond).done(), "#8AE9FF"),
+        pack("rim-machined", "MACHINED", Precision, Builder::new().form(Beam).treat(Treatment::Rim).reticle(CircleCross).done(), "#EDF1F7"),
+
+        // ── FACET — cut surfaces ─────────────────────────────────────
+        pack("fct-gemstone", "GEMSTONE", Fun, Builder::new().form(Prism).treat(Treatment::Facet).reticle(Diamond).done(), "#A24BFF"),
+        pack("fct-lowpoly", "LOW POLY", Fun, Builder::new().form(Wedge).treat(Treatment::Facet).reticle(Hex).done(), "#33D6A6"),
+        pack("fct-fracture", "FRACTURE", Gaming, Builder::new().form(Shard).treat(Treatment::Facet).reticle(Saltire).done(), "#FF4D5E"),
+        pack("fct-crystal", "CRYSTAL", Neon, Builder::new().form(Prism).treat(Treatment::Facet).glow(0.8).reticle(Star).done(), "#8AE9FF"),
+        pack("fct-origami-x", "ORIGAMI X", Fun, Builder::new().form(Triangle).treat(Treatment::Facet).reticle(Caret).done(), "#EDF1F7"),
+        pack("fct-carbon", "CARBON", Minimal, Builder::new().form(Classic).treat(Treatment::Facet).reticle(Grid).done(), "#8A94A6"),
+        pack("fct-shard-x", "SHARD X", Gaming, Builder::new().form(Bolt).treat(Treatment::Facet).reticle(TripleTick).done(), "#FFD23D"),
+        pack("fct-splinter", "SPLINTER", Gaming, Builder::new().form(Needle).treat(Treatment::Facet).reticle(ThinCross).done(), "#FF3DD8"),
+
+        // ── INLAY — hollow core, solid border ────────────────────────
+        pack("inl-signet", "SIGNET", Fun, Builder::new().form(Sigil).treat(Treatment::Inlay).reticle(Hex).done(), "#A24BFF"),
+        pack("inl-cameo", "CAMEO", Minimal, Builder::new().form(Round).treat(Treatment::Inlay).round().reticle(Circle).done(), "#EDF1F7"),
+        pack("inl-emblem", "EMBLEM", Fun, Builder::new().form(Crescent).treat(Treatment::Inlay).reticle(Star).done(), "#FFD23D"),
+        pack("inl-relic", "RELIC", Retro, Builder::new().form(Nib).treat(Treatment::Inlay).reticle(Diamond).done(), "#FF7A2E"),
+        pack("inl-badge", "BADGE", Minimal, Builder::new().form(Wedge).treat(Treatment::Inlay).reticle(Square).done(), "#5CB8FF"),
+        pack("inl-token", "TOKEN", Fun, Builder::new().form(Prism).treat(Treatment::Inlay).reticle(Rings).done(), "#33D6A6"),
+        pack("inl-crest", "CREST", Fun, Builder::new().form(Fang).treat(Treatment::Inlay).reticle(Saltire).done(), "#FF4D5E"),
+        pack("inl-seal", "SEAL", Minimal, Builder::new().form(Stack).treat(Treatment::Inlay).reticle(CornerDot).done(), "#EDF1F7"),
+
+        // ── FORM SHOWCASE — the new silhouettes, unadorned ───────────
+        pack("frm-bolt", "BOLT", Gaming, Builder::new().form(Bolt).reticle(Star).done(), "#FFD23D"),
+        pack("frm-needle", "NEEDLE", Precision, Builder::new().form(Needle).reticle(ThinCross).done(), "#EDF1F7"),
+        pack("frm-fang", "FANG", Gaming, Builder::new().form(Fang).reticle(Saltire).done(), "#FF4D5E"),
+        pack("frm-beam", "BEAM", Neon, Builder::new().form(Beam).glow(0.8).reticle(Bar).done(), "#2E8BFF"),
+        pack("frm-prism", "PRISM CORE", Minimal, Builder::new().form(Prism).reticle(Hex).done(), "#8AE9FF"),
+        pack("frm-crescent", "CRESCENT", Fun, Builder::new().form(Crescent).reticle(Arc).done(), "#A24BFF"),
+        pack("frm-stack", "STACK", Minimal, Builder::new().form(Stack).reticle(ChevronPair).done(), "#EDF1F7"),
+        pack("frm-shard", "SHARD", Gaming, Builder::new().form(Shard).reticle(Diamond).done(), "#33D6A6"),
+        pack("frm-nib", "NIB", Retro, Builder::new().form(Nib).reticle(Caret).done(), "#FF7A2E"),
+        pack("frm-sigil", "SIGIL", Fun, Builder::new().form(Sigil).reticle(Rings).done(), "#FF3DD8"),
+        pack("frm-bolt-mini", "BOLT MINI", Gaming, Builder::new().form(Bolt).scale(0.78).reticle(MicroDot).done(), "#8AE9FF"),
+        pack("frm-needle-ghost", "NEEDLE GHOST", Minimal, Builder::new().form(Needle).opacity(0.6).reticle(Dot).done(), "#EDF1F7"),
+        pack("frm-fang-glow", "FANG GLOW", Neon, Builder::new().form(Fang).glow(0.9).reticle(DotRing).done(), "#FF3DD8"),
+        pack("frm-beam-thin", "BEAM THIN", Precision, Builder::new().form(Beam).fill(Hairline).reticle(GapCross).done(), "#EDF1F7"),
     ]
 }
 
@@ -285,7 +409,7 @@ mod tests {
     fn the_catalog_meets_or_beats_the_target() {
         let count = all().len();
         assert!(count >= 64, "catalog shrank to {count}; the v1 floor is 64");
-        assert_eq!(count, 116, "update this when packs are added deliberately");
+        assert_eq!(count, 216, "update this when packs are added deliberately");
     }
 
     #[test]
@@ -355,19 +479,52 @@ mod tests {
 
     #[test]
     fn no_pack_name_borrows_a_third_party_mark() {
-        // PRD §15.3. Cheap to check, and exactly the kind of thing that slips in
-        // during a rename.
-        const FORBIDDEN: [&str; 10] = [
-            "windows", "microsoft", "mac", "apple", "amiga", "gameboy", "game boy", "nintendo",
-            "sega", "playstation",
+        // PRD §15.3. Matching on whole words, not substrings: "mac" inside
+        // MACHINED is an ordinary English word, and a check that cannot tell the
+        // difference gets weakened or deleted the first time it cries wolf.
+        const FORBIDDEN: [&str; 12] = [
+            "windows", "microsoft", "mac", "macos", "apple", "amiga", "gameboy", "nintendo",
+            "sega", "playstation", "xbox", "valve",
         ];
+        const FORBIDDEN_PHRASES: [&str; 2] = ["game boy", "play station"];
+
         for pack in all() {
             let name = pack.name.to_ascii_lowercase();
             let id = pack.id.to_ascii_lowercase();
+
+            let words: Vec<&str> = name
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .chain(id.split(|c: char| !c.is_ascii_alphanumeric()))
+                .filter(|w| !w.is_empty())
+                .collect();
+
             for mark in FORBIDDEN {
-                assert!(!name.contains(mark), "{} borrows {mark}", pack.name);
-                assert!(!id.contains(mark), "{} borrows {mark}", pack.id);
+                assert!(
+                    !words.contains(&mark),
+                    "{} ({}) borrows the mark \"{mark}\"",
+                    pack.name,
+                    pack.id
+                );
+            }
+            for phrase in FORBIDDEN_PHRASES {
+                assert!(!name.contains(phrase), "{} borrows \"{phrase}\"", pack.name);
             }
         }
+    }
+
+    /// The check above must still catch a real borrowing, or it is decoration.
+    #[test]
+    fn the_trademark_check_would_catch_an_actual_borrowing() {
+        let words: Vec<&str> = "retro gameboy"
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect();
+        assert!(words.contains(&"gameboy"), "a real mark must still trip it");
+
+        let innocent: Vec<&str> = "machined"
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect();
+        assert!(!innocent.contains(&"mac"), "an ordinary word must not trip it");
     }
 }
