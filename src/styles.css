@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+/* ────────────────────────────────────────────────────────────
+   Self-hosted faces. No CDN — required for offline use and CSP.
+   ──────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("./assets/fonts/chakra-petch-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("./assets/fonts/chakra-petch-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/inter-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/jetbrains-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Design tokens (PRD §10.2)
+   ──────────────────────────────────────────────────────────── */
+@theme {
+  --color-bg: #050507;
+  --color-surface: #0b0d12;
+  --color-elevated: #131722;
+  --color-border: #1e2532;
+  --color-border-hi: #2a3446;
+
+  --color-accent: #2e8bff;
+  --color-accent-hi: #5cb8ff;
+  --color-accent-dim: #0a2540;
+
+  --color-text: #edf1f7;
+  --color-text-muted: #8a94a6;
+  --color-text-dim: #58606e;
+
+  --color-danger: #ff4d5e;
+  --color-success: #33d6a6;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --font-display: "Chakra Petch", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --ease-forge: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  --accent-glow: rgba(46, 139, 255, 0.28);
+  --shadow-glow: 0 0 24px var(--accent-glow);
+  color-scheme: dark;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Base
+   ──────────────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  /* A desktop chrome, not a web page. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+::selection {
+  background: var(--color-accent-dim);
+  color: var(--color-accent-hi);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Utilities
+   ──────────────────────────────────────────────────────────── */
+@utility display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@utility mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility glow {
+  box-shadow: var(--shadow-glow);
+}
+
+/* Scrollbars: thin, dim, non-intrusive. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-hi) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-hi);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Screen transition — 8px vertical fade only (PRD §10.5)
+   ──────────────────────────────────────────────────────────── */
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.screen-in {
+  animation: screen-in 160ms var(--ease-forge) both;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -160% 0;
+  }
+  to {
+    background-position: 260% 0;
+  }
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--accent-glow) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.1s linear infinite;
+}
+
+/* Motion is a garnish, never a requirement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Suppressed while a live cursor preview is on-screen (PRD §10.5). */
+.no-motion *,
+.no-motion *::before,
+.no-motion *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
