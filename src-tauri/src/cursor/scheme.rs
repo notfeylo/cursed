@@ -251,23 +251,42 @@ pub fn write_base_size(size: u32) -> AppResult<()> {
 
 /// `SPI_SETCURSORS` with `SPIF_UPDATEINIFILE | SPIF_SENDCHANGE`: persist, then
 /// tell every window the pointer scheme changed.
+///
+/// **Never fails.** This is a notification, not the change itself — by the time
+/// it runs the registry already holds the new scheme and the cursor is already
+/// correct. `SystemParametersInfoW` can return FALSE without setting an error
+/// code (a busy desktop, a session in an odd state), and treating that as a
+/// failed apply put "Windows rejected the request" on screen over an apply that
+/// had in fact worked.
+///
+/// A broadcast that does not land costs a redraw, not a wrong cursor.
 pub fn broadcast() -> AppResult<()> {
     use windows::Win32::UI::WindowsAndMessaging::{
         SystemParametersInfoW, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETCURSORS,
     };
     // SAFETY: no pointer is passed; all arguments are plain values, and the call
     // only touches the calling user's own settings.
-    unsafe {
+    let result = unsafe {
         SystemParametersInfoW(
             SPI_SETCURSORS,
             0,
             None,
             SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
-        )?;
+        )
+    };
+    if let Err(e) = result {
+        log::debug!(
+            "the scheme was written but the change broadcast did not land: {}",
+            crate::error::describe_win32(&e)
+        );
     }
     Ok(())
 }
 
+/// Same reasoning as [`broadcast`]: reverting a hover preview is housekeeping,
+/// and a failure here must not surface as an error over a catalog someone is
+/// browsing.
+///
 /// Drops the in-session `SetSystemCursor` overrides by making Windows reload
 /// every cursor from the registry (PRD §4.1).
 pub fn reload_from_registry() -> AppResult<()> {
@@ -276,13 +295,19 @@ pub fn reload_from_registry() -> AppResult<()> {
     };
     // SAFETY: as above — value arguments only. No SPIF flags, so nothing is
     // written to disk and no broadcast storm is triggered for a hover preview.
-    unsafe {
+    let result = unsafe {
         SystemParametersInfoW(
             SPI_SETCURSORS,
             0,
             None,
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        )?;
+        )
+    };
+    if let Err(e) = result {
+        log::debug!(
+            "cursors could not be reloaded from the registry: {}",
+            crate::error::describe_win32(&e)
+        );
     }
     Ok(())
 }
@@ -305,6 +330,15 @@ mod tests {
         };
         let path = PathBuf::from(appdata).join("CursorForge").join("a.cur");
         assert_eq!(to_expandable(&path), r"%APPDATA%\CursorForge\a.cur");
+    }
+
+    /// A broadcast is a notification about a change that has already happened.
+    /// If it could fail the caller, a successful apply would report itself as an
+    /// error — which is exactly the bug this guards against.
+    #[test]
+    fn broadcasting_never_fails_the_caller() {
+        assert!(broadcast().is_ok());
+        assert!(reload_from_registry().is_ok());
     }
 
     #[test]
