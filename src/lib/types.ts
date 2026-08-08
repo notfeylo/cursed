@@ -109,6 +109,9 @@ export interface Settings {
   tint: string;
   outline: boolean;
   applyMode: ApplyMode;
+  blendPack: string;
+  /** Recolour catalog tiles to the tint. Off by default — see Settings. */
+  tintPreviews: boolean;
   animationSpeed: number;
   reapplyOnResume: boolean;
 

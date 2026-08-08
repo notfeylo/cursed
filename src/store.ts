@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tint: "#2E8BFF",
   outline: true,
   applyMode: "Blend",
+  blendPack: "precision-gap-cross",
+  tintPreviews: false,
   animationSpeed: 1,
   reapplyOnResume: true,
 

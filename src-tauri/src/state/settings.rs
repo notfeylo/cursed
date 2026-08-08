@@ -25,6 +25,14 @@ pub struct Settings {
     /// Fills the roles a custom or imported cursor does not define, so a
     /// one-role import does not leave fifteen stock Windows pointers behind it.
     pub blend_pack: String,
+    /// Whether catalog tiles are recoloured to the chosen tint.
+    ///
+    /// Off by default. Tinting every tile the same colour makes a large catalog
+    /// unreadable — two hundred identically-coloured arrows tell you nothing
+    /// about which is which. Showing each pack in its own colours is how you
+    /// find the one you want; the tint still applies to the cursor you actually
+    /// apply, which is what it was always for.
+    pub tint_previews: bool,
     pub animation_speed: f32,
     pub reapply_on_resume: bool,
 
@@ -67,6 +75,7 @@ impl Default for Settings {
             outline: true,
             apply_mode: ApplyMode::Blend,
             blend_pack: "precision-gap-cross".to_owned(),
+            tint_previews: false,
             animation_speed: 1.0,
             reapply_on_resume: true,
 

@@ -37,6 +37,7 @@ export function Catalog() {
   const [size, setSize] = useState(settings.cursorSize ?? 32);
   const [applying, setApplying] = useState<string | null>(null);
   const [applied, setApplied] = useState<string | null>(null);
+  const [tintPreviews, setTintPreviews] = useState(settings.tintPreviews);
 
   const hoverTimer = useRef<number | null>(null);
   const previewedRef = useRef<string | null>(null);
@@ -180,6 +181,7 @@ export function Catalog() {
                 key={pack.id}
                 pack={pack}
                 tint={tint}
+                tinted={tintPreviews}
                 busy={applying === pack.id}
                 active={applied === pack.id}
                 onEnter={() => onHover(pack)}
@@ -192,6 +194,28 @@ export function Catalog() {
       </div>
 
       <div className="border-t border-border bg-bg/95 px-3 py-2 backdrop-blur">
+        {/* Colour is an option, not the default view. With it off you see each
+            cursor as it actually looks, which is the only way to tell two
+            hundred of them apart. */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = !tintPreviews;
+            setTintPreviews(next);
+            void patchSettings({ tintPreviews: next });
+          }}
+          className={`display mb-2 flex w-full items-center justify-between rounded-xs border px-2 py-1.5 text-[9px] transition-colors duration-150 ${
+            tintPreviews
+              ? "border-accent bg-accent-dim text-accent-hi"
+              : "border-border text-text-dim hover:border-border-hi hover:text-text-muted"
+          }`}
+        >
+          <span>{tintPreviews ? "SHOWING TINTED" : "SHOWING TRUE COLOURS"}</span>
+          <span className="text-text-dim">
+            {tintPreviews ? "TAP FOR TRUE COLOURS" : "TAP TO TINT"}
+          </span>
+        </button>
+
         <div className="mb-2 flex items-center gap-1.5">
           {SWATCHES.map((swatch) => (
             <button
@@ -233,6 +257,7 @@ export function Catalog() {
 function Tile({
   pack,
   tint,
+  tinted,
   busy,
   active,
   onEnter,
@@ -241,6 +266,8 @@ function Tile({
 }: {
   pack: PackSummary;
   tint: string;
+  /** Recolour this tile to the tint, rather than showing its own colours. */
+  tinted: boolean;
   busy: boolean;
   active: boolean;
   onEnter: () => void;
@@ -266,7 +293,7 @@ function Tile({
         </span>
       )}
 
-      {pack.recolorable ? (
+      {pack.recolorable && tinted ? (
         /*
           Our own artwork is greyscale, so the preview is used as an alpha mask
           over a solid fill: the grid tracks the swatch the user just picked
