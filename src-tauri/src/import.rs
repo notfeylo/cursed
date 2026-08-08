@@ -370,48 +370,6 @@ fn categorise(_name: &str, _animated: bool) -> &'static str {
     "OPTIMAL CURSED"
 }
 
-/// The keyword buckets used before everything was collapsed into one category.
-/// Kept because the moment MINIMAL CURSED gets contents, this is how imports get
-/// sorted into it again.
-#[allow(dead_code)]
-fn categorise_by_keyword(name: &str, animated: bool) -> &'static str {
-    let n = name.to_ascii_lowercase();
-    const GAMING: [&str; 13] = [
-        "game", "knight", "sword", "pickaxe", "craft", "blox", "valorant", "csgo", "fortnite",
-        "hornet", "silksong", "kunai", "gun",
-    ];
-    const ANIME: [&str; 10] = [
-        "anime", "naruto", "kaisen", "sukuna", "akatsuki", "kuromi", "sanrio", "kitty", "manga",
-        "chibi",
-    ];
-    const VEHICLES: [&str; 8] = ["bmw", "toyota", "supra", "car", "racing", "m4", "m5", "moto"];
-    const CHARACTERS: [&str; 9] = [
-        "batman", "marvel", "spider", "venom", "hero", "meme", "ronaldo", "skull", "dagger",
-    ];
-    const NEON: [&str; 6] = ["neon", "glow", "electric", "rgb", "laser", "plasma"];
-    const RETRO: [&str; 6] = ["pixel", "8-bit", "8bit", "retro", "matrix", "arcade"];
-
-    let has = |set: &[&str]| set.iter().any(|k| n.contains(k));
-
-    if animated {
-        "ANIMATED"
-    } else if has(&ANIME) {
-        "ANIME"
-    } else if has(&VEHICLES) {
-        "VEHICLES"
-    } else if has(&GAMING) {
-        "GAMING"
-    } else if has(&CHARACTERS) {
-        "CHARACTERS"
-    } else if has(&NEON) {
-        "NEON"
-    } else if has(&RETRO) {
-        "RETRO"
-    } else {
-        "IMPORTED"
-    }
-}
-
 fn extension_of(path: &Path) -> String {
     path.extension()
         .and_then(|e| e.to_str())
@@ -1087,15 +1045,6 @@ mod tests {
         ] {
             assert_eq!(categorise(name, animated), "OPTIMAL CURSED", "for {name:?}");
         }
-    }
-
-    /// The keyword buckets are kept for when MINIMAL CURSED gets contents, so
-    /// they should still work rather than rot.
-    #[test]
-    fn the_keyword_buckets_still_sort_correctly_when_needed() {
-        assert_eq!(categorise_by_keyword("Grey BMW M5", false), "VEHICLES");
-        assert_eq!(categorise_by_keyword("Sanrio Hello Kitty", false), "ANIME");
-        assert_eq!(categorise_by_keyword("anything", true), "ANIMATED");
     }
 
     /// The names a downloaded scheme actually uses, from the three sets in

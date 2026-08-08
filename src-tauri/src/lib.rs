@@ -79,22 +79,32 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
 
-    // Logging is off unless the user asks for it, and even then it is a local
-    // rotating file — nothing leaves the machine (PRD §15.2).
-    if settings.debug_logging {
-        if let Ok(dir) = paths::logs_dir() {
-            builder = builder.plugin(
-                tauri_plugin_log::Builder::new()
-                    .target(tauri_plugin_log::Target::new(
-                        tauri_plugin_log::TargetKind::Folder {
-                            path: dir,
-                            file_name: Some("cursorforge".into()),
-                        },
-                    ))
-                    .level(log::LevelFilter::Info)
-                    .build(),
-            );
-        }
+    // A local rotating file, always on at info level — nothing leaves the
+    // machine (PRD §15.2).
+    //
+    // It used to be off unless the user opted in, which meant the one time a
+    // problem reached a user there was nothing on disk to read. A log that only
+    // exists after you already know you needed it is not a log. The setting now
+    // controls verbosity, not existence.
+    if let Ok(dir) = paths::logs_dir() {
+        builder = builder.plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Folder {
+                        path: dir,
+                        file_name: Some("cursed".into()),
+                    },
+                ))
+                // Bounded, so a long-running tray app cannot fill a disk.
+                .max_file_size(2 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .level(if settings.debug_logging {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
+                .build(),
+        );
     }
 
     let result = builder
@@ -147,6 +157,8 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = state::settings::get();
+
+            log_startup_record();
 
             // Before anything else touches the registry: capture what was there
             // first. Idempotent, so this is a no-op on every launch but the
@@ -205,5 +217,54 @@ pub fn run() {
         log::error!("Cursed could not start: {e}");
         eprintln!("Cursed could not start: {e}");
         std::process::exit(1);
+    }
+}
+
+/// Written once per launch, before anything can go wrong.
+///
+/// Every line here has already been the difference between a working install and
+/// a broken one: which build is really running, whether the data directory can
+/// be written, and how many cursors the catalog can actually offer. Recorded
+/// unconditionally, because a log that only starts after you know you needed it
+/// is not a log.
+fn log_startup_record() {
+    log::info!(
+        "Cursed {} ({}, {}) starting",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("CURSORFORGE_COMMIT").unwrap_or("local"),
+        std::env::consts::ARCH
+    );
+
+    for (label, dir) in [
+        ("data", paths::root()),
+        ("cache", paths::cache_dir()),
+        ("custom", paths::custom_dir()),
+        ("logs", paths::logs_dir()),
+    ] {
+        match dir {
+            Ok(path) => {
+                let writable = {
+                    let probe = path.join(".write-probe");
+                    let ok = std::fs::write(&probe, b"x").is_ok();
+                    let _ = std::fs::remove_file(&probe);
+                    ok
+                };
+                if writable {
+                    log::info!("{label} dir {}", path.display());
+                } else {
+                    // Not fatal on its own, but it explains almost every
+                    // downstream failure, so it must be loud.
+                    log::error!("{label} dir is NOT writable: {}", path.display());
+                }
+            }
+            Err(e) => log::error!("{label} dir unavailable: {e}"),
+        }
+    }
+
+    let built_in = packs::styles::all().len();
+    let imported = import::list().map(|v| v.len()).unwrap_or(0);
+    log::info!("catalog: {built_in} built-in, {imported} imported");
+    if built_in == 0 {
+        log::error!("the built-in catalog is empty -- every machine would show no cursors");
     }
 }

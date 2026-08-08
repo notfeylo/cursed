@@ -63,44 +63,40 @@ impl RenderSpec {
     }
 }
 
-/// Whether the generated packs appear in the catalog.
+/// Every pack that ships inside the executable.
 ///
-/// On, and it needs to stay on.
+/// There is deliberately no switch here. A `const SHOW_GENERATED_PACKS: bool`
+/// used to gate this, and setting it to `false` emptied the catalog on every
+/// machine that had not imported a folder — which was all of them but one. The
+/// app was not broken and nothing errored; there was simply nothing to show.
 ///
 /// These packs are the only cursors that exist on a machine which has just
-/// installed Cursed. They are defined in Rust and compiled into the executable,
-/// so they need no download, no unpacking, no network and no database — which is
-/// the entire point of the app: open it, pick a cursor, done.
-///
-/// Turning this off once emptied the catalog for everybody except the one person
-/// who had already imported a folder, so a new user was greeted by an app that
-/// asked them to go and find cursors themselves. An import is an *addition* to
-/// the library. It is never the library.
-const SHOW_GENERATED_PACKS: bool = true;
+/// installed Cursed. They are defined in Rust and compiled into the binary, so
+/// they need no download, no unpacking, no network and no database. An import is
+/// an *addition* to this library. It is never the library.
+fn built_in_summaries() -> AppResult<Vec<PackSummary>> {
+    styles::all()
+        .into_iter()
+        .map(|pack| {
+            let preview = preview_uri(&pack, pack.default_tint)?;
+            Ok(PackSummary {
+                id: pack.id.to_owned(),
+                name: pack.name.to_owned(),
+                // The built-ins are the clean, geometric, recolourable half of
+                // the catalog — which is what MINIMAL CURSED was named for and
+                // left empty waiting on.
+                category: "MINIMAL CURSED",
+                author: "feylo",
+                recolorable: true,
+                animated: pack.animated,
+                preview,
+            })
+        })
+        .collect()
+}
 
 pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
-    let mut out: Vec<PackSummary> = if SHOW_GENERATED_PACKS {
-        styles::all()
-            .into_iter()
-            .map(|pack| {
-                let preview = preview_uri(&pack, pack.default_tint)?;
-                Ok(PackSummary {
-                    id: pack.id.to_owned(),
-                    name: pack.name.to_owned(),
-                    // The built-ins are the clean, geometric, recolourable half
-                    // of the catalog — which is what MINIMAL CURSED was named
-                    // for and left empty waiting on.
-                    category: "MINIMAL CURSED",
-                    author: "feylo",
-                    recolorable: true,
-                    animated: pack.animated,
-                    preview,
-                })
-            })
-            .collect::<AppResult<_>>()?
-    } else {
-        Vec::new()
-    };
+    let mut out = built_in_summaries()?;
 
     // The user's own imports sit at the front: they went to the trouble of
     // adding them, so they should not have to scroll past 216 built-ins first.

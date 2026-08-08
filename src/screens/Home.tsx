@@ -19,6 +19,18 @@ export function Home() {
   const packs = useStore((s) => s.packs);
 
   const [update, setUpdate] = useState<ipc.UpdateState | null>(null);
+  const [appVersion, setAppVersion] = useState("");
+
+  // Visible without digging. "What version are you on?" has to be answerable in
+  // two seconds by someone with no technical skill — it was the first question
+  // every support conversation needed and nobody could answer it.
+  useEffect(() => {
+    if (!ipc.isDesktop()) return;
+    void ipc
+      .getBuildInfo()
+      .then((info) => setAppVersion(info.version))
+      .catch(() => undefined);
+  }, []);
 
   // The updater works in the background, so the home screen is where its result
   // should surface — nobody opens Settings to find out an update exists.
@@ -91,6 +103,17 @@ export function Home() {
           <Tile icon={<Layers size={13} />} label="SAVED" onClick={() => go("saved")} />
           <Tile icon={<Settings2 size={13} />} label="SETTINGS" onClick={() => go("settings")} />
         </div>
+
+        {appVersion && (
+          <button
+            type="button"
+            onClick={() => go("about")}
+            title="About Cursed"
+            className="mono mt-2.5 block w-full text-center text-[9px] text-text-dim transition-colors duration-150 hover:text-text-muted"
+          >
+            v{appVersion}
+          </button>
+        )}
       </div>
     </div>
   );
