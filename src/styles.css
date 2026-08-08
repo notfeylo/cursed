@@ -299,6 +299,27 @@
   }
 }
 
+/* The home screen's two drifting colour fields. Long, offset periods so the
+   pair never settles into an obvious loop. */
+@keyframes drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(38px, 26px) scale(1.12);
+  }
+}
+@keyframes drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1.08);
+  }
+  50% {
+    transform: translate(-30px, -34px) scale(1);
+  }
+}
+
 /* A slow sweep of light across a surface. Used sparingly — the hero panel. */
 @keyframes sweep {
   0% {

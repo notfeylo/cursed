@@ -464,6 +464,19 @@ pub fn clear_update_downloads() -> AppResult<()> {
     updates::clear_downloads()
 }
 
+/// What the background updater has found. Cheap enough to poll.
+#[tauri::command]
+pub fn get_update_state() -> AppResult<updates::UpdateState> {
+    Ok(updates::state())
+}
+
+/// Kicks off a check-and-download without waiting for it.
+#[tauri::command]
+pub fn start_update_check() -> AppResult<()> {
+    updates::auto_update_in_background();
+    Ok(())
+}
+
 /* ── importing the user's own cursors ──────────────────────── */
 
 /// Imports every cursor found in a folder the user picked.

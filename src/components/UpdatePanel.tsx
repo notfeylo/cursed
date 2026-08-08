@@ -29,8 +29,36 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
     }
   };
 
+  // The background updater usually got there first, so adopt whatever it found
+  // rather than starting a second check and making the user wait again.
   useEffect(() => {
-    if (autoCheck && ipc.isDesktop()) void check();
+    if (!autoCheck || !ipc.isDesktop()) return;
+
+    let cancelled = false;
+    const read = async () => {
+      try {
+        const bg = await ipc.getUpdateState();
+        if (cancelled) return;
+
+        if (bg.status) setStatus(bg.status);
+        if (bg.error) setMessage(bg.error);
+
+        if (bg.ready) setPhase("ready");
+        else if (bg.downloading) setPhase("downloading");
+        else if (bg.checking) setPhase("checking");
+        else if (bg.status) setPhase(bg.status.newerAvailable ? "available" : "current");
+        else void check();
+      } catch {
+        /* falls back to the manual button */
+      }
+    };
+
+    void read();
+    const timer = window.setInterval(read, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
     // Intentionally runs once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoCheck]);

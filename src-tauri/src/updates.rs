@@ -411,10 +411,100 @@ pub fn clear_downloads() -> AppResult<()> {
 /// Runs a check in the background at startup, if the user left it enabled.
 /// Failure is silent: a missing network is not an error worth a banner.
 pub fn check_in_background() {
+    auto_update_in_background();
+}
+
+/// What the background updater has found so far, for the UI to read.
+///
+/// Held in memory rather than pushed at the frontend: the window is usually
+/// hidden, and an event fired at a webview that does not exist yet is lost.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateState {
+    pub checking: bool,
+    pub downloading: bool,
+    /// Downloaded and verified against the release checksum — ready to run.
+    pub ready: bool,
+    pub status: Option<UpdateStatus>,
+    pub error: Option<String>,
+}
+
+fn state_slot() -> &'static std::sync::Mutex<UpdateState> {
+    static STATE: std::sync::OnceLock<std::sync::Mutex<UpdateState>> = std::sync::OnceLock::new();
+    STATE.get_or_init(|| std::sync::Mutex::new(UpdateState::default()))
+}
+
+pub fn state() -> UpdateState {
+    state_slot().lock().map(|s| s.clone()).unwrap_or_default()
+}
+
+fn update_state(f: impl FnOnce(&mut UpdateState)) {
+    if let Ok(mut guard) = state_slot().lock() {
+        f(&mut guard);
+    }
+}
+
+/// Checks, and if a newer version exists, downloads and verifies it — unasked.
+///
+/// Installing stays the user's decision, because it closes the app and runs an
+/// installer. Everything *before* that decision is work they would otherwise sit
+/// and wait through, so it happens up front and the button already says
+/// "install" by the time anyone looks at it.
+pub fn auto_update_in_background() {
     std::thread::Builder::new()
-        .name("cursorforge-update-check".into())
+        .name("cursed-auto-update".into())
         .spawn(|| {
-            let _ = check();
+            update_state(|s| {
+                s.checking = true;
+                s.error = None;
+            });
+
+            let found = check();
+            update_state(|s| s.checking = false);
+
+            let status = match found {
+                Ok(status) => status,
+                Err(e) => {
+                    // A missing network is not worth shouting about, but it is
+                    // recorded so Settings can say something honest.
+                    update_state(|s| s.error = Some(e.to_string()));
+                    return;
+                }
+            };
+            update_state(|s| s.status = Some(status.clone()));
+
+            let (Some(version), Some(installer)) = (status.latest.clone(), status.installer.clone())
+            else {
+                return;
+            };
+            if !status.newer_available {
+                return;
+            }
+
+            update_state(|s| s.downloading = true);
+            let outcome = download(&version, &installer).and_then(|_| {
+                // Verified now, not at install time: a download that fails its
+                // checksum must never reach a button labelled "install".
+                let expected = published_hash(&version, &installer)?;
+                let file = download_dir()?.join(&installer);
+                let actual = sha256_file(&file)?;
+                if crate::hash::hex_eq(&actual, &expected) {
+                    Ok(())
+                } else {
+                    let _ = std::fs::remove_file(&file);
+                    Err(AppError::msg(
+                        "the downloaded update did not match its published checksum",
+                    ))
+                }
+            });
+
+            update_state(|s| {
+                s.downloading = false;
+                match &outcome {
+                    Ok(()) => s.ready = true,
+                    Err(e) => s.error = Some(e.to_string()),
+                }
+            });
         })
         .ok();
 }

@@ -133,6 +133,8 @@ pub fn run() {
             commands::download_update,
             commands::install_update,
             commands::clear_update_downloads,
+            commands::get_update_state,
+            commands::start_update_check,
             commands::import_cursor_folder,
             commands::list_imported,
             commands::delete_imported,

@@ -153,6 +153,19 @@ export const installUpdate = (version: string, installer: string) =>
 
 export const clearUpdateDownloads = () => call<void>("clear_update_downloads");
 
+export interface UpdateState {
+  checking: boolean;
+  downloading: boolean;
+  /** Downloaded and verified against the release checksum — ready to run. */
+  ready: boolean;
+  status: UpdateStatus | null;
+  error: string | null;
+}
+
+/** What the background updater has found. Cheap enough to poll. */
+export const getUpdateState = () => call<UpdateState>("get_update_state");
+export const startUpdateCheck = () => call<void>("start_update_check");
+
 /* ── importing your own cursors ────────────────────────────── */
 
 export interface ImportReport {

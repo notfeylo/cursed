@@ -102,10 +102,44 @@ fn check_update() -> ! {
     }
 }
 
+/// `genpacks --list-packs` prints exactly what the catalog screen will show.
+///
+/// Added because "the catalog still shows cursors that are not mine" is not
+/// answerable by reading a flag — it needs the same function the UI calls.
+fn list_packs() -> ! {
+    match cursorforge_lib::packs::catalog::list_summaries() {
+        Ok(packs) => {
+            println!("{} entries in the catalog", packs.len());
+            for pack in &packs {
+                println!(
+                    "  {:<44} {:<16} {}",
+                    pack.name,
+                    pack.category,
+                    if pack.id.starts_with("user:") {
+                        "imported"
+                    } else {
+                        "GENERATED"
+                    }
+                );
+            }
+            let generated = packs.iter().filter(|p| !p.id.starts_with("user:")).count();
+            println!("\ngenerated: {generated}   imported: {}", packs.len() - generated);
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("could not list the catalog: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--icon") {
         render_icon(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--list-packs") {
+        list_packs();
     }
     if args.get(1).map(String::as_str) == Some("--check-update") {
         check_update();
