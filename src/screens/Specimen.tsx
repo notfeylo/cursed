@@ -112,21 +112,14 @@ const ICONS: { name: string; node: React.ReactNode }[] = [
  */
 const PAIRINGS = [
   {
-    id: "CURRENT",
-    stack: "Chakra Petch / Inter / JetBrains Mono",
-    display: "'Chakra Petch', sans-serif",
-    body: "'Inter', sans-serif",
-    mono: "'JetBrains Mono', monospace",
-  },
-  {
-    id: "A",
+    id: "SHIPPING (A)",
     stack: "Space Grotesk / Inter Tight / JetBrains Mono",
     display: "'Space Grotesk', sans-serif",
     body: "'Inter Tight', sans-serif",
     mono: "'JetBrains Mono', monospace",
   },
   {
-    id: "B",
+    id: "B — fallback if A fails a pass/fail check",
     stack: "Geist / Geist / Geist Mono",
     display: "'Geist', sans-serif",
     body: "'Geist', sans-serif",
@@ -152,10 +145,6 @@ const LONG_ERROR =
  */
 const CANDIDATE_FACES = (
   [
-    ["Space Grotesk", 600, "space-grotesk-600"],
-    ["Space Grotesk", 700, "space-grotesk-700"],
-    ["Inter Tight", 400, "inter-tight-400"],
-    ["Inter Tight", 500, "inter-tight-500"],
     ["Geist", 400, "geist-400"],
     ["Geist", 500, "geist-500"],
     ["Geist", 700, "geist-700"],
@@ -244,11 +233,11 @@ export function Specimen() {
               font and the two lines below look identical. That is the classic
               silent bug this row exists to catch. */}
           <div className="space-y-1 text-[14px]">
-            <p style={{ fontFamily: "'Chakra Petch', sans-serif" }}>
-              Chakra Petch — the quick brown fox jumps over the lazy dog
+            <p style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              Space Grotesk — the quick brown fox jumps over the lazy dog
             </p>
-            <p style={{ fontFamily: "'Inter', sans-serif" }}>
-              Inter — the quick brown fox jumps over the lazy dog
+            <p style={{ fontFamily: "'Inter Tight', sans-serif" }}>
+              Inter Tight — the quick brown fox jumps over the lazy dog
             </p>
             <p style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               JetBrains Mono — the quick brown fox jumps over the lazy dog

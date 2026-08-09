@@ -4,29 +4,29 @@
    Self-hosted faces. No CDN — required for offline use and CSP.
    ──────────────────────────────────────────────────────────── */
 @font-face {
-  font-family: "Chakra Petch";
-  src: url("./assets/fonts/chakra-petch-600.woff2") format("woff2");
+  font-family: "Space Grotesk";
+  src: url("./assets/fonts/space-grotesk-600.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: block;
 }
 @font-face {
-  font-family: "Chakra Petch";
-  src: url("./assets/fonts/chakra-petch-700.woff2") format("woff2");
+  font-family: "Space Grotesk";
+  src: url("./assets/fonts/space-grotesk-700.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: block;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("./assets/fonts/inter-400.woff2") format("woff2");
+  font-family: "Inter Tight";
+  src: url("./assets/fonts/inter-tight-400.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: block;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("./assets/fonts/inter-500.woff2") format("woff2");
+  font-family: "Inter Tight";
+  src: url("./assets/fonts/inter-tight-500.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: block;
@@ -65,8 +65,14 @@
   --radius-md: 12px;
   --radius-lg: 16px;
 
-  --font-display: "Chakra Petch", system-ui, sans-serif;
-  --font-sans: "Inter", system-ui, sans-serif;
+  /* Space Grotesk carries the display line: idiosyncratic letterforms without
+     tipping into costume. Inter Tight's tighter default tracking suits a 420 px
+     window where horizontal space is the scarce resource. JetBrains Mono stays
+     deliberately unmatched to the display family — mono is a utility face here,
+     used for paths and diagnostics, where distinguishing Il1 and O0 beats
+     looking related. */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-sans: "Inter Tight", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --ease-forge: cubic-bezier(0.16, 1, 0.3, 1);

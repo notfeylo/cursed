@@ -14,7 +14,8 @@
     "generate:packs": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- assets/packs",
     "generate:icon": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --icon src-tauri/icons/source.png 1024",
     "lint:types": "tsc --noEmit",
-    "version:set": "node scripts/set-version.mjs"
+    "version:set": "node scripts/set-version.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

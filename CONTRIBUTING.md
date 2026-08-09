@@ -82,3 +82,40 @@ fastest way to show what went wrong.
 Security issues go through a
 [private advisory](https://github.com/notfeylo/cursorforge/security/advisories/new),
 not a public issue. See [SECURITY.md](SECURITY.md).
+
+## Adding or replacing a font
+
+Faces are self-hosted WOFF2 under `src/assets/fonts/`. There is no CDN: the app
+works offline and its CSP has no route to one.
+
+**Take the file from the `/* latin */` block.** The Google Fonts `css2`
+response contains one `@font-face` per subset and the *first* one is
+`cyrillic-ext`. Taking the first `woff2` URL gives a file of roughly 3–4 KB with
+no Latin coverage at all — every glyph then renders from a fallback face, and
+the interface still looks plausible, just wrong. A real latin subset is roughly
+**13–22 KB**.
+
+```bash
+css=$(curl -s -A "$UA" "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=block&subset=latin")
+url=$(echo "$css" | awk '/\/\* latin \*\//{f=1} f && /src:/{print; exit}' \
+      | grep -oE "https://fonts.gstatic.com[^)]+\.woff2")
+```
+
+Then update `EXPECTED_FONTS` in `scripts/check-bundle.mjs` and run
+`npm run build && npm run check:bundle`. That check runs in CI and fails on a
+file that is too small, one that expands to too few glyphs, an orphan face
+nobody uses, and any font in the built bundle that is not in the expected list.
+
+**Never declare an evaluation-only face in `styles.css`.** A stylesheet is
+emitted even when the only component importing it has been tree-shaken, so
+candidate fonts declared there end up inside the installer. Put them in
+`dev-fonts/` and register them at runtime from the specimen, which is how the
+three-way pairing comparison works.
+
+## The specimen sheet
+
+`npm run dev`, then `http://localhost:1420/?specimen`. Every colour token, type
+size, spacing step, component state, icon and long-text torture case on one
+page, so a single screenshot answers a design question instead of a tour of
+seven screens. It is gated on `import.meta.env.DEV` and must never appear in a
+build; `npm run check:bundle` asserts that.

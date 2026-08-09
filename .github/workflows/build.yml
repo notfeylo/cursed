@@ -34,6 +34,13 @@ jobs:
       - name: Frontend
         run: npm run build
 
+      # Two failures that are invisible by design: a font subset carrying no
+      # Latin glyphs, which silently renders in a fallback face, and an unused
+      # font reaching the installer because an emitted stylesheet is never
+      # tree-shaken. Also asserts the dev-only specimen route is absent.
+      - name: Bundle contents
+        run: npm run check:bundle
+
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 

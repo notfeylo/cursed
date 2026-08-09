@@ -13,8 +13,8 @@ source.
 Three families ship inside the application as latin-subset WOFF2 files, each
 under the **SIL Open Font License 1.1**:
 
-- **Chakra Petch** — © Cadson Demak
-- **Inter** — © The Inter Project Authors
+- **Space Grotesk** — © Florian Karsten
+- **Inter Tight** — © The Inter Project Authors
 - **JetBrains Mono** — © JetBrains s.r.o. and the JetBrains Mono Project Authors
 
 > Copyright (c) the respective authors.
