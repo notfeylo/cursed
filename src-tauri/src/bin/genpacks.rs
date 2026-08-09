@@ -214,6 +214,49 @@ fn logo_sheets(args: &[String]) {
     std::process::exit(0);
 }
 
+/// `genpacks --shrink <in> <out> <max-dim>` prepares a bundled raster asset.
+///
+/// A photographic backdrop arrives from a screenshot tool at full resolution
+/// with a full colour palette, and every byte of that ends up inside the
+/// installer. A blurred greyscale image carries almost no high-frequency detail,
+/// so it survives being halved and reduced to a single channel with nothing
+/// visible lost — and the app scales it to fill the window anyway.
+fn shrink_image(args: &[String]) {
+    let (Some(src), Some(dst)) = (args.get(2), args.get(3)) else {
+        eprintln!("usage: genpacks --shrink <in> <out> [max-dim]");
+        std::process::exit(2);
+    };
+    let max: u32 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(512);
+
+    let img = match image::open(src) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("could not open {src}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let before = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
+
+    let scaled = img.resize(max, max, image::imageops::FilterType::Lanczos3);
+    let grey = image::DynamicImage::ImageLuma8(scaled.to_luma8());
+
+    if let Err(e) = grey.save(dst) {
+        eprintln!("could not write {dst}: {e}");
+        std::process::exit(1);
+    }
+    let after = std::fs::metadata(dst).map(|m| m.len()).unwrap_or(0);
+    println!(
+        "{} -> {}  {}x{}  {:.1} KB -> {:.1} KB",
+        src,
+        dst,
+        grey.width(),
+        grey.height(),
+        before as f64 / 1024.0,
+        after as f64 / 1024.0
+    );
+    std::process::exit(0);
+}
+
 /// `genpacks --trace <png>` turns a supplied logo image into an SVG path.
 ///
 /// Transcribing a shape by eye from a picture produces a shape that is nearly
@@ -428,7 +471,22 @@ fn logo_accept(args: &[String]) {
         }
     }
 
-    const Z: u32 = 10;
+        // Also dump the tiled app icon at taskbar sizes, since that is the form
+    // the .ico ships and the one Windows actually draws down there.
+    {
+        let mut s2 = Bitmap::new(760, 200);
+        fill(&mut s2, 0, 0, 760, 200, [0x20, 0x20, 0x20, 0xff]);
+        let mut x = 20;
+        for size in [16u32, 24, 32, 48] {
+            if let Ok(m) = cursorforge_lib::build::svg::render(&brand::icon_svg(), size) {
+                zoom(&mut s2, &m, x, 20, 8);
+            }
+            x += size * 8 + 24;
+        }
+        write_sheet(&out, "accept-5-tile-small.png", &s2);
+    }
+
+const Z: u32 = 10;
     const LIGHT: [u8; 4] = [0xf3, 0xf3, 0xf3, 0xff];
     const TASKBAR: [u8; 4] = [0x20, 0x20, 0x20, 0xff];
 
@@ -543,12 +601,16 @@ fn icon_set(args: &[String]) {
     const SIZES: [u32; 7] = [256, 128, 64, 48, 32, 24, 16];
     let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
 
+    // The tiled icon at every size, including 16 and 24.
+    //
+    // Those two used to be the bare flat mark on transparency while everything
+    // 32 and up was the mark on its tile. Windows picks whichever size fits the
+    // surface it is drawing, so the taskbar got the bare wedge while the Start
+    // menu and Explorer got the tile — one app with two icons, which is exactly
+    // what it looked like. The tile survives 16 px (verified by rendering it and
+    // reading the pixels), so there is no reason to have a second treatment.
     for size in SIZES {
-        let markup = if size < 32 {
-            brand::small_mark_svg("#2e8bff")
-        } else {
-            brand::icon_svg()
-        };
+        let markup = brand::icon_svg();
         match cursorforge_lib::build::svg::render(&markup, size)
             .and_then(|b| b.to_png(image::codecs::png::CompressionType::Best))
         {
@@ -579,11 +641,7 @@ fn icon_set(args: &[String]) {
         ("Square310x310Logo.png", 310),
     ];
     for (name, size) in extras {
-        let markup = if size < 32 {
-            brand::small_mark_svg("#2e8bff")
-        } else {
-            brand::icon_svg()
-        };
+        let markup = brand::icon_svg();
         match cursorforge_lib::build::svg::render(&markup, size)
             .and_then(|b| b.to_png(image::codecs::png::CompressionType::Best))
         {
@@ -760,6 +818,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--trace") {
         trace_logo(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--shrink") {
+        shrink_image(&args);
     }
     if args.get(1).map(String::as_str) == Some("--fetch-update") {
         // Downloads whatever the release feed is offering and checks it against

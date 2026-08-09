@@ -1,6 +1,6 @@
 [package]
 name = "cursorforge"
-version = "1.8.3"
+version = "1.9.0"
 description = "Your pointer. Possessed."
 authors = ["feylo"]
 license = "MIT"

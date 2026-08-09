@@ -26,7 +26,11 @@ use std::path::{Path, PathBuf};
 
 /// Extensions we know how to turn into a cursor.
 const CURSOR_FILES: [&str; 2] = ["cur", "ani"];
-const IMAGE_FILES: [&str; 5] = ["png", "jpg", "jpeg", "webp", "bmp"];
+/// Everything the decoder can already read. GIF and APNG become real animated
+/// cursors; the rest become still ones. `ico` is here because a downloaded
+/// "cursor" is very often an icon file wearing the wrong extension.
+const IMAGE_FILES: [&str; 9] =
+    ["png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif"];
 /// Read for metadata only — never executed, never installed.
 const META_FILES: [&str; 2] = ["inf", "txt"];
 

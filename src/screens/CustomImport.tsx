@@ -71,7 +71,15 @@ export function CustomImport() {
     if (!ipc.isDesktop()) return;
     const picked = await open({
       multiple: false,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif"] }],
+      filters: [
+        {
+          name: "Anything with a picture in it",
+          extensions: [
+            "png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif", "tiff",
+            "cur", "ani",
+          ],
+        },
+      ],
     });
     if (typeof picked === "string") void accept(() => ipc.importImage(picked));
   };
@@ -132,7 +140,10 @@ export function CustomImport() {
       </ScreenHeader>
 
       {!image ? (
-        <DropZone busy={busy} onBrowse={() => void browse()} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <DropZone busy={busy} onBrowse={() => void browse()} />
+          <CustomLibrary />
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           <div className="grid grid-cols-2 gap-2">
@@ -353,6 +364,121 @@ function PreviewLadder({ previews }: { previews: Preview[] }) {
                 className="shrink-0"
               />
             ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Everything the user has already made, as a browsable shelf.
+ *
+ * Custom used to be a one-shot builder: make a cursor, apply it, and it
+ * vanished from view even though the files were still on disk. The only way
+ * back to one was to remember it existed. Listing them makes this a library of
+ * the user's own work, which is what the screen was always doing anyway.
+ */
+function CustomLibrary() {
+  const [items, setItems] = useState<ipc.CustomEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const settings = useStore((s) => s.settings);
+  const packs = useStore((s) => s.packs);
+  const refreshActive = useStore((s) => s.refreshActive);
+  const go = useStore((s) => s.go);
+
+  // The same call the builder makes when it finishes, so a saved cursor and a
+  // freshly made one take exactly one code path to the pointer.
+  const apply = async (id: string) => {
+    try {
+      await ipc.applyCustomCursor({
+        cursorId: id,
+        applyMode: settings.applyMode,
+        blendPackId:
+          settings.applyMode === "Blend" ? settings.blendPack || packs[0]?.id || null : null,
+        tint: settings.tint,
+        size: settings.cursorSize ?? 32,
+        outline: settings.outline,
+      });
+      await refreshActive();
+      go("home");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That cursor could not be applied.");
+    }
+  };
+
+  const load = useCallback(() => {
+    if (!ipc.isDesktop()) {
+      setItems([]);
+      return;
+    }
+    ipc
+      .listCustomCursors()
+      .then(setItems)
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not read your custom cursors."));
+  }, []);
+
+  useEffect(load, [load]);
+
+  if (error) {
+    return (
+      <div className="px-3 pb-4">
+        <p className="text-[11px] text-danger">{error}</p>
+      </div>
+    );
+  }
+
+  // Loading and empty are different states and must not look the same.
+  if (items === null) {
+    return (
+      <div className="space-y-2 px-3 pb-4">
+        <div className="h-2 w-1/3 rounded-full shimmer" />
+        <div className="h-16 w-full rounded-sm shimmer" />
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="px-3 pb-4">
+        <p className="text-[11px] text-text-dim">
+          Anything you make is saved here automatically.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 pb-4">
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="display text-[11px] text-text-dim">YOUR CURSORS</span>
+        <span className="mono text-[10px] text-text-dim">{items.length}</span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            title={item.name}
+            onClick={() => void apply(item.id)}
+            className="panel group flex flex-col items-center gap-1.5 rounded-sm border border-border p-2 transition-all duration-150 ease-out hover:-translate-y-px hover:border-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          >
+            <span className="grid h-12 w-12 place-items-center">
+              {item.preview ? (
+                <img src={item.preview} alt="" className="max-h-12 max-w-12" />
+              ) : (
+                // Never an invisible gap: a tile that failed to render must
+                // still be a tile, or the grid silently loses an entry.
+                <span className="mono text-[10px] text-text-dim">?</span>
+              )}
+            </span>
+            <span className="w-full truncate text-center text-[10px] text-text-muted">
+              {item.name}
+            </span>
+            {item.animated && (
+              <span className="display text-[10px] text-accent-hi">ANIM</span>
+            )}
+          </button>
+        ))}
       </div>
     </div>
   );

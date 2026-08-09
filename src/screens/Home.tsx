@@ -4,6 +4,7 @@ import { useStore } from "../store";
 import { Button } from "../components/ui";
 import { Mark } from "../components/Mark";
 import * as ipc from "../lib/ipc";
+import backdrop from "../assets/backdrop.png";
 
 /**
  * The first thing anyone sees, so it earns its space.
@@ -70,12 +71,26 @@ export function Home() {
 
         <p className="mt-3 text-center text-[12px] text-text-muted">Your pointer. Possessed.</p>
 
-        <div className="mt-4 flex max-w-full items-center gap-2">
-          <Pill icon={<Layers size={11} />} label={`${packs.length} CURSORS`} />
-          <Pill
-            label={active.isDefault ? "WINDOWS DEFAULT" : (active.packName ?? "CUSTOM")}
-            tone={active.isDefault ? "dim" : "accent"}
-          />
+        {/* What is actually on the pointer right now, named. "Using X" answers
+            the question people open the app to ask, and it is the only way to
+            tell two similar cursors apart after the fact. */}
+        <div className="mt-5 flex w-full max-w-full flex-col items-center gap-2">
+          <span className="display text-[11px] text-text-dim">
+            {active.isDefault ? "USING" : "USING"}
+          </span>
+          <span
+            title={active.isDefault ? "Windows default" : (active.packName ?? "Custom cursor")}
+            className={`display max-w-full truncate rounded-full border px-4 py-1.5 text-center text-[12px] ${
+              active.isDefault
+                ? "border-border text-text-muted"
+                : "border-accent/50 bg-accent-dim/50 text-accent-hi"
+            }`}
+          >
+            {active.isDefault ? "WINDOWS DEFAULT" : (active.packName ?? "CUSTOM CURSOR")}
+          </span>
+          <span className="mono text-[10px] text-text-dim">
+            {packs.length} cursors available
+          </span>
         </div>
       </div>
 
@@ -124,30 +139,6 @@ export function Home() {
   );
 }
 
-function Pill({
-  icon,
-  label,
-  tone = "dim",
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  tone?: "dim" | "accent";
-}) {
-  return (
-    <span
-      title={label}
-      className={`display inline-flex min-w-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] ${
-        tone === "accent"
-          ? "border-accent/40 bg-accent-dim/50 text-accent-hi"
-          : "border-border text-text-dim"
-      }`}
-    >
-      {icon}
-      <span className="truncate">{label}</span>
-    </span>
-  );
-}
-
 function Tile({
   icon,
   label,
@@ -170,40 +161,42 @@ function Tile({
 }
 
 /**
- * A deep gradient with a fine grain over it. Completely static.
+ * The supplied backdrop, held still.
  *
- * The previous version drifted two blurred gradients on a CSS animation. That
- * looks pleasant for the ten seconds anyone watches it and then composites
- * forever, on a window that sits in the tray all day — which is exactly the kind
- * of cost that does not show up in a screenshot and does show up in a battery.
+ * A single greyscale image — blurred folds of light — tinted toward the app's
+ * ink and darkened at the edges so the controls that sit on top of it keep their
+ * contrast. Nothing here animates: this window lives in the tray all day, and a
+ * moving background would composite forever for the ten seconds anyone looks
+ * at it.
  *
- * The grain is a pre-baked `feTurbulence` tile as a data URI: rasterised once by
- * the browser, then repeated. No canvas, no animation frame, nothing to schedule.
- * It is what stops a large flat gradient from banding on a cheap panel.
+ * The source arrived as a 659 KB screenshot. It is blurred greyscale, so it
+ * survives being halved and reduced to one channel with nothing visible lost —
+ * 126 KB, and it is scaled to fill the window regardless.
  */
 function Backdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <img
+        src={backdrop}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover opacity-[0.55]"
+      />
+      {/* Pushes the greyscale toward the brand blue rather than leaving it
+          neutral, so the backdrop belongs to the app instead of sitting behind
+          it. */}
+      <div
+        className="absolute inset-0 mix-blend-color"
+        style={{ background: "linear-gradient(160deg, #2e8bff 0%, #123a72 100%)" }}
+      />
+      {/* A vignette, so the type and buttons never land on a bright fold. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 50% 0%, #10182b 0%, #0a0e18 45%, var(--color-bg) 100%)",
+            "radial-gradient(120% 85% at 50% 40%, rgba(5,5,7,0.25) 0%, rgba(5,5,7,0.78) 62%, var(--color-bg) 100%)",
         }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
-        style={{ backgroundImage: `url("${GRAIN}")`, backgroundRepeat: "repeat" }}
       />
     </div>
   );
 }
-
-/** One 120px tile of fractal noise, inlined so it costs no request. */
-const GRAIN =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>` +
-      `<filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter>` +
-      `<rect width='120' height='120' filter='url(#g)'/></svg>`,
-  );

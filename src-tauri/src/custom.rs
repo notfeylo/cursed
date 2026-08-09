@@ -189,6 +189,20 @@ pub fn build(
         .map(|(size, data_uri)| Preview { size, data_uri })
         .collect();
 
+    // A manifest beside the files, so a saved cursor can be listed later.
+    //
+    // Without this the directory is a slug and a uuid: the name the user typed
+    // is gone the moment the screen closes, and a saved cursor is only
+    // reachable if they remember making it. Writing it is what turns Custom
+    // from a one-shot builder into a library.
+    let manifest = CustomCursor {
+        id: id.clone(),
+        name: name.chars().take(48).collect(),
+        animated,
+        created: crate::util::iso_now(),
+    };
+    std::fs::write(dir.join("cursor.json"), serde_json::to_string_pretty(&manifest)?)?;
+
     // The staged copy has done its job; hold nothing further.
     if let Ok(mut staged) = staging().lock() {
         staged.remove(token);
@@ -376,4 +390,54 @@ mod tests {
         let count = staging().lock().map(|staged| staged.len()).unwrap_or(0);
         assert!(count <= MAX_STAGED, "staged {count} images");
     }
+}
+
+/// One cursor the user built and kept.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomCursor {
+    pub id: String,
+    pub name: String,
+    pub animated: bool,
+    pub created: String,
+}
+
+/// Every custom cursor still on disk, newest first.
+///
+/// Reads the manifests rather than the directory names: a directory is a slug
+/// and a uuid, and the whole point is to show the name the user gave it.
+pub fn list() -> AppResult<Vec<CustomCursor>> {
+    let root = paths::custom_dir()?;
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return Ok(out);
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let manifest = entry.path().join("cursor.json");
+        let Ok(text) = std::fs::read_to_string(&manifest) else {
+            continue;
+        };
+        if let Ok(cursor) = serde_json::from_str::<CustomCursor>(crate::util::strip_bom(&text)) {
+            out.push(cursor);
+        }
+    }
+    // Newest first: the one just made is the one being looked for.
+    out.sort_by(|a, b| b.created.cmp(&a.created));
+    Ok(out)
+}
+
+/// A tile image for a saved custom cursor, from the PNG kept beside it.
+pub fn thumbnail(id: &str) -> AppResult<String> {
+    let dir = cursor_dir(id)?;
+    let bytes = std::fs::read(dir.join("source.png"))
+        .map_err(|_| AppError::invalid("that cursor's artwork is missing"))?;
+    let decoded = image::load_from_memory(&bytes)
+        .map_err(|_| AppError::invalid("that cursor's artwork could not be read"))?
+        .to_rgba8();
+    let bitmap = crate::build::bitmap::Bitmap::from_rgba(
+        decoded.width(),
+        decoded.height(),
+        decoded.into_raw(),
+    )?;
+    bitmap.resized(64, 64)?.to_png_data_uri()
 }

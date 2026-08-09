@@ -9,5 +9,6 @@ pub mod bitmap;
 pub mod cur_reader;
 pub mod cur_writer;
 pub mod hotspot;
+pub mod matte;
 pub mod pipeline;
 pub mod svg;

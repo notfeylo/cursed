@@ -207,10 +207,27 @@ fn collect_frames(frames: Vec<image::Frame>) -> AppResult<Source> {
     Ok(Source::Animated(out))
 }
 
-/// Trim, square, and pad by one pixel so a contrast outline has room to exist
-/// without being clipped at the canvas edge.
+/// Cut out the background, then trim, square, and pad by one pixel so a contrast
+/// outline has room to exist without being clipped at the canvas edge.
 pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
-    let trimmed = bitmap.trimmed();
+    // The cut-out has to come first, because everything after it depends on
+    // alpha. A JPEG off a search page, or a screenshot, is fully opaque — so
+    // `trimmed()` finds nothing to trim and the whole rectangle, card and
+    // corners included, becomes the cursor. That is the difference between
+    // turning anything into a cursor and dragging a white box around the screen.
+    //
+    // An image that already carries transparency is left exactly as it was; see
+    // `matte` for that rule and for what this deliberately does not attempt.
+    let mut source = bitmap.clone();
+    let report = crate::build::matte::remove_background(&mut source);
+    if report.removed > 0.0 {
+        log::debug!(
+            "cut {:.0}% of the image away as background",
+            report.removed * 100.0
+        );
+    }
+
+    let trimmed = source.trimmed();
     if trimmed.is_empty() {
         return Err(AppError::invalid(
             "the image is completely transparent, so there is nothing to make a cursor from",

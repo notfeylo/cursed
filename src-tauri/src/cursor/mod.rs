@@ -209,13 +209,6 @@ pub fn drifted() -> bool {
     let Some(state) = applied() else {
         return false;
     };
-    let Some(expected) = state.set.get(roles::Role::Arrow) else {
-        return false;
-    };
-    let Ok(current) = scheme::read_role(roles::Role::Arrow) else {
-        return false;
-    };
-
     // The registry stores an unexpanded `%APPDATA%\...` string; compare on the
     // file name, which is stable across expansion and path formatting.
     let file_name = |text: &str| {
@@ -224,10 +217,31 @@ pub fn drifted() -> bool {
             .unwrap_or_default()
             .to_ascii_lowercase()
     };
-    let expected_name = expected
-        .file_name()
-        .map(|n| n.to_string_lossy().to_ascii_lowercase())
-        .unwrap_or_default();
 
-    file_name(&current) != expected_name
+    // Every role, not only the arrow.
+    //
+    // Watching the arrow alone missed a whole class of reset: something restores
+    // the busy and working pointers to the Windows defaults and leaves the arrow
+    // untouched, so the watchdog sees nothing wrong. The user then gets the stock
+    // spinner every time the machine is busy — which is precisely when the
+    // pointer is most conspicuous.
+    //
+    // It is a handful of registry string reads every few seconds, which is not a
+    // cost worth trading correctness for.
+    for (role, expected) in &state.set.files {
+        let Ok(current) = scheme::read_role(*role) else {
+            continue;
+        };
+        let expected_name = expected
+            .file_name()
+            .map(|n| n.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if expected_name.is_empty() {
+            continue;
+        }
+        if file_name(&current) != expected_name {
+            return true;
+        }
+    }
+    false
 }

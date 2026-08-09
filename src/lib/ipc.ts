@@ -101,6 +101,18 @@ export const previewCustom = (token: string, outline: boolean) =>
 export const buildCustomCursor = (args: BuildArgs) =>
   call<BuiltCursor>("build_custom_cursor", { args });
 
+export interface CustomEntry {
+  id: string;
+  name: string;
+  animated: boolean;
+  created: string;
+  /** Empty when the artwork could not be read. */
+  preview: string;
+}
+
+/** Every custom cursor the user has kept. */
+export const listCustomCursors = () => call<CustomEntry[]>("list_custom_cursors");
+
 export const deleteCustomCursor = (id: string) =>
   call<void>("delete_custom_cursor", { id });
 

@@ -310,11 +310,48 @@ pub fn build_imported(pack_id: &str, base: &str, spec: &RenderSpec) -> AppResult
     let files = crate::import::role_files(&pack)?;
 
     let mut set = build_roles(base, &ALL_ROLES, spec)?;
+
+    // Roles the import does not define, but which are still *the pointer*, take
+    // the import's own arrow rather than the generated base pack's artwork.
+    //
+    // Most downloaded packs define an arrow and a hand and nothing else. Filling
+    // the other fifteen from an unrelated pack meant that the moment anything on
+    // the machine started working — a copy, a download, an app launching — the
+    // pointer turned into a completely different design. From the outside that
+    // reads as the cursor having reverted to the system default, because the one
+    // shape the user recognises has gone.
+    //
+    // The directional and text roles are deliberately left alone. A resize
+    // handle that looks like an arrow says nothing about which way to drag, and
+    // an I-beam that is an arrow hides where text will land. Those keep the base
+    // pack's purpose-built shapes.
+    if let Some(arrow) = files.get(&Role::Arrow) {
+        for role in POINTER_LIKE_ROLES {
+            if !files.contains_key(&role) {
+                set.insert(role, arrow.clone());
+            }
+        }
+    }
+
     for (role, path) in files {
         set.insert(role, path);
     }
     Ok(set)
 }
+
+/// Roles that are the ordinary pointer wearing a different hat.
+///
+/// These read as "your cursor, busy" or "your cursor, over something odd"
+/// rather than as a distinct tool, so an imported pack's own arrow serves them
+/// better than a stranger's artwork does.
+const POINTER_LIKE_ROLES: [Role; 6] = [
+    Role::AppStarting,
+    Role::Wait,
+    Role::Help,
+    Role::No,
+    Role::UpArrow,
+    Role::Person,
+];
 
 /// Builds a complete 17-role scheme.
 pub fn build_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {

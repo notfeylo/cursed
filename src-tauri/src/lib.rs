@@ -133,6 +133,7 @@ pub fn run() {
             commands::build_custom_cursor,
             commands::apply_custom_cursor,
             commands::delete_custom_cursor,
+            commands::list_custom_cursors,
             commands::get_storage_dir,
             commands::open_storage_dir,
             commands::get_cache_size,

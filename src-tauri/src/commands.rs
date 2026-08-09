@@ -370,6 +370,40 @@ pub fn apply_custom_cursor(app: AppHandle, args: ApplyCustomArgs) -> AppResult<(
     Ok(())
 }
 
+/// Every custom cursor the user has kept, with a tile image for each.
+///
+/// Custom used to be a one-shot builder: make a cursor, apply it, and it was
+/// gone from view even though the files were still on disk. Listing them turns
+/// that screen into a library of the user's own work, which is what it always
+/// should have been.
+#[tauri::command]
+pub fn list_custom_cursors() -> AppResult<Vec<CustomEntry>> {
+    Ok(custom::list()?
+        .into_iter()
+        .map(|c| {
+            let preview = custom::thumbnail(&c.id).unwrap_or_default();
+            CustomEntry {
+                id: c.id,
+                name: c.name,
+                animated: c.animated,
+                created: c.created,
+                preview,
+            }
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomEntry {
+    pub id: String,
+    pub name: String,
+    pub animated: bool,
+    pub created: String,
+    /// Empty when the artwork could not be read; the UI shows a placeholder.
+    pub preview: String,
+}
+
 #[tauri::command]
 pub fn delete_custom_cursor(id: String) -> AppResult<()> {
     custom::remove(&id)
