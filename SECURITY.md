@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Open a [private security advisory](https://github.com/notfeylo/cursorforge/security/advisories/new).
+Open a [private security advisory](https://github.com/notfeylo/cursed/security/advisories/new).
 Please do not open a public issue for a vulnerability. Expect an
 acknowledgement within a week.
 

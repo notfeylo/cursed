@@ -58,9 +58,9 @@ here; it is a property of the design.
 
 Download and double-click:
 
-**[Cursed-Setup.exe](https://github.com/notfeylo/cursorforge/releases/latest/download/Cursed-Setup.exe)**
-· [all releases](https://github.com/notfeylo/cursorforge/releases)
-· [checksums](https://github.com/notfeylo/cursorforge/releases/latest/download/SHA256SUMS.txt)
+**[Cursed-Setup.exe](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe)**
+· [all releases](https://github.com/notfeylo/cursed/releases)
+· [checksums](https://github.com/notfeylo/cursed/releases/latest/download/SHA256SUMS.txt)
 
 That link always resolves to the newest release. It is deliberately not a
 version-specific filename — the previous wording named a build five versions

@@ -169,7 +169,7 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
             variant="ghost"
             onClick={() =>
               void ipc
-                .openExternal("https://github.com/notfeylo/cursorforge/releases/latest")
+                .openExternal("https://github.com/notfeylo/cursed/releases/latest")
                 .catch(() => undefined)
             }
           >

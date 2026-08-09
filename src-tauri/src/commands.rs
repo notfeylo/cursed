@@ -695,9 +695,9 @@ pub fn delete_all_imported() -> AppResult<()> {
 #[tauri::command]
 pub fn open_external(url: String) -> AppResult<()> {
     const ALLOWED: [&str; 3] = [
-        "https://github.com/notfeylo/cursorforge",
-        "https://github.com/notfeylo/cursorforge/issues",
-        "https://github.com/notfeylo/cursorforge/releases",
+        "https://github.com/notfeylo/cursed",
+        "https://github.com/notfeylo/cursed/issues",
+        "https://github.com/notfeylo/cursed/releases",
     ];
     if !ALLOWED.contains(&url.as_str()) {
         return Err(AppError::invalid("that link is not one Cursed opens"));
@@ -772,7 +772,7 @@ mod tests {
     fn external_links_are_allow_listed() {
         assert!(open_external("https://example.com/".into()).is_err());
         assert!(open_external("file:///C:/Windows".into()).is_err());
-        assert!(open_external("https://github.com/notfeylo/cursorforge.evil.com".into()).is_err());
+        assert!(open_external("https://github.com/notfeylo/cursed.evil.com".into()).is_err());
     }
 
     #[test]

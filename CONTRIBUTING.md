@@ -80,7 +80,7 @@ the README). A screenshot of Control Panel → Mouse → Pointers is often the
 fastest way to show what went wrong.
 
 Security issues go through a
-[private advisory](https://github.com/notfeylo/cursorforge/security/advisories/new),
+[private advisory](https://github.com/notfeylo/cursed/security/advisories/new),
 not a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Adding or replacing a font

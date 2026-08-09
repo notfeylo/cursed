@@ -109,7 +109,7 @@ export function About() {
             <Button
               variant="ghost"
               onClick={() =>
-                void ipc.openExternal("https://github.com/notfeylo/cursorforge").catch(() => undefined)
+                void ipc.openExternal("https://github.com/notfeylo/cursed").catch(() => undefined)
               }
             >
               GITHUB
@@ -118,7 +118,7 @@ export function About() {
               variant="ghost"
               onClick={() =>
                 void ipc
-                  .openExternal("https://github.com/notfeylo/cursorforge/issues")
+                  .openExternal("https://github.com/notfeylo/cursed/issues")
                   .catch(() => undefined)
               }
             >
@@ -217,7 +217,7 @@ function UpdateStatusLine() {
           variant="ghost"
           onClick={() =>
             void ipc
-              .openExternal("https://github.com/notfeylo/cursorforge/releases/latest")
+              .openExternal("https://github.com/notfeylo/cursed/releases/latest")
               .catch(() => undefined)
           }
         >

@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const page = join(here, "..", "index.html");
-const API = "https://api.github.com/repos/notfeylo/cursorforge/releases/latest";
+const API = "https://api.github.com/repos/notfeylo/cursed/releases/latest";
 
 /** Replaces the text inside `<tag id="…">…</tag>`, leaving attributes alone. */
 function setById(html, id, value) {

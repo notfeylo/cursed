@@ -27,9 +27,9 @@ use windows::Win32::Networking::WinHttp::{
 };
 
 const API_HOST: &str = "api.github.com";
-const RELEASE_PATH: &str = "/repos/notfeylo/cursorforge/releases/latest";
+const RELEASE_PATH: &str = "/repos/notfeylo/cursed/releases/latest";
 const DOWNLOAD_HOST: &str = "github.com";
-pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursorforge/releases";
+pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursed/releases";
 
 /// GitHub requires a User-Agent and rejects requests without one.
 const AGENT: &str = "Cursed-UpdateCheck";
@@ -313,7 +313,7 @@ pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
     }
     let tag = sanitise_tag(tag)?;
 
-    let path = format!("/notfeylo/cursorforge/releases/download/v{tag}/{asset}");
+    let path = format!("/notfeylo/cursed/releases/download/v{tag}/{asset}");
     let bytes = get(DOWNLOAD_HOST, &path, MAX_DOWNLOAD, true)?;
     if bytes.len() < 512 * 1024 {
         return Err(AppError::msg("the download looks truncated"));
@@ -350,7 +350,7 @@ fn sha256_file(path: &Path) -> AppResult<String> {
 /// Fetches the release's own `SHA256SUMS.txt` and returns the hash for `asset`.
 fn published_hash(tag: &str, asset: &str) -> AppResult<String> {
     let tag = sanitise_tag(tag)?;
-    let path = format!("/notfeylo/cursorforge/releases/download/v{tag}/SHA256SUMS.txt");
+    let path = format!("/notfeylo/cursed/releases/download/v{tag}/SHA256SUMS.txt");
     let bytes = get(DOWNLOAD_HOST, &path, MAX_SUMS, true)?;
     let text = String::from_utf8(bytes)
         .map_err(|_| AppError::msg("the checksum file is not readable"))?;
