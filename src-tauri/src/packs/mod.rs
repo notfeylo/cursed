@@ -5,4 +5,5 @@ pub mod art;
 pub mod brand;
 pub mod catalog;
 pub mod cfpack;
+pub mod logo;
 pub mod styles;

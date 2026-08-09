@@ -133,6 +133,105 @@ fn list_packs() -> ! {
     }
 }
 
+/// The sizes that decide a mark. 16 is the one that kills directions.
+const SHEET_SIZES: [u32; 5] = [256, 128, 48, 32, 16];
+
+/// Contact sheets for the candidate marks, on dark and on light.
+///
+/// Every size is rasterised **at its own pixel size** and then blitted, rather
+/// than drawing one big sheet and scaling it down. Those are different
+/// operations: scaling a 256 px render to 16 px shows what the shape looks like,
+/// not what the rasteriser will actually do with it in a tray icon, which is the
+/// only question that matters here.
+fn logo_sheets(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    use cursorforge_lib::packs::logo;
+
+    let out = PathBuf::from(args.get(2).cloned().unwrap_or_else(|| "logo-sheets".into()));
+    if let Err(e) = std::fs::create_dir_all(&out) {
+        eprintln!("could not create {}: {e}", out.display());
+        std::process::exit(1);
+    }
+
+    // Panels are the app's own background and a plain light one, because a
+    // light Windows taskbar is the case everyone forgets to check.
+    let panels: [([u8; 4], [u8; 4], &str); 2] = [
+        ([0x05, 0x05, 0x07, 0xff], [0xed, 0xf1, 0xf7, 0xff], "dark"),
+        ([0xf4, 0xf5, 0xf7, 0xff], [0x0b, 0x0d, 0x12, 0xff], "light"),
+    ];
+
+    const PAD: u32 = 24;
+    const GAP: u32 = 24;
+    let width = PAD * 2 + 256 + GAP + 128;
+    let panel_h = PAD * 2 + 256;
+    let height = panel_h * 2;
+
+    for direction in logo::DIRECTIONS {
+        let mut sheet = Bitmap::new(width, height);
+
+        for (index, (background, ink, _label)) in panels.iter().enumerate() {
+            let top = index as u32 * panel_h;
+            for y in top..top + panel_h {
+                for x in 0..width {
+                    sheet.set_pixel(x, y, *background);
+                }
+            }
+
+            let colour = format!("#{:02x}{:02x}{:02x}", ink[0], ink[1], ink[2]);
+            let markup = logo::svg(direction, &colour);
+
+            // 256 on the left; the smaller sizes stack down the right column,
+            // baseline-aligned so they can be compared against each other.
+            let mut cursor_y = top + PAD;
+            for size in SHEET_SIZES {
+                let Ok(mark) = cursorforge_lib::build::svg::render(&markup, size) else {
+                    eprintln!("{direction}: could not render at {size}px");
+                    continue;
+                };
+                let (ox, oy) = if size == 256 {
+                    (PAD, top + PAD)
+                } else {
+                    let x = PAD + 256 + GAP;
+                    let y = cursor_y;
+                    cursor_y += size + 16;
+                    (x, y)
+                };
+                blit(&mut sheet, &mark, ox, oy);
+            }
+        }
+
+        let path = out.join(format!("{direction}.png"));
+        match sheet.to_png(image::codecs::png::CompressionType::Default) {
+            Ok(bytes) => match std::fs::write(&path, &bytes) {
+                Ok(()) => println!("{}  ({} bytes)", path.display(), bytes.len()),
+                Err(e) => eprintln!("could not write {}: {e}", path.display()),
+            },
+            Err(e) => eprintln!("{direction}: {e}"),
+        }
+    }
+    std::process::exit(0);
+}
+
+/// Straight source-over composite of `over` onto `sheet` at (ox, oy).
+fn blit(sheet: &mut cursorforge_lib::build::bitmap::Bitmap, over: &cursorforge_lib::build::bitmap::Bitmap, ox: u32, oy: u32) {
+    for y in 0..over.height {
+        for x in 0..over.width {
+            let src = over.pixel(x, y);
+            let a = src[3] as u32;
+            if a == 0 {
+                continue;
+            }
+            let (tx, ty) = (ox + x, oy + y);
+            if tx >= sheet.width || ty >= sheet.height {
+                continue;
+            }
+            let dst = sheet.pixel(tx, ty);
+            let mix = |s: u8, d: u8| -> u8 { ((s as u32 * a + d as u32 * (255 - a)) / 255) as u8 };
+            sheet.set_pixel(tx, ty, [mix(src[0], dst[0]), mix(src[1], dst[1]), mix(src[2], dst[2]), 255]);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--icon") {
@@ -146,6 +245,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--logo-sheet") {
+        logo_sheets(&args);
     }
     if args.get(1).map(String::as_str) == Some("--fetch-update") {
         // Downloads whatever the release feed is offering and checks it against
