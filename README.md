@@ -38,12 +38,12 @@ here; it is a property of the design.
 
 ## What it does
 
-- **216 full schemes**, each defining **all 17 pointer roles** — not just the
+- **205 full schemes**, each defining **all 17 pointer roles** — not just the
   arrow, so you never end up with a neon pointer and a stock hourglass.
 - **Every size, sharp.** Catalog cursors are rendered from vectors at 32, 48,
   64, 96, 128, 160, 192 and 256 px into one multi-resolution `.cur`.
 - **Any colour.** Artwork ships as greyscale masters and is tinted at apply
-  time, so 216 packs × any colour costs the installer nothing.
+  time, so 205 packs × any colour costs the installer nothing.
 - **Drop a PNG.** Hotspot picker with alpha-centroid and tip-detect, a 1:1
   preview of all eight sizes, and a real cursor in under three seconds. GIF and
   APNG become real animated `.ani` files.
