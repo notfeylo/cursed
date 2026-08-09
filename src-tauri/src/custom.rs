@@ -64,16 +64,20 @@ pub struct Preview {
 
 /// Decodes, trims, squares and stages an image for the hotspot picker.
 pub fn stage(bytes: Vec<u8>) -> AppResult<ImportedImage> {
+    stage_with(bytes, pipeline::Cut::Auto)
+}
+
+pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage> {
     let source = pipeline::decode(bytes)?;
 
     // Normalise every frame the same way, or an animation's frames drift
     // relative to each other and the hotspot means something different per frame.
     let normalised = match source {
-        Source::Static(bitmap) => Source::Static(pipeline::prepare_master(&bitmap)?),
+        Source::Static(bitmap) => Source::Static(pipeline::prepare_master_with(&bitmap, cut)?),
         // Animations go through the same background removal as stills. They
         // used to skip it entirely, so a GIF with a white card behind it became
         // a cursor with a white card behind it.
-        Source::Animated(frames) => Source::Animated(pipeline::prepare_animation(&frames)?),
+        Source::Animated(frames) => Source::Animated(pipeline::prepare_animation_with(&frames, cut)?),
     };
 
     let first = normalised.first()?.clone();

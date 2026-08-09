@@ -123,6 +123,7 @@ pub fn all() -> Vec<PackDef> {
     use Fill::*;
     use Form::*;
     use Reticle::*;
+    use Treatment::*;
 
     vec![
         // ── PRECISION ─────────────────────────────────────────
@@ -379,6 +380,101 @@ pub fn all() -> Vec<PackDef> {
         pack("frm-needle-ghost", "NEEDLE GHOST", Minimal, Builder::new().form(Needle).opacity(0.6).reticle(Dot).done(), "#EDF1F7"),
         pack("frm-fang-glow", "FANG GLOW", Neon, Builder::new().form(Fang).glow(0.9).reticle(DotRing).done(), "#FF3DD8"),
         pack("frm-beam-thin", "BEAM THIN", Precision, Builder::new().form(Beam).fill(Hairline).reticle(GapCross).done(), "#EDF1F7"),
+
+        // ── SURFACES ─────────────────────────────────────────
+        // The renderer has always supported nine surface treatments — a lit
+        // rim, flat facets, an inset core, a cast shadow, scanlines, a halo,
+        // a motion trail, a broken outline and a tonal sweep — and not one
+        // shipped pack used any of them. Every pack was the default flat
+        // surface, which is most of why the catalog read as one idea at
+        // twenty angles. These change how a cursor is *made*, not just its
+        // outline, so they read as different objects rather than variations.
+        pack("t-rim-blade", "RIM BLADE", Gaming, Builder::new().form(Blade).treat(Rim).reticle(ThinCross).done(), "#33D6A6"),
+        pack("t-rim-shard", "RIM SHARD", Gaming, Builder::new().form(Shard).treat(Rim).reticle(GapCross).done(), "#2E8BFF"),
+        pack("t-rim-prism", "RIM PRISM", Precision, Builder::new().form(Prism).treat(Rim).reticle(Diamond).done(), "#EDF1F7"),
+        pack("t-rim-wedge", "RIM WEDGE", Gaming, Builder::new().form(Wedge).treat(Rim).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-rim-fang", "RIM FANG", Gaming, Builder::new().form(Fang).treat(Rim).reticle(Notch).done(), "#FF3DD8"),
+        pack("t-rim-kite", "RIM KITE", Precision, Builder::new().form(Kite).treat(Rim).reticle(TCross).done(), "#8AE9FF"),
+        pack("t-rim-nib", "RIM NIB", Minimal, Builder::new().form(Nib).treat(Rim).reticle(MicroDot).done(), "#EDF1F7"),
+        pack("t-rim-sigil", "RIM SIGIL", Fun, Builder::new().form(Sigil).treat(Rim).reticle(Circle).done(), "#B48CFF"),
+        pack("t-rim-stack", "RIM STACK", Retro, Builder::new().form(Stack).treat(Rim).reticle(Square).done(), "#FFC66B"),
+        pack("t-rim-split", "RIM SPLIT", Precision, Builder::new().form(Split).treat(Rim).reticle(CornerDot).done(), "#EDF1F7"),
+        pack("t-rim-crescent", "RIM CRESCENT", Neon, Builder::new().form(Crescent).treat(Rim).reticle(DotRing).done(), "#8AE9FF"),
+        pack("t-rim-bolt", "RIM BOLT", Neon, Builder::new().form(Bolt).treat(Rim).reticle(TripleTick).done(), "#FFE45C"),
+        pack("t-facet-triangle", "FACET TRIANGLE", Minimal, Builder::new().form(Triangle).treat(Facet).reticle(Dot).done(), "#EDF1F7"),
+        pack("t-facet-prism", "FACET PRISM", Precision, Builder::new().form(Prism).treat(Facet).reticle(Plus).done(), "#8AE9FF"),
+        pack("t-facet-shard", "FACET SHARD", Gaming, Builder::new().form(Shard).treat(Facet).reticle(Diamond).done(), "#33D6A6"),
+        pack("t-facet-wedge", "FACET WEDGE", Retro, Builder::new().form(Wedge).treat(Facet).reticle(Square).done(), "#FFC66B"),
+        pack("t-facet-crescent", "FACET CRESCENT", Fun, Builder::new().form(Crescent).treat(Facet).reticle(Circle).done(), "#FF9ECF"),
+        pack("t-facet-stack", "FACET STACK", Retro, Builder::new().form(Stack).treat(Facet).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-facet-kite", "FACET KITE", Minimal, Builder::new().form(Kite).treat(Facet).reticle(ChevronPair).done(), "#A8B2C4"),
+        pack("t-facet-sigil", "FACET SIGIL", Fun, Builder::new().form(Sigil).treat(Facet).reticle(CircleCross).done(), "#B48CFF"),
+        pack("t-facet-blade", "FACET BLADE", Gaming, Builder::new().form(Blade).treat(Facet).reticle(Notch).done(), "#2E8BFF"),
+        pack("t-facet-nib", "FACET NIB", Precision, Builder::new().form(Nib).treat(Facet).reticle(ThinCross).done(), "#EDF1F7"),
+        pack("t-inlay-round", "INLAY ROUND", Minimal, Builder::new().form(Round).treat(Inlay).reticle(Dot).done(), "#EDF1F7"),
+        pack("t-inlay-sigil", "INLAY SIGIL", Fun, Builder::new().form(Sigil).treat(Inlay).reticle(DotRing).done(), "#B48CFF"),
+        pack("t-inlay-classic", "INLAY CLASSIC", Minimal, Builder::new().form(Classic).treat(Inlay).reticle(MicroDot).done(), "#A8B2C4"),
+        pack("t-inlay-crescent", "INLAY CRESCENT", Fun, Builder::new().form(Crescent).treat(Inlay).reticle(Circle).done(), "#FF9ECF"),
+        pack("t-inlay-wedge", "INLAY WEDGE", Retro, Builder::new().form(Wedge).treat(Inlay).reticle(Bracket).done(), "#FFC66B"),
+        pack("t-inlay-prism", "INLAY PRISM", Neon, Builder::new().form(Prism).treat(Inlay).reticle(Diamond).done(), "#8AE9FF"),
+        pack("t-inlay-stack", "INLAY STACK", Retro, Builder::new().form(Stack).treat(Inlay).reticle(Circle).done(), "#FF7A3D"),
+        pack("t-inlay-kite", "INLAY KITE", Precision, Builder::new().form(Kite).treat(Inlay).reticle(TCross).done(), "#EDF1F7"),
+        pack("t-inlay-shard", "INLAY SHARD", Gaming, Builder::new().form(Shard).treat(Inlay).reticle(GapCross).done(), "#33D6A6"),
+        pack("t-inlay-nib", "INLAY NIB", Minimal, Builder::new().form(Nib).treat(Inlay).reticle(Notch).done(), "#EDF1F7"),
+        pack("t-depth-classic", "DROP CLASSIC", Minimal, Builder::new().form(Classic).treat(Depth).reticle(Dot).done(), "#EDF1F7"),
+        pack("t-depth-triangle", "DROP TRIANGLE", Precision, Builder::new().form(Triangle).treat(Depth).reticle(Plus).done(), "#EDF1F7"),
+        pack("t-depth-round", "DROP ROUND", Minimal, Builder::new().form(Round).treat(Depth).reticle(Circle).done(), "#A8B2C4"),
+        pack("t-depth-wedge", "DROP WEDGE", Gaming, Builder::new().form(Wedge).treat(Depth).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-depth-pixel", "DROP PIXEL", Retro, Builder::new().form(Pixel).treat(Depth).reticle(Square).done(), "#FFC66B"),
+        pack("t-depth-blade", "DROP BLADE", Gaming, Builder::new().form(Blade).treat(Depth).reticle(ThinCross).done(), "#33D6A6"),
+        pack("t-depth-kite", "DROP KITE", Precision, Builder::new().form(Kite).treat(Depth).reticle(ChevronPair).done(), "#8AE9FF"),
+        pack("t-depth-stack", "DROP STACK", Retro, Builder::new().form(Stack).treat(Depth).reticle(CornerDot).done(), "#FF9ECF"),
+        pack("t-depth-fang", "DROP FANG", Gaming, Builder::new().form(Fang).treat(Depth).reticle(Notch).done(), "#FF3DD8"),
+        pack("t-depth-sigil", "DROP SIGIL", Fun, Builder::new().form(Sigil).treat(Depth).reticle(CircleCross).done(), "#B48CFF"),
+        pack("t-scan-pixel", "SCAN PIXEL", Retro, Builder::new().form(Pixel).treat(Scan).reticle(Square).done(), "#33D6A6"),
+        pack("t-scan-classic", "SCAN CLASSIC", Retro, Builder::new().form(Classic).treat(Scan).reticle(Plus).done(), "#FFC66B"),
+        pack("t-scan-wedge", "SCAN WEDGE", Retro, Builder::new().form(Wedge).treat(Scan).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-scan-blade", "SCAN BLADE", Neon, Builder::new().form(Blade).treat(Scan).reticle(GapCross).done(), "#8AE9FF"),
+        pack("t-scan-beam", "SCAN BEAM", Neon, Builder::new().form(Beam).treat(Scan).reticle(TripleTick).done(), "#FFE45C"),
+        pack("t-scan-prism", "SCAN PRISM", Neon, Builder::new().form(Prism).treat(Scan).reticle(Diamond).done(), "#FF3DD8"),
+        pack("t-scan-stack", "SCAN STACK", Retro, Builder::new().form(Stack).treat(Scan).reticle(CornerDot).done(), "#B48CFF"),
+        pack("t-scan-shard", "SCAN SHARD", Neon, Builder::new().form(Shard).treat(Scan).reticle(GapCross).done(), "#2E8BFF"),
+        pack("t-halo-round", "HALO ROUND", Neon, Builder::new().form(Round).treat(Halo).reticle(DotRing).done(), "#8AE9FF"),
+        pack("t-halo-crescent", "HALO CRESCENT", Neon, Builder::new().form(Crescent).treat(Halo).reticle(Circle).done(), "#FF9ECF"),
+        pack("t-halo-sigil", "HALO SIGIL", Neon, Builder::new().form(Sigil).treat(Halo).reticle(CircleCross).done(), "#B48CFF"),
+        pack("t-halo-needle", "HALO NEEDLE", Neon, Builder::new().form(Needle).treat(Halo).reticle(MicroDot).done(), "#FFE45C"),
+        pack("t-halo-classic", "HALO CLASSIC", Neon, Builder::new().form(Classic).treat(Halo).reticle(Dot).done(), "#2E8BFF"),
+        pack("t-halo-prism", "HALO PRISM", Neon, Builder::new().form(Prism).treat(Halo).reticle(Diamond).done(), "#FF3DD8"),
+        pack("t-halo-bolt", "HALO BOLT", Neon, Builder::new().form(Bolt).treat(Halo).reticle(TripleTick).done(), "#33D6A6"),
+        pack("t-halo-beam", "HALO BEAM", Neon, Builder::new().form(Beam).treat(Halo).reticle(GapCross).done(), "#8AE9FF"),
+        pack("t-trail-blade", "TRAIL BLADE", Gaming, Builder::new().form(Blade).treat(Trail).reticle(ThinCross).done(), "#33D6A6"),
+        pack("t-trail-needle", "TRAIL NEEDLE", Gaming, Builder::new().form(Needle).treat(Trail).reticle(Dot).done(), "#2E8BFF"),
+        pack("t-trail-bolt", "TRAIL BOLT", Gaming, Builder::new().form(Bolt).treat(Trail).reticle(Notch).done(), "#FFE45C"),
+        pack("t-trail-shard", "TRAIL SHARD", Gaming, Builder::new().form(Shard).treat(Trail).reticle(GapCross).done(), "#FF3DD8"),
+        pack("t-trail-fang", "TRAIL FANG", Gaming, Builder::new().form(Fang).treat(Trail).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-trail-beam", "TRAIL BEAM", Neon, Builder::new().form(Beam).treat(Trail).reticle(TripleTick).done(), "#8AE9FF"),
+        pack("t-trail-kite", "TRAIL KITE", Gaming, Builder::new().form(Kite).treat(Trail).reticle(ChevronPair).done(), "#B48CFF"),
+        pack("t-trail-slim", "TRAIL SLIM", Gaming, Builder::new().form(Slim).treat(Trail).reticle(MicroDot).done(), "#EDF1F7"),
+        pack("t-dash-chevron", "DASH CHEVRON", Precision, Builder::new().form(Chevron).treat(Dashed).reticle(Plus).done(), "#EDF1F7"),
+        pack("t-dash-triangle", "DASH TRIANGLE", Precision, Builder::new().form(Triangle).treat(Dashed).reticle(ThinCross).done(), "#8AE9FF"),
+        pack("t-dash-classic", "DASH CLASSIC", Minimal, Builder::new().form(Classic).treat(Dashed).reticle(Square).done(), "#A8B2C4"),
+        pack("t-dash-round", "DASH ROUND", Minimal, Builder::new().form(Round).treat(Dashed).reticle(Circle).done(), "#EDF1F7"),
+        pack("t-dash-prism", "DASH PRISM", Precision, Builder::new().form(Prism).treat(Dashed).reticle(Diamond).done(), "#EDF1F7"),
+        pack("t-dash-kite", "DASH KITE", Precision, Builder::new().form(Kite).treat(Dashed).reticle(CornerDot).done(), "#8AE9FF"),
+        pack("t-dash-split", "DASH SPLIT", Precision, Builder::new().form(Split).treat(Dashed).reticle(GapCross).done(), "#EDF1F7"),
+        pack("t-dash-nib", "DASH NIB", Minimal, Builder::new().form(Nib).treat(Dashed).reticle(MicroDot).done(), "#A8B2C4"),
+        pack("t-grad-classic", "FADE CLASSIC", Minimal, Builder::new().form(Classic).treat(Gradient).reticle(Dot).done(), "#2E8BFF"),
+        pack("t-grad-blade", "FADE BLADE", Gaming, Builder::new().form(Blade).treat(Gradient).reticle(ThinCross).done(), "#33D6A6"),
+        pack("t-grad-round", "FADE ROUND", Minimal, Builder::new().form(Round).treat(Gradient).reticle(Circle).done(), "#8AE9FF"),
+        pack("t-grad-prism", "FADE PRISM", Neon, Builder::new().form(Prism).treat(Gradient).reticle(CircleCross).done(), "#FF3DD8"),
+        pack("t-grad-wedge", "FADE WEDGE", Retro, Builder::new().form(Wedge).treat(Gradient).reticle(Bracket).done(), "#FF7A3D"),
+        pack("t-grad-crescent", "FADE CRESCENT", Fun, Builder::new().form(Crescent).treat(Gradient).reticle(DotRing).done(), "#FF9ECF"),
+        pack("t-grad-sigil", "FADE SIGIL", Fun, Builder::new().form(Sigil).treat(Gradient).reticle(CircleCross).done(), "#B48CFF"),
+        pack("t-grad-stack", "FADE STACK", Retro, Builder::new().form(Stack).treat(Gradient).reticle(Square).done(), "#FFC66B"),
+        pack("t-grad-shard", "FADE SHARD", Gaming, Builder::new().form(Shard).treat(Gradient).reticle(Notch).done(), "#2E8BFF"),
+        pack("t-grad-kite", "FADE KITE", Precision, Builder::new().form(Kite).treat(Gradient).reticle(TCross).done(), "#EDF1F7"),
+        pack("t-grad-nib", "FADE NIB", Minimal, Builder::new().form(Nib).treat(Gradient).reticle(MicroDot).done(), "#EDF1F7"),
+        pack("t-grad-fang", "FADE FANG", Gaming, Builder::new().form(Fang).treat(Gradient).reticle(GapCross).done(), "#FF3DD8"),
     ]
 }
 
@@ -398,7 +494,7 @@ mod tests {
     fn the_catalog_meets_or_beats_the_target() {
         let count = all().len();
         assert!(count >= 64, "catalog shrank to {count}; the v1 floor is 64");
-        assert_eq!(count, 205, "update this when packs are added deliberately");
+        assert_eq!(count, 291, "update this when packs are added deliberately");
     }
 
     /// Colour is a setting, not a design.

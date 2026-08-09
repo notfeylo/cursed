@@ -83,9 +83,20 @@ export const importCfpack = (src: string) => call<Preset>("import_cfpack", { src
 
 /* ── custom import ─────────────────────────────────────────── */
 
-export const importImage = (path: string) => call<ImportedImage>("import_image", { path });
-export const importImageBytes = (bytes: number[]) =>
-  call<ImportedImage>("import_image_bytes", { bytes });
+/**
+ * What to do about the background of an imported image.
+ *
+ * `auto` cuts it out unless the image already carries transparency — the right
+ * default, because re-cutting art somebody already cut loses a soft edge.
+ * `force` cuts regardless, for a PNG that has an alpha channel and a white card
+ * behind it anyway. `keep` leaves it exactly as it arrived.
+ */
+export type Cut = "auto" | "force" | "keep";
+
+export const importImage = (path: string, cut: Cut = "auto") =>
+  call<ImportedImage>("import_image", { path, cut });
+export const importImageBytes = (bytes: number[], cut: Cut = "auto") =>
+  call<ImportedImage>("import_image_bytes", { bytes, cut });
 
 export interface BuildArgs {
   token: string;

@@ -209,7 +209,25 @@ fn collect_frames(frames: Vec<image::Frame>) -> AppResult<Source> {
 
 /// Cut out the background, then trim, square, and pad by one pixel so a contrast
 /// outline has room to exist without being clipped at the canvas edge.
+/// What to do about the background of a user's image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Cut {
+    /// Cut it out, unless the image already carries transparency.
+    #[default]
+    Auto,
+    /// Cut it out regardless. For art that has an alpha channel and a
+    /// background anyway.
+    Force,
+    /// Leave the image exactly as it arrived.
+    Keep,
+}
+
 pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
+    prepare_master_with(bitmap, Cut::Auto)
+}
+
+pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
     // The cut-out has to come first, because everything after it depends on
     // alpha. A JPEG off a search page, or a screenshot, is fully opaque — so
     // `trimmed()` finds nothing to trim and the whole rectangle, card and
@@ -219,7 +237,11 @@ pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
     // An image that already carries transparency is left exactly as it was; see
     // `matte` for that rule and for what this deliberately does not attempt.
     let mut source = bitmap.clone();
-    let report = crate::build::matte::remove_background(&mut source);
+    let report = match cut {
+        Cut::Auto => crate::build::matte::remove_background(&mut source),
+        Cut::Force => crate::build::matte::remove_background_forced(&mut source),
+        Cut::Keep => crate::build::matte::MatteReport { removed: 0.0, already_had_alpha: false },
+    };
     if report.removed > 0.0 {
         log::debug!(
             "cut {:.0}% of the image away as background",
@@ -299,6 +321,13 @@ impl Transform {
 /// that same rectangle. Frames stay registered with each other and the hotspot
 /// keeps its meaning.
 pub fn prepare_animation(frames: &[(Bitmap, u32)]) -> AppResult<Vec<(Bitmap, u32)>> {
+    prepare_animation_with(frames, Cut::Auto)
+}
+
+pub fn prepare_animation_with(
+    frames: &[(Bitmap, u32)],
+    cut: Cut,
+) -> AppResult<Vec<(Bitmap, u32)>> {
     if frames.is_empty() {
         return Err(AppError::invalid("the animation has no frames"));
     }
@@ -307,7 +336,15 @@ pub fn prepare_animation(frames: &[(Bitmap, u32)]) -> AppResult<Vec<(Bitmap, u32
         .iter()
         .map(|(bitmap, delay)| {
             let mut copy = bitmap.clone();
-            crate::build::matte::remove_background(&mut copy);
+            match cut {
+                Cut::Auto => {
+                    crate::build::matte::remove_background(&mut copy);
+                }
+                Cut::Force => {
+                    crate::build::matte::remove_background_forced(&mut copy);
+                }
+                Cut::Keep => {}
+            }
             (copy, *delay)
         })
         .collect();

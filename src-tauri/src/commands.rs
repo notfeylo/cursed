@@ -310,21 +310,27 @@ pub fn import_cfpack(src: String) -> AppResult<Preset> {
 /* ── custom import ─────────────────────────────────────────── */
 
 #[tauri::command]
-pub fn import_image(path: String) -> AppResult<custom::ImportedImage> {
+pub fn import_image(
+    path: String,
+    cut: Option<crate::build::pipeline::Cut>,
+) -> AppResult<custom::ImportedImage> {
     let source = PathBuf::from(path);
     let metadata = std::fs::metadata(&source)
         .map_err(|_| AppError::invalid("that file could not be opened"))?;
     if metadata.len() > crate::build::pipeline::MAX_INPUT_BYTES as u64 {
         return Err(AppError::ImageTooLarge("over 20 MB".into()));
     }
-    custom::stage(std::fs::read(&source)?)
+    custom::stage_with(std::fs::read(&source)?, cut.unwrap_or_default())
 }
 
 /// Bytes route for drag-and-drop, where the webview hands us content rather
 /// than a path.
 #[tauri::command]
-pub fn import_image_bytes(bytes: Vec<u8>) -> AppResult<custom::ImportedImage> {
-    custom::stage(bytes)
+pub fn import_image_bytes(
+    bytes: Vec<u8>,
+    cut: Option<crate::build::pipeline::Cut>,
+) -> AppResult<custom::ImportedImage> {
+    custom::stage_with(bytes, cut.unwrap_or_default())
 }
 
 #[derive(Debug, Clone, Deserialize)]

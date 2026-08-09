@@ -54,11 +54,26 @@ pub fn has_transparency(bitmap: &Bitmap) -> bool {
 
 /// Removes a flat or near-flat background, in place, returning what it did.
 pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
+    cut(bitmap, false)
+}
+
+/// The same, but ignoring the "this already has transparency" shortcut.
+///
+/// An image can carry an alpha channel and still have a background — a PNG
+/// exported with a white card behind it, a GIF whose transparency only covers
+/// the corners. The automatic path leaves those alone on purpose, because
+/// re-cutting art that somebody already cut is how you lose a soft edge. When
+/// the user asks for it explicitly, that caution is the wrong default.
+pub fn remove_background_forced(bitmap: &mut Bitmap) -> MatteReport {
+    cut(bitmap, true)
+}
+
+fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     let (w, h) = (bitmap.width, bitmap.height);
     if w < 3 || h < 3 {
         return MatteReport { removed: 0.0, already_had_alpha: false };
     }
-    if has_transparency(bitmap) {
+    if !force && has_transparency(bitmap) {
         return MatteReport { removed: 0.0, already_had_alpha: true };
     }
 

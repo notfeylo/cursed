@@ -32,6 +32,14 @@ export function CustomImport() {
   const [mode, setMode] = useState<ApplyMode>(settings.applyMode);
   const [blendPack, setBlendPack] = useState(settings.tint ? "precision-gap-cross" : "");
   const [busy, setBusy] = useState(false);
+  // Whether to cut the background out even when the file already claims
+  // transparency. Off by default: re-cutting art somebody already cut loses a
+  // soft edge, and `auto` already handles the ordinary case.
+  const [forceCut, setForceCut] = useState(false);
+  // Kept so the toggle can re-stage the same image rather than asking the user
+  // to drop it again — the cut happens at stage time, because the preview has
+  // to show what will actually be built.
+  const [lastSource, setLastSource] = useState<string | null>(null);
 
   const accept = useCallback(
     async (loader: () => Promise<ImportedImage>) => {
@@ -59,7 +67,10 @@ export function CustomImport() {
       .onDragDropEvent((event) => {
         if (event.payload.type !== "drop") return;
         const [first] = event.payload.paths;
-        if (first) void accept(() => ipc.importImage(first));
+        if (first) {
+          setLastSource(first);
+          void accept(() => ipc.importImage(first, forceCut ? "force" : "auto"));
+        }
       })
       .then((fn) => {
         unlisten = fn;
@@ -81,7 +92,21 @@ export function CustomImport() {
         },
       ],
     });
-    if (typeof picked === "string") void accept(() => ipc.importImage(picked));
+    if (typeof picked === "string") {
+      setLastSource(picked);
+      void accept(() => ipc.importImage(picked, forceCut ? "force" : "auto"));
+    }
+  };
+
+  // Re-stages the same file with a different background decision.
+  //
+  // The cut happens when the image is staged, not when it is built, because
+  // the preview and the hotspot picker both show the cut result — changing the
+  // setting without re-staging would show one thing and build another.
+  const recut = async (next: boolean) => {
+    setForceCut(next);
+    if (!lastSource) return;
+    await accept(() => ipc.importImage(lastSource, next ? "force" : "auto"));
   };
 
   const refreshPreviews = async (nextOutline: boolean) => {
@@ -146,56 +171,87 @@ export function CustomImport() {
           <AcceptedFormats />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          <div className="grid grid-cols-2 gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          {/* Sections, not one long stack.
+              Everything used to sit in a single `space-y-1` column — a preview,
+              a row of chips, a name field, a toggle, two dropdowns and a warning
+              — with nothing to say which control belonged to which decision.
+              Three cards: what it looks like, what it is, where it goes. */}
+          <div className="grid grid-cols-2 gap-3">
             <HotspotPicker image={image} hotspot={hotspot} onChange={setHotspot} />
             <PreviewLadder previews={previews} />
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-1">
-            {HOTSPOT_PRESETS.map((preset) => (
-              <button
-                key={preset.value}
-                type="button"
-                onClick={() => setHotspot(presetHotspot(preset.value, image))}
-                className="display rounded-full border border-border px-2 py-1 text-[10px] text-text-dim transition-colors duration-150 hover:border-border-hi hover:text-text"
-              >
-                {preset.label}
-              </button>
-            ))}
-            <span className="mono ml-auto self-center text-[10px] text-text-dim">
-              {hotspot[0].toFixed(2)} · {hotspot[1].toFixed(2)}
-            </span>
+          <div className="panel mt-4 rounded-sm border border-border p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <span className="display text-[11px] text-text-muted">HOTSPOT</span>
+              <span className="mono shrink-0 text-[11px] text-text-dim">
+                {hotspot[0].toFixed(2)} · {hotspot[1].toFixed(2)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {HOTSPOT_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setHotspot(presetHotspot(preset.value, image))}
+                  className="rounded-full border border-border px-3 py-1 text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-3 space-y-1">
-            <TextInput value={name} onChange={setName} placeholder="Name this cursor" maxLength={48} />
+          <div className="panel mt-4 rounded-sm border border-border p-4">
+            <span className="display mb-3 block text-[11px] text-text-muted">THE CURSOR</span>
 
-            <Toggle
-              checked={outline}
-              onChange={(next) => void refreshPreviews(next)}
-              label="Add contrast outline"
-              hint="Keeps a dark cursor visible on a white page"
+            <TextInput
+              value={name}
+              onChange={setName}
+              placeholder="Name this cursor"
+              maxLength={48}
             />
 
-            <div className="pt-1">
-              <span className="mb-1 block text-[11px] text-text-muted">Apply to</span>
-              <Select<ApplyMode>
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: "Blend", label: "Blend — my arrow + a catalog pack" },
-                  { value: "ArrowOnly", label: "Just the arrow" },
-                  { value: "Recommended", label: "Arrow + link + precision" },
-                  { value: "All", label: "All 17 roles (same image everywhere)" },
-                ]}
+            <div className="mt-2">
+              <Toggle
+                checked={forceCut}
+                onChange={(next) => void recut(next)}
+                label="Remove the background"
+                hint={
+                  forceCut
+                    ? "Cutting it out, whatever the file already claims"
+                    : "Cut automatically, unless the image is already transparent"
+                }
+              />
+
+              <Toggle
+                checked={outline}
+                onChange={(next) => void refreshPreviews(next)}
+                label="Add contrast outline"
+                hint="Keeps a dark cursor visible on a white page"
               />
             </div>
+          </div>
+
+          <div className="panel mt-4 rounded-sm border border-border p-4">
+            <span className="display mb-3 block text-[11px] text-text-muted">WHERE IT GOES</span>
+
+            <Select<ApplyMode>
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "Blend", label: "Blend — my arrow + a catalog pack" },
+                { value: "ArrowOnly", label: "Just the arrow" },
+                { value: "Recommended", label: "Arrow + link + precision" },
+                { value: "All", label: "All 17 roles (same image everywhere)" },
+              ]}
+            />
 
             {mode === "Blend" && (
-              <div className="pt-1">
-                <span className="mb-1 block text-[11px] text-text-muted">
-                  Pack for the other 16 roles
+              <div className="mt-3">
+                <span className="mb-2 block text-[11px] text-text-muted">
+                  Pack for the other roles
                 </span>
                 <Select
                   value={blendPack}
@@ -206,20 +262,20 @@ export function CustomImport() {
             )}
 
             {mode === "All" && (
-              <p className="pt-1 text-[11px] text-danger">
+              <p className="mt-3 text-[11px] leading-relaxed text-danger">
                 Every role becomes this image — including the text caret and the busy
                 pointer. Blend usually looks better.
               </p>
             )}
 
             {image.animated && (
-              <p className="pt-1 text-[11px] text-text-dim">
-                {image.frameCount} frames · built as an animated cursor at all eight sizes.
+              <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+                {image.frameCount} frames · built as an animated cursor at every size.
               </p>
             )}
           </div>
 
-          <div className="mt-3 pb-1">
+          <div className="mt-4 pb-2">
             <Button full onClick={() => void buildAndApply()} disabled={busy}>
               {busy ? "BUILDING" : "BUILD & APPLY"}
             </Button>
