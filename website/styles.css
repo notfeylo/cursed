@@ -519,9 +519,9 @@ footer {
 /* The mark breathes, mirroring the app's HOME logo exactly: the chamber pulses,
    the seam glows as if something inside it is hot, and the spark flares. Slow
    enough to be atmosphere rather than a distraction. */
-.mark {
-  animation: mark-glow 5s ease-in-out infinite;
-}
+/* No glow. Depth on the mark comes from its own fold and cast shadow, the
+   same way it does in the app — a halo behind it would light the shape from
+   the wrong side and flatten both. */
 .mark svg .logo-blade {
   transform-box: fill-box;
   transform-origin: center;
@@ -531,19 +531,7 @@ footer {
 }
 /* The two short arcs pulse, so the ring reads as holding something rather
    than as a static outline. */
-.mark svg .logo-seam {
-  animation: logo-seam 5s ease-in-out infinite;
-}
 
-@keyframes mark-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 22px rgba(46, 139, 255, 0.26);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(46, 139, 255, 0.62);
-  }
-}
 @keyframes logo-breathe {
   0%,
   100% {
@@ -553,15 +541,6 @@ footer {
   50% {
     transform: scale(1.045);
     opacity: 1;
-  }
-}
-@keyframes logo-seam {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  50% {
-    opacity: 0.75;
   }
 }
 }

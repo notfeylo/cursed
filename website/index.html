@@ -26,21 +26,34 @@
         <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
         <svg viewBox="0 0 64 64" width="34" height="34">
           <defs>
-            <linearGradient id="blade" x1="0.15" y1="0" x2="0.85" y2="1">
-              <stop offset="0" stop-color="#ffffff" />
-              <stop offset="0.45" stop-color="#5cb8ff" />
+            <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
+              <stop offset="0" stop-color="#5cb8ff" />
               <stop offset="1" stop-color="#2e8bff" />
             </linearGradient>
-            <radialGradient id="core" cx="0.5" cy="0.6" r="0.6">
-              <stop offset="0" stop-color="#5cb8ff" stop-opacity="0.45" />
-              <stop offset="1" stop-color="#2e8bff" stop-opacity="0" />
-            </radialGradient>
+            <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
+              <stop offset="0" stop-color="#2e8bff" />
+              <stop offset="1" stop-color="#123a72" />
+            </linearGradient>
+            <filter id="cast" x="-25%" y="-25%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="1.4" />
+            </filter>
           </defs>
-          <ellipse class="logo-seam" cx="32" cy="40" rx="30" ry="22" fill="url(#core)" />
+          <g filter="url(#cast)" opacity="0.5">
+            <path
+              d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
+              fill="#000000"
+              transform="translate(2.4 3)"
+            />
+          </g>
           <path
             class="logo-blade"
             d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-            fill="url(#blade)"
+            fill="url(#face)"
+          />
+          <path
+            class="logo-blade"
+            d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z"
+            fill="url(#fold)"
           />
         </svg>
       </span>

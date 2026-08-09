@@ -54,18 +54,12 @@ export function Home() {
       <Backdrop />
 
       <div className="relative flex flex-1 flex-col items-center justify-center px-6">
-        {/* A soft bloom behind the mark — the one piece of character in the
-            background, chosen over a vignette or a watermark because it does
-            the compositional work of anchoring the eye rather than just adding
-            texture. */}
+        {/* No bloom behind the mark. The mark carries its own depth now — a
+            fold across the wedge and a shadow cast down and to the right — and
+            a glow behind it would flatten both by lighting the shape from the
+            wrong side. */}
         <div className="relative mb-6 grid place-items-center">
-          <div
-            className="pointer-events-none absolute h-40 w-40 rounded-full blur-3xl"
-            style={{ background: "radial-gradient(circle, rgba(46,139,255,0.34), transparent 70%)" }}
-          />
-          <div className="relative">
-            <Mark size={96} animated id="hero" />
-          </div>
+          <Mark size={96} animated id="hero" />
         </div>
 
         <h1 className="display text-center text-[28px] leading-[1.05] text-text">

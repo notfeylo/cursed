@@ -23,31 +23,36 @@
 /// `accent` and `accent_hi` are hex strings so the same geometry can be drawn in
 /// the brand blue, in white for a monochrome context, or in a user's own colour.
 pub fn mark_svg(accent: &str, accent_hi: &str, depth: bool) -> String {
+    // A cast shadow, not a halo. `depth` controls how far it throws.
     let shadow = if depth {
         format!(
-            r##"<path d="{MARK}" fill="#000000" opacity="0.40" transform="translate(2.2 2.6)"/>"##
+            r##"<g filter="url(#cast)"><path d="{MARK}" fill="#000000" opacity="0.55" transform="translate(2.6 3.2)"/></g>"##
         )
     } else {
-        String::new()
+        format!(
+            r##"<path d="{MARK}" fill="#000000" opacity="0.28" transform="translate(1.4 1.8)"/>"##
+        )
     };
 
     format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <linearGradient id="blade" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.45" stop-color="{accent_hi}"/>
+    <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="{accent_hi}"/>
       <stop offset="1" stop-color="{accent}"/>
     </linearGradient>
-    <radialGradient id="core" cx="0.5" cy="0.6" r="0.6">
-      <stop offset="0" stop-color="{accent_hi}" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="{accent}" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="{accent}"/>
+      <stop offset="1" stop-color="#123a72"/>
+    </linearGradient>
+    <filter id="cast" x="-25%" y="-25%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
   </defs>
 
-  <ellipse cx="32" cy="40" rx="30" ry="22" fill="url(#core)"/>
   {shadow}
-  <path d="{MARK}" fill="url(#blade)"/>
+  <path d="{MARK}" fill="url(#face)"/>
+  <path d="{WING}" fill="url(#fold)"/>
 </svg>"##
     )
 }
@@ -57,6 +62,20 @@ pub fn mark_svg(accent: &str, accent_hi: &str, depth: bool) -> String {
 /// edge back up to the tip.
 pub const MARK: &str =
     "M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z";
+
+/// The part of the mark right of the fold.
+///
+/// The traced outline has a genuine crease in it: the tip and the notch both sit
+/// at x≈44.5, so a straight vertical line from the tip to the base divides the
+/// wedge into a broad face and a narrow wing. Filling that wing a shade darker
+/// makes the shape read as one plane folded rather than as a flat triangle —
+/// which is where the depth comes from now that nothing glows.
+///
+/// It is a tonal step inside the existing silhouette, so it costs nothing at
+/// small sizes: if the two tones merge in a 16 px tray icon, what is left is
+/// exactly the solid wedge that was there before.
+pub const WING: &str =
+    "M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z";
 
 /// Flat single-colour form, for a tray icon, a stencil or a silhouette test.
 ///
@@ -111,29 +130,34 @@ pub fn icon_svg() -> String {
       <stop offset="0.5" stop-color="#2e8bff" stop-opacity="0.22"/>
       <stop offset="1" stop-color="#2e8bff" stop-opacity="0.05"/>
     </linearGradient>
-    <linearGradient id="blade" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.45" stop-color="#5cb8ff"/>
+    <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#7cc6ff"/>
       <stop offset="1" stop-color="#2e8bff"/>
     </linearGradient>
-    <radialGradient id="bloom" cx="0.5" cy="0.52" r="0.55">
-      <stop offset="0" stop-color="#2e8bff" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#2e8bff" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="14"/>
+    <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2472d6"/>
+      <stop offset="1" stop-color="#123a72"/>
+    </linearGradient>
+    <filter id="cast" x="-40%" y="-40%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="13"/>
     </filter>
   </defs>
 
   <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#tile)"/>
-  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bloom)"/>
   <rect x="17.5" y="17.5" width="477" height="477" rx="106" fill="none"
         stroke="url(#edge)" stroke-width="3"/>
 
-  <g filter="url(#soft)" opacity="0.7">
-    <g transform="translate(104 104) scale(4.75)"><path d="{MARK}" fill="#2e8bff"/></g>
+  <!-- The mark is lit from the upper left and throws a shadow down and right
+       onto the tile. Depth here comes from that cast, and from the fold across
+       the wedge itself — there is no bloom behind it, so the tile stays a solid
+       surface rather than a light source. -->
+  <g filter="url(#cast)" opacity="0.75">
+    <g transform="translate(116 122) scale(4.75)"><path d="{MARK}" fill="#000000"/></g>
   </g>
-  <g transform="translate(104 104) scale(4.75)"><path d="{MARK}" fill="url(#blade)"/></g>
+  <g transform="translate(104 104) scale(4.75)">
+    <path d="{MARK}" fill="url(#face)"/>
+    <path d="{WING}" fill="url(#fold)"/>
+  </g>
 </svg>"##
     )
 }
