@@ -273,8 +273,28 @@ pub fn build_set(
         _ => CursorSet::default(),
     };
 
+    // In Blend, the custom image covers the roles that are simply *the pointer*
+    // as well as the arrow.
+    //
+    // Filling working, busy, help, unavailable and alternate from the base pack
+    // meant that the instant the machine did anything -- a copy, a download, an
+    // app launching -- the user's own cursor was replaced by a stranger's
+    // artwork, which reads as the pointer having reverted. The directional and
+    // text roles stay with the base pack on purpose: a resize handle shaped like
+    // an arrow says nothing about which way to drag.
+    const POINTER_LIKE: [Role; 7] = [
+        Role::Arrow,
+        Role::AppStarting,
+        Role::Wait,
+        Role::Help,
+        Role::No,
+        Role::UpArrow,
+        Role::Person,
+    ];
+
     let roles: &[Role] = match mode {
-        ApplyMode::ArrowOnly | ApplyMode::Blend => &[Role::Arrow],
+        ApplyMode::ArrowOnly => &[Role::Arrow],
+        ApplyMode::Blend => &POINTER_LIKE,
         ApplyMode::Recommended => &RECOMMENDED_ROLES,
         ApplyMode::All => &ALL_ROLES,
     };
