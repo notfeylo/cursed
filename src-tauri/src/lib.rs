@@ -9,6 +9,7 @@
 
 pub mod autostart;
 pub mod build;
+pub mod bundled;
 pub mod commands;
 pub mod cursor;
 pub mod custom;
@@ -167,6 +168,10 @@ pub fn run() {
             if let Err(e) = cursor::restore::capture_once() {
                 log::warn!("could not capture the original cursor scheme: {e}");
             }
+
+            // Shipped packs land before the catalog is first asked for, so a
+            // machine that has never run the app already has them.
+            bundled::install_missing();
 
             state::settings::propagate(&settings);
             cursor::watchdog::start();

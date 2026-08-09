@@ -35,10 +35,19 @@ You may not use Cursed to:
 
 ## 5. Bundled cursor artwork
 
-All cursor artwork bundled with Cursed is original work, © 2026 feylo, and
-is licensed under the MIT License alongside the source code. No bundled asset
-replicates a protected character, logo, or copyrighted design, and no pack is
-named after a third party's product or trademark.
+The generated cursor catalog is original work, © 2026 feylo, licensed under the
+MIT License alongside the source code. No generated asset replicates a protected
+character, logo, or copyrighted design, and no pack is named after a third
+party's product or trademark.
+
+A small number of complete cursor sets by other authors also ship with Cursed.
+They are included only where the author has licensed the work for
+redistribution, they keep their own licence, and that licence is extracted
+alongside them. See **Licences** for the list.
+
+Cursors you import from your own folders stay on your computer. They are never
+uploaded, never redistributed, and never included in the installer — whatever
+their licence.
 
 ## 6. Limitation of liability
 
