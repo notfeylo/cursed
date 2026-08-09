@@ -306,6 +306,50 @@ fn download_dir() -> AppResult<PathBuf> {
     Ok(dir)
 }
 
+
+/// Downloads an update and checks it, recording progress in the shared state.
+///
+/// **Both** the background updater and the manual button go through here, and
+/// that is the point. They used to be separate: the background path set
+/// `downloading` and `ready` on the shared state, the button did not. The UI
+/// polls that state every three seconds, so pressing Download produced an
+/// Install button that existed for at most three seconds before the next poll
+/// read `ready: false` and replaced it with a Download button again. Pressing it
+/// worked exactly as designed and looked exactly like nothing happening.
+///
+/// The checksum is verified here rather than at install time, so a download that
+/// fails it never reaches a button labelled "install".
+pub fn download_and_verify(version: &str, installer: &str) -> AppResult<()> {
+    update_state(|s| {
+        s.downloading = true;
+        s.ready = false;
+        s.error = None;
+    });
+
+    let outcome = download(version, installer).and_then(|_| {
+        let expected = published_hash(version, installer)?;
+        let file = download_dir()?.join(installer);
+        let actual = sha256_file(&file)?;
+        if crate::hash::hex_eq(&actual, &expected) {
+            Ok(())
+        } else {
+            let _ = std::fs::remove_file(&file);
+            Err(AppError::msg(
+                "the downloaded update did not match its published checksum",
+            ))
+        }
+    });
+
+    update_state(|s| {
+        s.downloading = false;
+        match &outcome {
+            Ok(()) => s.ready = true,
+            Err(e) => s.error = Some(e.to_string()),
+        }
+    });
+    outcome
+}
+
 /// Downloads the installer for `tag` and returns where it landed.
 pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
     if !is_our_installer(asset) {
@@ -419,6 +463,11 @@ pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// Where a downloaded installer is staged.
+pub fn downloaded_path(installer: &str) -> AppResult<PathBuf> {
+    Ok(download_dir()?.join(installer))
+}
+
 /// Removes anything left in the update staging directory.
 pub fn clear_downloads() -> AppResult<()> {
     let dir = download_dir()?;
@@ -501,22 +550,7 @@ pub fn auto_update_in_background() {
                 return;
             }
 
-            update_state(|s| s.downloading = true);
-            let outcome = download(&version, &installer).and_then(|_| {
-                // Verified now, not at install time: a download that fails its
-                // checksum must never reach a button labelled "install".
-                let expected = published_hash(&version, &installer)?;
-                let file = download_dir()?.join(&installer);
-                let actual = sha256_file(&file)?;
-                if crate::hash::hex_eq(&actual, &expected) {
-                    Ok(())
-                } else {
-                    let _ = std::fs::remove_file(&file);
-                    Err(AppError::msg(
-                        "the downloaded update did not match its published checksum",
-                    ))
-                }
-            });
+            let outcome = download_and_verify(&version, &installer);
 
             update_state(|s| {
                 s.downloading = false;

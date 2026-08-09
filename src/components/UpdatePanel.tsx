@@ -29,8 +29,15 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
     }
   };
 
-  // The background updater usually got there first, so adopt whatever it found
-  // rather than starting a second check and making the user wait again.
+  // The backend owns update state; this only mirrors it.
+  //
+  // The manual buttons used to keep their own phase while this poll ran every
+  // three seconds off a state the buttons never wrote to. Pressing Download set
+  // a local "ready", the next poll read the shared state — which had never heard
+  // of that download — and put the Download button straight back. The action
+  // worked perfectly and looked exactly like nothing happening, forever.
+  //
+  // Both paths now write the same state, so there is nothing left to disagree.
   useEffect(() => {
     if (!autoCheck || !ipc.isDesktop()) return;
 
@@ -41,7 +48,7 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
         if (cancelled) return;
 
         if (bg.status) setStatus(bg.status);
-        if (bg.error) setMessage(bg.error);
+        setMessage(bg.error ?? null);
 
         if (bg.ready) setPhase("ready");
         else if (bg.downloading) setPhase("downloading");
@@ -54,7 +61,7 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
     };
 
     void read();
-    const timer = window.setInterval(read, 3000);
+    const timer = window.setInterval(read, 1500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -64,7 +71,13 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
   }, [autoCheck]);
 
   const download = async () => {
-    if (!status?.latest || !status.installer) return;
+    if (!status?.latest || !status.installer) {
+      // Nothing to download is a state worth saying out loud. Silently doing
+      // nothing on a click is indistinguishable from a broken button.
+      setMessage("This release has no installer to download. Use the manual link below.");
+      setPhase("failed");
+      return;
+    }
     setPhase("downloading");
     setMessage(null);
     try {
@@ -77,7 +90,11 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
   };
 
   const install = async () => {
-    if (!status?.latest || !status.installer) return;
+    if (!status?.latest || !status.installer) {
+      setMessage("There is no downloaded installer to run. Try Download again.");
+      setPhase("failed");
+      return;
+    }
     setMessage(null);
     try {
       // Verifies the download against the checksum published with the release

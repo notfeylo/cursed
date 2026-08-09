@@ -718,7 +718,12 @@ pub fn check_for_updates() -> AppResult<updates::UpdateStatus> {
 /// they end up in a URL and a filename.
 #[tauri::command]
 pub fn download_update(version: String, installer: String) -> AppResult<u64> {
-    let file = updates::download(&version, &installer)?;
+    // Through the shared path, so the state the UI polls reflects what the
+    // button just did. Downloading here without recording it was why pressing
+    // Download appeared to do nothing: the next poll, at most three seconds
+    // later, read a state that had never heard of it.
+    updates::download_and_verify(&version, &installer)?;
+    let file = updates::downloaded_path(&installer)?;
     Ok(std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0))
 }
 
