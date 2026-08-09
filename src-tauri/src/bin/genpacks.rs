@@ -214,6 +214,143 @@ fn logo_sheets(args: &[String]) {
     std::process::exit(0);
 }
 
+/// The four acceptance checks for the mark, rendered so they can be judged
+/// rather than asserted.
+///
+/// Each one is a failure that survives a casual eyeball review: a tray icon that
+/// vanishes on a light taskbar, a mark indistinguishable from the system arrow
+/// it sits next to, a size ramp that reads as two different logos, and artwork
+/// that only holds together in the brand colour.
+fn logo_accept(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    use cursorforge_lib::packs::brand;
+
+    let out = PathBuf::from(args.get(2).cloned().unwrap_or_else(|| "logo-sheets".into()));
+    let _ = std::fs::create_dir_all(&out);
+
+    let fill = |b: &mut Bitmap, x0: u32, y0: u32, w: u32, h: u32, c: [u8; 4]| {
+        for y in y0..(y0 + h).min(b.height) {
+            for x in x0..(x0 + w).min(b.width) {
+                b.set_pixel(x, y, c);
+            }
+        }
+    };
+    /// Nearest-neighbour magnification, so the pixel grid stays visible.
+    fn zoom(sheet: &mut Bitmap, src: &Bitmap, ox: u32, oy: u32, z: u32) {
+        for y in 0..src.height * z {
+            for x in 0..src.width * z {
+                let s = src.pixel(x / z, y / z);
+                let a = s[3] as u32;
+                if a == 0 {
+                    continue;
+                }
+                let (tx, ty) = (ox + x, oy + y);
+                if tx >= sheet.width || ty >= sheet.height {
+                    continue;
+                }
+                let d = sheet.pixel(tx, ty);
+                let m = |s: u8, d: u8| ((s as u32 * a + d as u32 * (255 - a)) / 255) as u8;
+                sheet.set_pixel(tx, ty, [m(s[0], d[0]), m(s[1], d[1]), m(s[2], d[2]), 255]);
+            }
+        }
+    }
+
+    const Z: u32 = 10;
+    const LIGHT: [u8; 4] = [0xf3, 0xf3, 0xf3, 0xff];
+    const TASKBAR: [u8; 4] = [0x20, 0x20, 0x20, 0xff];
+
+    // 1 — the tray form on a light taskbar and a dark one, actual size and
+    //     magnified. The accent blue is what actually ships in the tray.
+    {
+        let mut s = Bitmap::new(760, 400);
+        fill(&mut s, 0, 0, 760, 200, LIGHT);
+        fill(&mut s, 0, 200, 760, 200, TASKBAR);
+        for (i, bg) in [LIGHT, TASKBAR].iter().enumerate() {
+            let top = i as u32 * 200;
+            let _ = bg;
+            for (j, colour) in ["#2e8bff", "#000000", "#ffffff"].iter().enumerate() {
+                if let Ok(m) = cursorforge_lib::build::svg::render(&brand::small_mark_svg(colour), 16)
+                {
+                    let x = 40 + j as u32 * 240;
+                    zoom(&mut s, &m, x, top + 20, Z);
+                    // Actual size beside it, which is the only honest view.
+                    zoom(&mut s, &m, x + 180, top + 52, 1);
+                }
+            }
+        }
+        write_sheet(&out, "accept-1-light-taskbar.png", &s);
+    }
+
+    // 2 — beside the system arrow. This is the constraint that killed Horns.
+    {
+        let mut s = Bitmap::new(560, 400);
+        fill(&mut s, 0, 0, 560, 200, LIGHT);
+        fill(&mut s, 0, 200, 560, 200, TASKBAR);
+        let stock = std::path::Path::new(r"C:\Windows\Cursors\aero_arrow.cur");
+        for (i, ink) in ["#2e8bff", "#2e8bff"].iter().enumerate() {
+            let top = i as u32 * 200;
+            if let Ok(m) = cursorforge_lib::build::svg::render(&brand::small_mark_svg(ink), 16) {
+                zoom(&mut s, &m, 40, top + 20, Z);
+            }
+            if let Ok(w) = cursorforge_lib::build::cur_reader::read(stock, 16) {
+                zoom(&mut s, &w, 300, top + 20, Z);
+            }
+        }
+        write_sheet(&out, "accept-2-vs-windows-arrow.png", &s);
+    }
+
+    // 3 — the size ramp, actual size, to judge whether the two forms read as
+    //     one logo. Anything but actual size would beg the question.
+    {
+        let mut s = Bitmap::new(420, 180);
+        fill(&mut s, 0, 0, 420, 180, [0x0b, 0x0d, 0x12, 0xff]);
+        let mut x = 24;
+        for size in [16u32, 24, 32, 128] {
+            let markup = if size < 32 {
+                brand::small_mark_svg("#5cb8ff")
+            } else {
+                brand::mark_svg("#2e8bff", "#5cb8ff", false)
+            };
+            if let Ok(m) = cursorforge_lib::build::svg::render(&markup, size) {
+                zoom(&mut s, &m, x, 24 + (128 - size), 1);
+            }
+            x += size + 32;
+        }
+        write_sheet(&out, "accept-3-size-ramp.png", &s);
+    }
+
+    // 4 — flat white on black. If it only works in the accent, it is not a logo.
+    {
+        let mut s = Bitmap::new(460, 200);
+        fill(&mut s, 0, 0, 460, 200, [0x00, 0x00, 0x00, 0xff]);
+        if let Ok(m) = cursorforge_lib::build::svg::render(&brand::mark_svg("#ffffff", "#ffffff", false), 128) {
+            zoom(&mut s, &m, 24, 36, 1);
+        }
+        if let Ok(m) = cursorforge_lib::build::svg::render(&brand::mark_svg("#ffffff", "#ffffff", false), 32) {
+            zoom(&mut s, &m, 190, 36, 1);
+        }
+        if let Ok(m) = cursorforge_lib::build::svg::render(&brand::small_mark_svg("#ffffff"), 16) {
+            zoom(&mut s, &m, 250, 40, 6);
+        }
+        write_sheet(&out, "accept-4-silhouette.png", &s);
+    }
+
+    std::process::exit(0);
+}
+
+fn write_sheet(dir: &std::path::Path, name: &str, sheet: &cursorforge_lib::build::bitmap::Bitmap) {
+    match sheet.to_png(image::codecs::png::CompressionType::Default) {
+        Ok(bytes) => {
+            let path = dir.join(name);
+            match std::fs::write(&path, &bytes) {
+                Ok(()) => println!("{}", path.display()),
+                Err(e) => eprintln!("could not write {}: {e}", path.display()),
+            }
+        }
+        Err(e) => eprintln!("{name}: {e}"),
+    }
+}
+
 /// Writes the multi-resolution `.ico` and the PNG icon set.
 ///
 /// Built here rather than by scaling one master, because the mark has two forms
@@ -444,6 +581,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--icon-set") {
         icon_set(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--logo-accept") {
+        logo_accept(&args);
     }
     if args.get(1).map(String::as_str) == Some("--fetch-update") {
         // Downloads whatever the release feed is offering and checks it against

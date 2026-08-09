@@ -107,9 +107,9 @@ fn sigil(colour: &str) -> String {
 /// ground swapped. Every feature here is at least three units wide, which is one
 /// whole pixel at 16 px.
 pub fn sigil_small(colour: &str) -> String {
-    wrap(&format!(
-        r##"<path fill-rule="evenodd" fill="{colour}" d="M32 2 A30 30 0 1 1 31.99 2 Z M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z"/>"##
-    ))
+    // Delegates so the candidate sheet and the shipped icon cannot drift into
+    // two slightly different small marks.
+    crate::packs::brand::small_mark_svg(colour)
 }
 
 /// The form to draw at a given pixel size.

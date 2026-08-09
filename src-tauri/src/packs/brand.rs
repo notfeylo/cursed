@@ -73,15 +73,36 @@ const RING_LEFT: &str = "M4.5 32 A27.5 27.5 0 0 0 19.3 56.9";
 /// The pointer, sized to sit inside the ring with clear air around it.
 const ARROW: &str = "M23 17 L43.5 36.5 L33.5 37.5 L38.5 49 L33.5 51 L28.5 39.5 L23 44.5 Z";
 
-/// Below 32 px: a solid disc with the pointer knocked out.
+/// Below 32 px: a disc with the pointer knocked out, and the ring's three gaps
+/// cut into its rim.
+///
+/// The gaps are what make the two forms one logo. Without them the ramp flips
+/// from an outline to a solid at the 24→32 step and reads as two different
+/// marks — a real failure, and the one thing size-specific artwork is most
+/// likely to get wrong. Cutting the notches at exactly the ring's angles carries
+/// the same signature all the way down.
 ///
 /// Every feature is at least three units wide, which is a whole pixel at 16 px.
-/// `evenodd` is what makes the pointer a hole rather than a second shape.
+/// `evenodd` is what makes the pointer and the notches holes rather than extra
+/// shapes.
 pub fn small_mark_svg(colour: &str) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><path fill-rule="evenodd" fill="{colour}" d="M32 2 A30 30 0 1 1 31.99 2 Z M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z"/></svg>"##
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><path fill-rule="evenodd" fill="{colour}" d="M32 2 A30 30 0 1 1 31.99 2 Z {NOTCHES} {POINTER_HOLE}"/></svg>"##
     )
 }
+
+/// A single shallow bite out of the left rim, where the ring's widest gap sits.
+///
+/// It stops well short of the centre. Two earlier attempts did not: three
+/// full-depth wedges shattered the disc into a pinwheel at 16 px, and one
+/// full-depth wedge cut through to meet the pointer hole. A wedge drawn from the
+/// centre removes a pie slice; what is wanted is a notch in the edge, which is a
+/// different shape entirely.
+const NOTCHES: &str = "M1.5 24.5 L12 27 L12 37 L1.5 39.5 Z";
+
+/// The pointer, as a hole. Slightly heavier than the full-size one so its
+/// narrowest part still clears a pixel at 16 px.
+const POINTER_HOLE: &str = "M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z";
 
 /// The full app icon: the mark on a rounded, bevelled tile.
 ///

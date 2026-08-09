@@ -222,3 +222,17 @@ Zustand store and plain view state instead of a router — there are six screens
 The webview holds no privileged capability. It cannot read a file, run a shell
 command, or make an HTTP request; it can only call the typed commands in
 `commands.rs`. See [SECURITY.md](../SECURITY.md).
+
+## A permanently burned name
+
+The repository was renamed `cursorforge` → `cursed`. The release-feed path in
+`updates.rs` is compiled into the binary, so every 1.6.x and 1.7.0 install in the
+world is still asking GitHub for `notfeylo/cursorforge/releases/latest`.
+
+Those installs keep working purely because GitHub redirects the old name. **That
+redirect is destroyed the instant anything is created under `cursorforge`
+again** — a repo, a fork restored under that name, anything. The failure is
+silent: no error the user sees, the update check simply stops finding releases.
+
+So the name is burned permanently, and this is the only reason. Current builds
+point at `notfeylo/cursed` directly and do not depend on the redirect.

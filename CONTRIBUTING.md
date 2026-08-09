@@ -119,3 +119,16 @@ size, spacing step, component state, icon and long-text torture case on one
 page, so a single screenshot answers a design question instead of a tour of
 seven screens. It is gated on `import.meta.env.DEV` and must never appear in a
 build; `npm run check:bundle` asserts that.
+
+## The name `cursorforge` is permanently burned
+
+**Never create a repository, organisation or package called `cursorforge`.**
+
+Every 1.6.x and 1.7.0 install has `notfeylo/cursorforge` compiled into its
+release-feed path. Those installs keep updating only because GitHub redirects
+the old name to `notfeylo/cursed` — and that redirect is destroyed the moment
+anything is created under the old name. Not broken, not degraded: the redirect
+stops existing, and every one of those installs silently stops receiving
+updates with no error a user would ever see.
+
+It costs nothing to respect and cannot be undone once tripped.
