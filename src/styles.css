@@ -260,8 +260,10 @@
 
    Slow and small on purpose. It sits above the button that changes the real
    cursor, so anything livelier competes with the thing the user came to look at.
+   The mark is one solid shape now, so there is one thing to move: the blade
+   breathes, and the bloom behind it swells very slightly out of phase.
    ──────────────────────────────────────────────────────────── */
-.mark-live .mark-hex {
+.mark-live .mark-blade {
   transform-box: fill-box;
   transform-origin: center;
   animation: mark-breathe 5s ease-in-out infinite;
@@ -274,45 +276,21 @@
   0%,
   100% {
     transform: scale(1);
-    opacity: 0.9;
+    opacity: 0.92;
   }
   50% {
-    transform: scale(1.045);
+    transform: scale(1.04);
     opacity: 1;
   }
 }
 @keyframes mark-seam {
   0%,
   100% {
-    opacity: 0.25;
+    opacity: 0.5;
   }
   50% {
-    opacity: 0.7;
+    opacity: 1;
   }
-}
-
-/* A slow sweep of light across a surface. Used sparingly — the hero panel. */
-@keyframes sweep {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(220%);
-  }
-}
-
-.sweep::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    transparent 35%,
-    rgba(92, 184, 255, 0.09) 50%,
-    transparent 65%
-  );
-  animation: sweep 7s ease-in-out infinite;
 }
 
 /* Motion is a garnish, never a requirement. */

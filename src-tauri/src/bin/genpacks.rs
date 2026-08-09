@@ -214,6 +214,179 @@ fn logo_sheets(args: &[String]) {
     std::process::exit(0);
 }
 
+/// `genpacks --trace <png>` turns a supplied logo image into an SVG path.
+///
+/// Transcribing a shape by eye from a picture produces a shape that is nearly
+/// right, which is the worst outcome for a logo: every angle slightly off, and
+/// no way to tell which. This reads the pixels instead. It masks the artwork,
+/// separates the connected shapes, walks the boundary of the one asked for,
+/// simplifies the staircase a raster edge is made of, and prints a path
+/// normalised into a 64-unit box.
+fn trace_logo(args: &[String]) {
+    let Some(path) = args.get(2) else {
+        eprintln!("usage: genpacks --trace <png> [shape-index]");
+        std::process::exit(2);
+    };
+    let want: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+
+    let img = match image::open(path) {
+        Ok(i) => i.to_rgba8(),
+        Err(e) => {
+            eprintln!("could not open {path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (w, h) = (img.width() as i32, img.height() as i32);
+
+    // Ink is anything both opaque and dark. The file is a cut-out, so the
+    // background may be transparent or white and both have to be excluded.
+    let ink: Vec<bool> = img
+        .pixels()
+        .map(|p| {
+            let [r, g, b, a] = p.0;
+            let luma = (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000;
+            a > 128 && luma < 160
+        })
+        .collect();
+    let at = |x: i32, y: i32| -> bool { x >= 0 && y >= 0 && x < w && y < h && ink[(y * w + x) as usize] };
+
+    // Flood fill, so the mark and each letter are separate shapes.
+    let mut label = vec![0usize; (w * h) as usize];
+    let mut shapes: Vec<(usize, i32, i32, i32, i32, usize)> = Vec::new();
+    let mut next = 0usize;
+    for sy in 0..h {
+        for sx in 0..w {
+            if !at(sx, sy) || label[(sy * w + sx) as usize] != 0 {
+                continue;
+            }
+            next += 1;
+            let (mut count, mut x0, mut y0, mut x1, mut y1) = (0usize, sx, sy, sx, sy);
+            let mut stack = vec![(sx, sy)];
+            label[(sy * w + sx) as usize] = next;
+            while let Some((x, y)) = stack.pop() {
+                count += 1;
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if at(nx, ny) && label[(ny * w + nx) as usize] == 0 {
+                        label[(ny * w + nx) as usize] = next;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+            if count > 200 {
+                shapes.push((next, x0, y0, x1, y1, count));
+            }
+        }
+    }
+    shapes.sort_by_key(|s| s.2);
+
+    println!("{} shapes, top to bottom:", shapes.len());
+    for (i, (_, x0, y0, x1, y1, n)) in shapes.iter().enumerate() {
+        println!("  [{i}] x {x0}..{x1}  y {y0}..{y1}  {}x{}  {n} px", x1 - x0 + 1, y1 - y0 + 1);
+    }
+    let Some(&(id, x0, y0, x1, y1, _)) = shapes.get(want) else {
+        eprintln!("no shape at index {want}");
+        std::process::exit(1);
+    };
+
+    let member = |x: i32, y: i32| -> bool {
+        x >= 0 && y >= 0 && x < w && y < h && label[(y * w + x) as usize] == id
+    };
+    let mut start = (x0, y0);
+    'find: for y in y0..=y1 {
+        for x in x0..=x1 {
+            if member(x, y) {
+                start = (x, y);
+                break 'find;
+            }
+        }
+    }
+
+    // Moore-neighbourhood boundary walk.
+    const DIRS: [(i32, i32); 8] =
+        [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
+    let mut outline: Vec<(f64, f64)> = Vec::new();
+    let (mut cx, mut cy) = start;
+    let mut dir = 0usize;
+    for step in 0..200_000usize {
+        outline.push((cx as f64, cy as f64));
+        let mut moved = false;
+        for k in 0..8 {
+            let d = (dir + 6 + k) % 8;
+            let (nx, ny) = (cx + DIRS[d].0, cy + DIRS[d].1);
+            if member(nx, ny) {
+                cx = nx;
+                cy = ny;
+                dir = d;
+                moved = true;
+                break;
+            }
+        }
+        if !moved || ((cx, cy) == start && step > 8) {
+            break;
+        }
+    }
+
+    let simplified = rdp(&outline, 1.5);
+    let (bw, bh) = ((x1 - x0 + 1) as f64, (y1 - y0 + 1) as f64);
+    let scale = 60.0 / bw.max(bh);
+    let ox = (64.0 - bw * scale) / 2.0 - x0 as f64 * scale;
+    let oy = (64.0 - bh * scale) / 2.0 - y0 as f64 * scale;
+
+    let mut d = String::new();
+    for (i, (px, py)) in simplified.iter().enumerate() {
+        d.push_str(&format!(
+            "{}{:.2} {:.2} ",
+            if i == 0 { "M" } else { "L" },
+            px * scale + ox,
+            py * scale + oy
+        ));
+    }
+    d.push('Z');
+
+    println!("\nboundary {} points -> {} after simplification", outline.len(), simplified.len());
+    println!("\n{d}\n");
+    std::process::exit(0);
+}
+
+/// Ramer-Douglas-Peucker: keeps the corners, drops the staircase.
+fn rdp(points: &[(f64, f64)], epsilon: f64) -> Vec<(f64, f64)> {
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+    let (first, last) = (points[0], points[points.len() - 1]);
+    let (mut worst, mut index) = (0.0f64, 0usize);
+    for (i, p) in points.iter().enumerate().take(points.len() - 1).skip(1) {
+        let d = perpendicular(*p, first, last);
+        if d > worst {
+            worst = d;
+            index = i;
+        }
+    }
+    if worst > epsilon {
+        let mut left = rdp(&points[..=index], epsilon);
+        let right = rdp(&points[index..], epsilon);
+        left.pop();
+        left.extend(right);
+        left
+    } else {
+        vec![first, last]
+    }
+}
+
+fn perpendicular(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < f64::EPSILON {
+        return ((p.0 - a.0).powi(2) + (p.1 - a.1).powi(2)).sqrt();
+    }
+    ((p.0 - a.0) * dy - (p.1 - a.1) * dx).abs() / len
+}
+
 /// The four acceptance checks for the mark, rendered so they can be judged
 /// rather than asserted.
 ///
@@ -584,6 +757,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--logo-accept") {
         logo_accept(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--trace") {
+        trace_logo(&args);
     }
     if args.get(1).map(String::as_str) == Some("--fetch-update") {
         // Downloads whatever the release feed is offering and checks it against
