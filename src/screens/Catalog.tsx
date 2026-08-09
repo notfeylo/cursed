@@ -134,7 +134,7 @@ export function Catalog() {
               key={item}
               type="button"
               onClick={() => setCategory(item)}
-              className={`display shrink-0 rounded-full border px-2.5 py-1 text-[9px] transition-colors duration-150 ${
+              className={`display shrink-0 rounded-full border px-2.5 py-1 text-[10px] transition-colors duration-150 ${
                 category === item
                   ? "border-accent bg-accent-dim text-accent-hi"
                   : "border-border text-text-dim hover:border-border-hi hover:text-text-muted"
@@ -184,7 +184,7 @@ export function Catalog() {
             setTintPreviews(next);
             void patchSettings({ tintPreviews: next });
           }}
-          className={`display mb-2 flex w-full items-center justify-between rounded-xs border px-2 py-1.5 text-[9px] transition-colors duration-150 ${
+          className={`display mb-2 flex w-full items-center justify-between rounded-xs border px-2 py-1.5 text-[10px] transition-colors duration-150 ${
             tintPreviews
               ? "border-accent bg-accent-dim text-accent-hi"
               : "border-border text-text-dim hover:border-border-hi hover:text-text-muted"
@@ -272,7 +272,7 @@ function Tile({
         />
       )}
 
-      <span className="display mt-2 w-full truncate px-0.5 text-center text-[8px] text-text-dim transition-colors duration-150 group-hover:text-text">
+      <span className="display mt-2 w-full truncate px-0.5 text-center text-[10px] text-text-dim transition-colors duration-150 group-hover:text-text">
         {pack.name}
       </span>
 

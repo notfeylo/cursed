@@ -55,7 +55,7 @@ export function About() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <div className="flex flex-col items-center gap-2 pb-4">
           <Mark size={54} animated id="about" />
-          <span className="display text-[13px] text-text">CURSED</span>
+          <span className="display text-[14px] text-text">CURSED</span>
           <span className="mono text-[11px] text-accent-hi">v{info.version}</span>
           <span className="text-[11px] text-text-muted">Give your dead cursor a new life.</span>
         </div>
@@ -298,7 +298,7 @@ function DocView({ kind, onBack }: { kind: Doc; onBack: () => void }) {
                 type="button"
                 title={s.text}
                 onClick={() => jump(slug(s.text))}
-                className="mono max-w-28 shrink-0 truncate rounded-full border border-border px-2 py-0.5 text-[9px] text-text-dim transition-colors duration-150 hover:border-accent hover:text-accent-hi"
+                className="mono max-w-28 shrink-0 truncate rounded-full border border-border px-2 py-0.5 text-[10px] text-text-dim transition-colors duration-150 hover:border-accent hover:text-accent-hi"
               >
                 {/^\d+\./.test(s.text) ? s.text.split(".")[0] : s.text}
               </button>

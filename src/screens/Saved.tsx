@@ -93,7 +93,7 @@ export function Saved() {
             className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-border-hi text-text-dim transition-colors duration-150 hover:border-accent hover:text-text"
           >
             <span className="text-lg leading-none">+</span>
-            <span className="display text-[9px]">NEW FROM CURRENT</span>
+            <span className="display text-[10px]">NEW FROM CURRENT</span>
           </button>
 
           {presets.map((preset) => (
@@ -141,11 +141,11 @@ export function Saved() {
                       {preset.name}
                     </span>
                   )}
-                  <span className="mono block text-[9px] text-text-dim">
+                  <span className="mono block text-[10px] text-text-dim">
                     {preset.size}px · {preset.tint.toUpperCase()}
                   </span>
                   {preset.hotkey && (
-                    <span className="mono block text-[9px] text-accent-hi">
+                    <span className="mono block text-[10px] text-accent-hi">
                       {preset.hotkey}
                     </span>
                   )}
@@ -175,7 +175,7 @@ export function Saved() {
                           await refreshActive();
                         })
                       }
-                      className="display mr-auto rounded-xs border border-border px-2 py-1 text-[9px] text-text-muted hover:border-accent hover:text-accent-hi"
+                      className="display mr-auto rounded-xs border border-border px-2 py-1 text-[10px] text-text-muted hover:border-accent hover:text-accent-hi"
                     >
                       APPLY
                     </button>

@@ -57,7 +57,7 @@ import { Mark } from "../components/Mark";
    invisible until it is all laid out together like this.
    ──────────────────────────────────────────────────────── */
 
-const TYPE_SCALE = [11, 12, 14, 16, 20, 28, 40] as const;
+const TYPE_SCALE = [10, 11, 12, 14, 16, 20, 28, 40] as const;
 const SPACE_SCALE = [4, 8, 12, 16, 24, 32, 48] as const;
 
 const COLOURS: { token: string; value: string; note?: string }[] = [
@@ -104,11 +104,10 @@ const ICONS: { name: string; node: React.ReactNode }[] = [
 ];
 
 /**
- * The three candidate stacks, rendered side by side on identical content.
+ * The shipping stack, and the runner-up kept for comparison.
  *
- * CURRENT is what ships today. A and B exist only here — nothing in the app
- * references them, so choosing one is a later, deliberate change rather than
- * something that has already half-happened.
+ * Only Geist is loaded from `/dev-fonts/`; the shipping faces come from the
+ * app's own stylesheet, so this row also proves they are really loading.
  */
 const PAIRINGS = [
   {
@@ -195,7 +194,7 @@ export function Specimen() {
         </Block>
 
         {/* ── type ───────────────────────────────────────── */}
-        <Block title="Type scale — display (Chakra Petch)">
+        <Block title="Type scale — display (Space Grotesk)">
           {TYPE_SCALE.map((size) => (
             <div key={size} className="flex items-baseline gap-4 border-b border-border/50 py-1.5">
               <span className="mono w-12 shrink-0 text-[10px] text-text-dim">{size}px</span>
@@ -206,7 +205,7 @@ export function Specimen() {
           ))}
         </Block>
 
-        <Block title="Type scale — body (Inter)">
+        <Block title="Type scale — body (Inter Tight)">
           {TYPE_SCALE.map((size) => (
             <div key={size} className="flex items-baseline gap-4 border-b border-border/50 py-1.5">
               <span className="mono w-12 shrink-0 text-[10px] text-text-dim">{size}px</span>
@@ -388,19 +387,19 @@ export function Specimen() {
         {/* ── chips and badges ───────────────────────────── */}
         <Block title="Chips and badges">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="display rounded-full border border-border px-2.5 py-1 text-[9px] text-text-dim">
+            <span className="display rounded-full border border-border px-2.5 py-1 text-[10px] text-text-dim">
               205 CURSORS
             </span>
-            <span className="display rounded-full border border-accent/40 bg-accent-dim/50 px-2.5 py-1 text-[9px] text-accent-hi">
+            <span className="display rounded-full border border-accent/40 bg-accent-dim/50 px-2.5 py-1 text-[10px] text-accent-hi">
               SKYRIM SET 2
             </span>
-            <span className="display rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-[9px] text-success">
+            <span className="display rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-[10px] text-success">
               UP TO DATE
             </span>
-            <span className="display rounded-full border border-danger/40 bg-danger/10 px-2.5 py-1 text-[9px] text-danger">
+            <span className="display rounded-full border border-danger/40 bg-danger/10 px-2.5 py-1 text-[10px] text-danger">
               FILE MISSING
             </span>
-            <span className="mono rounded-xs border border-border bg-bg px-1 py-px text-[10.5px] text-accent-hi">
+            <span className="mono rounded-xs border border-border bg-bg px-1 py-px text-[11px] text-accent-hi">
               inline code
             </span>
           </div>
@@ -445,7 +444,7 @@ export function Specimen() {
                 <span className="text-text-muted [&>svg]:h-[13px] [&>svg]:w-[13px]">
                   {icon.node}
                 </span>
-                <span className="mono max-w-full truncate px-1 text-[8px] text-text-dim">
+                <span className="mono max-w-full truncate px-1 text-[10px] text-text-dim">
                   {icon.name}
                 </span>
               </div>
@@ -483,7 +482,7 @@ export function Specimen() {
                 60-char preset name, in a chip
               </div>
               <span
-                className="display block max-w-full truncate rounded-full border border-accent/40 bg-accent-dim/50 px-2.5 py-1 text-[9px] text-accent-hi"
+                className="display block max-w-full truncate rounded-full border border-accent/40 bg-accent-dim/50 px-2.5 py-1 text-[10px] text-accent-hi"
                 title={LONG_PRESET}
               >
                 {LONG_PRESET}

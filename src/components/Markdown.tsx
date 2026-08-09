@@ -164,7 +164,7 @@ function Inline({ text }: { text: string }): ReactNode {
       return (
         <code
           key={key}
-          className="mono rounded-xs border border-border bg-bg px-1 py-px text-[10.5px] break-all text-accent-hi"
+          className="mono rounded-xs border border-border bg-bg px-1 py-px text-[11px] break-all text-accent-hi"
         >
           {piece.slice(1, -1)}
         </code>
@@ -303,13 +303,13 @@ export function Markdown({ source }: { source: string }) {
                 key={key}
                 className="mb-2.5 overflow-x-auto rounded-xs border border-border"
               >
-                <table className="w-full border-collapse text-left text-[10.5px]">
+                <table className="w-full border-collapse text-left text-[11px]">
                   <thead>
                     <tr className="bg-elevated">
                       {block.head.map((cell, n) => (
                         <th
                           key={`${n}`}
-                          className="display px-2 py-1.5 text-[9px] whitespace-nowrap text-text-dim"
+                          className="display px-2 py-1.5 text-[10px] whitespace-nowrap text-text-dim"
                         >
                           {cell}
                         </th>

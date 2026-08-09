@@ -151,7 +151,7 @@ export function SettingsScreen() {
                     <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">
                       {pack.name}
                     </span>
-                    <span className="display shrink-0 text-[9px] text-text-dim">
+                    <span className="display shrink-0 text-[10px] text-text-dim">
                       {pack.category}
                     </span>
                     <button

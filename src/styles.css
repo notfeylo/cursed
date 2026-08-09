@@ -91,9 +91,11 @@
   color-scheme: dark;
 }
 
-/* A faint grid, far enough back to read as texture rather than decoration.
-   Fixed attachment so it stays put while content scrolls over it — the surface
-   the app sits on, not part of the content. */
+/* A faint grid, used only behind the large cursor preview on Customise. It
+   gives that preview a sense of scale and shows where transparency is, which is
+   the one place in the app where that matters. It is deliberately no longer the
+   app's background: a repeating pattern behind everything flattens whatever sits
+   in front of it. */
 @utility circuit {
   background-image:
     linear-gradient(rgba(46, 139, 255, 0.05) 1px, transparent 1px),
@@ -267,11 +269,6 @@
 .mark-live .mark-seam {
   animation: mark-seam 5s ease-in-out infinite;
 }
-.mark-live .mark-spark {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: mark-spark 5s ease-in-out infinite;
-}
 
 @keyframes mark-breathe {
   0%,
@@ -291,38 +288,6 @@
   }
   50% {
     opacity: 0.7;
-  }
-}
-@keyframes mark-spark {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.55;
-  }
-  45% {
-    transform: scale(1.5);
-    opacity: 1;
-  }
-}
-
-/* The home screen's two drifting colour fields. Long, offset periods so the
-   pair never settles into an obvious loop. */
-@keyframes drift-a {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(38px, 26px) scale(1.12);
-  }
-}
-@keyframes drift-b {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1.08);
-  }
-  50% {
-    transform: translate(-30px, -34px) scale(1);
   }
 }
 

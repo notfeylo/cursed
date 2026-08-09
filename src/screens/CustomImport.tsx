@@ -124,7 +124,7 @@ export function CustomImport() {
               setImage(null);
               setPreviews([]);
             }}
-            className="display text-[9px] text-text-dim hover:text-text"
+            className="display text-[10px] text-text-dim hover:text-text"
           >
             CLEAR
           </button>
@@ -146,7 +146,7 @@ export function CustomImport() {
                 key={preset.value}
                 type="button"
                 onClick={() => setHotspot(presetHotspot(preset.value, image))}
-                className="display rounded-full border border-border px-2 py-1 text-[9px] text-text-dim transition-colors duration-150 hover:border-border-hi hover:text-text"
+                className="display rounded-full border border-border px-2 py-1 text-[10px] text-text-dim transition-colors duration-150 hover:border-border-hi hover:text-text"
               >
                 {preset.label}
               </button>
@@ -336,7 +336,7 @@ function HotspotPicker({
 function PreviewLadder({ previews }: { previews: Preview[] }) {
   return (
     <div className="rounded-sm border border-border bg-surface p-2">
-      <span className="display mb-2 block text-[9px] text-text-dim">ACTUAL SIZE</span>
+      <span className="display mb-2 block text-[10px] text-text-dim">ACTUAL SIZE</span>
       <div className="flex flex-wrap items-end gap-2">
         {previews.length === 0
           ? [32, 48, 64].map((size) => (
