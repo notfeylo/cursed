@@ -78,15 +78,49 @@ fn fracture(colour: &str) -> String {
 /// **Sigil** — the pointer, contained.
 ///
 /// A ring broken at two points so it reads as a mark rather than a loading
-/// spinner, with the pointer set inside it at reduced scale. Six units of stroke
-/// is 1.5 px at 16 px, which is the thinnest thing in any of these three.
+/// spinner, with the pointer set inside it.
+///
+/// This is the full-size form and it is used at **32 px and above**. Below that
+/// the ring, the gaps and the space between ring and pointer are all competing
+/// for the same two or three pixels and the whole thing silts up into a blob —
+/// see [`sigil_small`], which is what actually renders in a tray icon.
 fn sigil(colour: &str) -> String {
     wrap(&format!(
-        r##"<g fill="none" stroke="{colour}" stroke-width="6" stroke-linecap="butt">
-  <path d="M32 5 A27 27 0 0 1 59 32 A27 27 0 0 1 32 59"/>
-  <path d="M22.5 7.7 A27 27 0 0 0 7.7 22.5"/>
-  <path d="M5 32 A27 27 0 0 0 19.8 56.1"/>
+        r##"<g fill="none" stroke="{colour}" stroke-width="7" stroke-linecap="butt">
+  <path d="M32 4.5 A27.5 27.5 0 0 1 59.5 32 A27.5 27.5 0 0 1 32 59.5"/>
+  <path d="M21.4 6.6 A27.5 27.5 0 0 0 6.6 21.4"/>
+  <path d="M4.5 32 A27.5 27.5 0 0 0 19.3 56.9"/>
 </g>
-<path d="M24 19 L44 36 L35 37 L39.5 47.5 L34.5 49.5 L30 39 L24 44 Z" fill="{colour}"/>"##
+<path d="M23 17 L43.5 36.5 L33.5 37.5 L38.5 49 L33.5 51 L28.5 39.5 L23 44.5 Z" fill="{colour}"/>"##
     ))
+}
+
+/// **Sigil at small sizes** — the same idea, drawn so it survives.
+///
+/// A solid disc with the pointer knocked out of it. This is the standard answer
+/// to an icon that dies when it shrinks, and it is why macOS, Windows and
+/// Firefox all ship size-specific glyphs rather than one scaled artwork: below
+/// about 32 px there are not enough pixels for a stroke, a gap and a counter, so
+/// the only reliable currency left is solid mass against a hole.
+///
+/// Same reading as the full mark — a pointer, contained — with the figure and
+/// ground swapped. Every feature here is at least three units wide, which is one
+/// whole pixel at 16 px.
+pub fn sigil_small(colour: &str) -> String {
+    wrap(&format!(
+        r##"<path fill-rule="evenodd" fill="{colour}" d="M32 2 A30 30 0 1 1 31.99 2 Z M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z"/>"##
+    ))
+}
+
+/// The form to draw at a given pixel size.
+///
+/// The switch is at 32 px: the tray, the taskbar and a favicon all ask for 16
+/// and 24, and every one of them would otherwise get the version that does not
+/// survive.
+pub fn svg_for_size(direction: &str, colour: &str, size: u32) -> String {
+    if direction == "sigil" && size < 32 {
+        sigil_small(colour)
+    } else {
+        svg(direction, colour)
+    }
 }

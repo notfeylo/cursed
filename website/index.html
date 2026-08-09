@@ -40,31 +40,20 @@
               <stop offset="1" stop-color="#2e8bff" stop-opacity="0" />
             </radialGradient>
           </defs>
-          <path
-            class="logo-hex"
-            d="M32 5 L54 17.5 L54 46.5 L32 59 L10 46.5 L10 17.5 Z"
-            fill="url(#core)"
-            stroke="url(#hex)"
-            stroke-width="2.4"
-            stroke-linejoin="round"
-          />
-          <path
-            class="logo-seam"
-            d="M14 40 L50 26"
-            stroke="#5cb8ff"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            opacity="0.5"
-          />
+          <circle cx="32" cy="32" r="24" fill="url(#core)" />
+          <g class="logo-ring" fill="none" stroke="url(#hex)" stroke-width="7" stroke-linecap="butt">
+            <path d="M32 4.5 A27.5 27.5 0 0 1 59.5 32 A27.5 27.5 0 0 1 32 59.5" />
+            <path class="logo-seam" d="M21.4 6.6 A27.5 27.5 0 0 0 6.6 21.4" />
+            <path class="logo-seam" d="M4.5 32 A27.5 27.5 0 0 0 19.3 56.9" />
+          </g>
           <path
             class="logo-blade"
-            d="M23 15 L45 36 L33.5 37.2 L39.6 50 L34.2 52.4 L28.2 39.6 L23 45.4 Z"
+            d="M23 17 L43.5 36.5 L33.5 37.5 L38.5 49 L33.5 51 L28.5 39.5 L23 44.5 Z"
             fill="url(#blade)"
             stroke="#ffffff"
-            stroke-width="1.5"
+            stroke-width="1.2"
             stroke-linejoin="round"
           />
-          <circle class="logo-spark" cx="47" cy="19" r="2.6" fill="#ffffff" opacity="0.92" />
         </svg>
       </span>
       <span class="wordmark">Cursed</span>

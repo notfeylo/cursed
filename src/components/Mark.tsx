@@ -46,31 +46,41 @@ export function Mark({
         </radialGradient>
       </defs>
 
-      <path
-        className="mark-hex"
-        d="M32 5 L54 17.5 L54 46.5 L32 59 L10 46.5 L10 17.5 Z"
-        fill={`url(#${core})`}
-        stroke={`url(#${hex})`}
-        strokeWidth="2.4"
-        strokeLinejoin="round"
-      />
-      <path
-        className="mark-seam"
-        d="M14 40 L50 26"
-        stroke="var(--color-accent-hi)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        opacity="0.5"
-      />
-      <path
-        className="mark-blade"
-        d="M23 15 L45 36 L33.5 37.2 L39.6 50 L34.2 52.4 L28.2 39.6 L23 45.4 Z"
-        fill={`url(#${blade})`}
-        stroke="#ffffff"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <circle className="mark-spark" cx="47" cy="19" r="2.6" fill="#ffffff" opacity="0.92" />
+      {/* Below 32 px the ring's stroke, its gaps and the air around the pointer
+          are all fighting for the same two pixels, so the mark switches to a
+          solid disc with the pointer knocked out of it. Same reading — a
+          pointer, contained — with figure and ground swapped. This mirrors
+          `brand::small_mark_svg`, which is what goes into the .ico. */}
+      {size < 32 ? (
+        <path
+          fillRule="evenodd"
+          fill={`url(#${blade})`}
+          d="M32 2 A30 30 0 1 1 31.99 2 Z M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z"
+        />
+      ) : (
+        <>
+          <circle cx="32" cy="32" r="24" fill={`url(#${core})`} />
+          <g
+            className="mark-hex"
+            fill="none"
+            stroke={`url(#${hex})`}
+            strokeWidth="7"
+            strokeLinecap="butt"
+          >
+            <path d="M32 4.5 A27.5 27.5 0 0 1 59.5 32 A27.5 27.5 0 0 1 32 59.5" />
+            <path className="mark-seam" d="M21.4 6.6 A27.5 27.5 0 0 0 6.6 21.4" />
+            <path className="mark-seam" d="M4.5 32 A27.5 27.5 0 0 0 19.3 56.9" />
+          </g>
+          <path
+            className="mark-blade"
+            d="M23 17 L43.5 36.5 L33.5 37.5 L38.5 49 L33.5 51 L28.5 39.5 L23 44.5 Z"
+            fill={`url(#${blade})`}
+            stroke="#ffffff"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
     </svg>
   );
 }

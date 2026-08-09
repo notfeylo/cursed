@@ -4,10 +4,20 @@
 //! Keeping it here — and rendering the icon through our own SVG rasteriser —
 //! means the three can never drift into three slightly different logos.
 //!
-//! The mark is a **forge core**: a hexagonal chamber, a molten seam across it,
-//! and a pointer struck through the middle. It reads as a pointer at 16 px and
-//! as a piece of machinery at 512 px, which is the whole trick with an icon that
-//! has to live in a taskbar and on a store page.
+//! The mark is a **sigil**: a broken ring with a pointer set inside it — a
+//! pointer, contained. A containment mark rather than an occult one.
+//!
+//! It exists in two forms, and which one is drawn depends on the size:
+//!
+//! - **32 px and above** — the ring, with two gaps in it.
+//! - **Below 32 px** — a solid disc with the pointer knocked out of it.
+//!
+//! That is not a fallback, it is the design. Below about 32 px the ring stroke,
+//! its gaps and the space between ring and pointer are all competing for the
+//! same two or three pixels, and the whole thing silts up into a blob. Solid
+//! mass against a hole is the only currency that survives down there, which is
+//! why macOS, Windows and Firefox all ship size-specific glyphs instead of one
+//! scaled drawing. Verified by rasterising each size and reading the pixels.
 
 /// The mark on its own, transparent, in a 64×64 box.
 ///
@@ -40,24 +50,38 @@ pub fn mark_svg(accent: &str, accent_hi: &str, depth: bool) -> String {
     </radialGradient>
   </defs>
 
-  <!-- forge chamber -->
-  <path d="{HEX}" fill="url(#core)" stroke="url(#hex)" stroke-width="2.4" stroke-linejoin="round"/>
-  <!-- molten seam -->
-  <path d="M14 40 L50 26" stroke="{accent_hi}" stroke-width="1.6" stroke-linecap="round" opacity="0.5"/>
+  <!-- the containment ring, broken -->
+  <g fill="none" stroke="url(#hex)" stroke-width="7" stroke-linecap="butt">
+    <path d="{RING_MAIN}"/>
+    <path d="{RING_TOP}"/>
+    <path d="{RING_LEFT}"/>
+  </g>
+  <circle cx="32" cy="32" r="24" fill="url(#core)"/>
   {shadow}
-  <!-- the pointer, struck through the core -->
-  <path d="{ARROW}" fill="url(#blade)" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
-  <!-- spark -->
-  <circle cx="47" cy="19" r="2.6" fill="#ffffff" opacity="0.92"/>
+  <!-- the pointer, contained -->
+  <path d="{ARROW}" fill="url(#blade)" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
 </svg>"##
     )
 }
 
-/// Hexagonal chamber, flat-topped, centred in the box.
-const HEX: &str = "M32 5 L54 17.5 L54 46.5 L32 59 L10 46.5 L10 17.5 Z";
+/// The ring, in three arcs with two gaps. Seven units of stroke is the
+/// narrowest that still reads at 32 px.
+const RING_MAIN: &str = "M32 4.5 A27.5 27.5 0 0 1 59.5 32 A27.5 27.5 0 0 1 32 59.5";
+const RING_TOP: &str = "M21.4 6.6 A27.5 27.5 0 0 0 6.6 21.4";
+const RING_LEFT: &str = "M4.5 32 A27.5 27.5 0 0 0 19.3 56.9";
 
-/// The pointer. Sized so its tip sits inside the hexagon at every scale.
-const ARROW: &str = "M23 15 L45 36 L33.5 37.2 L39.6 50 L34.2 52.4 L28.2 39.6 L23 45.4 Z";
+/// The pointer, sized to sit inside the ring with clear air around it.
+const ARROW: &str = "M23 17 L43.5 36.5 L33.5 37.5 L38.5 49 L33.5 51 L28.5 39.5 L23 44.5 Z";
+
+/// Below 32 px: a solid disc with the pointer knocked out.
+///
+/// Every feature is at least three units wide, which is a whole pixel at 16 px.
+/// `evenodd` is what makes the pointer a hole rather than a second shape.
+pub fn small_mark_svg(colour: &str) -> String {
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><path fill-rule="evenodd" fill="{colour}" d="M32 2 A30 30 0 1 1 31.99 2 Z M24 15 L45 35.5 L34 36.5 L39.5 48.5 L33.5 51 L28 39 L24 44 Z"/></svg>"##
+    )
+}
 
 /// The full app icon: the mark on a rounded, bevelled tile.
 ///
@@ -111,11 +135,13 @@ fn inner_mark(accent: &str, accent_hi: &str, depth: bool) -> String {
     };
     format!(
         r##"<g>
-  <path d="{HEX}" fill="none" stroke="{accent_hi}" stroke-width="2.4" stroke-linejoin="round" opacity="0.9"/>
-  <path d="M14 40 L50 26" stroke="{accent_hi}" stroke-width="1.6" stroke-linecap="round" opacity="0.5"/>
+  <g fill="none" stroke="{accent_hi}" stroke-width="7" stroke-linecap="butt" opacity="0.95">
+    <path d="{RING_MAIN}"/>
+    <path d="{RING_TOP}"/>
+    <path d="{RING_LEFT}"/>
+  </g>
   {shadow}
-  <path d="{ARROW}" fill="{accent}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
-  <circle cx="47" cy="19" r="2.6" fill="#ffffff" opacity="0.92"/>
+  <path d="{ARROW}" fill="{accent}" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
 </g>"##
     )
 }

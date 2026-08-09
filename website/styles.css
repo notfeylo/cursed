@@ -512,19 +512,18 @@ footer {
 .mark {
   animation: mark-glow 5s ease-in-out infinite;
 }
-.mark svg .logo-hex,
-.mark svg .logo-spark {
+.mark svg .logo-ring,
+.mark svg .logo-blade {
   transform-box: fill-box;
   transform-origin: center;
 }
-.mark svg .logo-hex {
+.mark svg .logo-ring {
   animation: logo-breathe 5s ease-in-out infinite;
 }
+/* The two short arcs pulse, so the ring reads as holding something rather
+   than as a static outline. */
 .mark svg .logo-seam {
   animation: logo-seam 5s ease-in-out infinite;
-}
-.mark svg .logo-spark {
-  animation: logo-spark 5s ease-in-out infinite;
 }
 
 @keyframes mark-glow {
@@ -556,16 +555,6 @@ footer {
     opacity: 0.75;
   }
 }
-@keyframes logo-spark {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.55;
-  }
-  45% {
-    transform: scale(1.55);
-    opacity: 1;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
