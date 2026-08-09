@@ -214,6 +214,121 @@ fn logo_sheets(args: &[String]) {
     std::process::exit(0);
 }
 
+/// `genpacks --flatten <in> <out.png> <rrggbb>` composites an image onto a
+/// solid card, destroying its alpha.
+///
+/// Exists to manufacture the exact input people complain about: artwork that
+/// *had* transparency, saved by something that did not keep it. Cutting that
+/// back out is the whole job, and it cannot be tested without one.
+fn flatten(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+
+    let (Some(src), Some(dst)) = (args.get(2), args.get(3)) else {
+        eprintln!("usage: genpacks --flatten <in> <out.png> [rrggbb]");
+        std::process::exit(2);
+    };
+    let hex = args.get(4).cloned().unwrap_or_else(|| "ffffff".into());
+    let card = cursorforge_lib::util::parse_hex_color(&hex).unwrap_or([255, 255, 255]);
+
+    let decoded = match image::open(src) {
+        Ok(i) => i.to_rgba8(),
+        Err(e) => {
+            eprintln!("could not open {src}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (w, h) = (decoded.width(), decoded.height());
+    let source = match Bitmap::from_rgba(w, h, decoded.into_raw()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut out = Bitmap::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let [r, g, b, a] = source.pixel(x, y);
+            let a = a as u32;
+            let mix = |s: u8, d: u8| ((s as u32 * a + d as u32 * (255 - a)) / 255) as u8;
+            out.set_pixel(x, y, [mix(r, card[0]), mix(g, card[1]), mix(b, card[2]), 255]);
+        }
+    }
+
+    match out.to_png(image::codecs::png::CompressionType::Best) {
+        Ok(png) => {
+            let _ = std::fs::write(dst, &png);
+            println!("wrote {dst} ({w}x{h}) on #{hex}");
+        }
+        Err(e) => eprintln!("{e}"),
+    }
+    std::process::exit(0);
+}
+
+/// `genpacks --cutout <in> <out.png>` runs the real background remover.
+///
+/// The matte is covered by synthetic tests, but a synthetic test cannot tell you
+/// whether a photograph comes out clean. This writes the actual result so it can
+/// be looked at, and reports what survived: any pixel that is still opaque and
+/// still the background colour is a failure you can count.
+fn cutout(args: &[String]) {
+    use cursorforge_lib::build::{bitmap::Bitmap, matte};
+
+    let (Some(src), Some(dst)) = (args.get(2), args.get(3)) else {
+        eprintln!("usage: genpacks --cutout <in> <out.png>");
+        std::process::exit(2);
+    };
+    let decoded = match image::open(src) {
+        Ok(i) => i.to_rgba8(),
+        Err(e) => {
+            eprintln!("could not open {src}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (w, h) = (decoded.width(), decoded.height());
+    let mut bitmap = match Bitmap::from_rgba(w, h, decoded.into_raw()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+
+    let corner = bitmap.pixel(0, 0);
+    let report = matte::remove_background(&mut bitmap);
+
+    // Count what is still opaque and still looks like the original corner.
+    let mut residue = 0usize;
+    let mut kept = 0usize;
+    for y in 0..h {
+        for x in 0..w {
+            let p = bitmap.pixel(x, y);
+            if p[3] > 128 {
+                kept += 1;
+                let d = |a: u8, b: u8| (a as i32 - b as i32).abs();
+                if d(p[0], corner[0]).max(d(p[1], corner[1])).max(d(p[2], corner[2])) <= 40 {
+                    residue += 1;
+                }
+            }
+        }
+    }
+
+    println!("removed        {:.1}%", report.removed * 100.0);
+    println!("already alpha  {}", report.already_had_alpha);
+    println!("kept opaque    {kept} px");
+    println!("residue        {residue} px still the background colour and opaque");
+
+    match bitmap.to_png(image::codecs::png::CompressionType::Best) {
+        Ok(png) => match std::fs::write(dst, &png) {
+            Ok(()) => println!("wrote {dst}"),
+            Err(e) => eprintln!("could not write {dst}: {e}"),
+        },
+        Err(e) => eprintln!("{e}"),
+    }
+    std::process::exit(0);
+}
+
 /// `genpacks --shrink <in> <out> <max-dim>` prepares a bundled raster asset.
 ///
 /// A photographic backdrop arrives from a screenshot tool at full resolution
@@ -821,6 +936,12 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--shrink") {
         shrink_image(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--cutout") {
+        cutout(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--flatten") {
+        flatten(&args);
     }
     if args.get(1).map(String::as_str) == Some("--fetch-update") {
         // Downloads whatever the release feed is offering and checks it against

@@ -25,10 +25,47 @@ use tauri::{AppHandle, Manager};
 /// Resolves the pixel size to render at: the user's explicit choice, else
 /// whatever Windows' own accessibility slider is set to (PRD §5.2).
 fn effective_size(requested: u32) -> u32 {
-    if requested >= 32 {
-        requested.min(256)
-    } else {
-        cursor::engine::effective_size(settings::get().cursor_size)
+    // Zero means "not specified", and nothing else does.
+    //
+    // This used to treat anything under 32 as unspecified, which worked only
+    // while 32 was the smallest size on offer. Once the range opened to 10 px
+    // that sentinel started swallowing real requests: asking for 10 or 16
+    // silently fell back to the settings value, so the size control appeared to
+    // do nothing at the small end. A magic threshold that happens to sit at the
+    // bottom of the old range is not a sentinel, it is a collision waiting for
+    // the range to change.
+    if requested == 0 {
+        return cursor::engine::effective_size(settings::get().cursor_size);
+    }
+    requested.clamp(
+        crate::state::settings::MIN_CURSOR_PX,
+        crate::state::settings::MAX_CURSOR_PX,
+    )
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::effective_size;
+    use crate::state::settings::{MAX_CURSOR_PX, MIN_CURSOR_PX};
+
+    /// The regression: every size below 32 was discarded, so the small end of
+    /// the slider did nothing at all.
+    #[test]
+    fn a_small_size_is_honoured_rather_than_swallowed() {
+        for requested in [MIN_CURSOR_PX, 12, 16, 24, 31] {
+            assert_eq!(
+                effective_size(requested),
+                requested,
+                "{requested} px should survive"
+            );
+        }
+    }
+
+    #[test]
+    fn the_range_is_enforced_at_both_ends() {
+        assert_eq!(effective_size(1), MIN_CURSOR_PX);
+        assert_eq!(effective_size(9_999), MAX_CURSOR_PX);
+        assert_eq!(effective_size(64), 64);
     }
 }
 
@@ -830,9 +867,18 @@ mod tests {
     }
 
     #[test]
-    fn a_size_below_the_floor_falls_back_to_the_system_size() {
+    fn only_zero_means_unspecified() {
+        use crate::state::settings::{MAX_CURSOR_PX, MIN_CURSOR_PX};
+
         assert_eq!(effective_size(48), 48);
-        assert_eq!(effective_size(9_999), 256);
-        assert!(effective_size(0) >= 32);
+        assert_eq!(effective_size(9_999), MAX_CURSOR_PX);
+
+        // Zero is the sentinel, and it is the only one. This test used to
+        // assert that anything under 32 fell back to the system size, which was
+        // the bug: once the range opened to 10 px, that threshold silently
+        // swallowed every small request the slider could make.
+        let inherited = effective_size(0);
+        assert!((MIN_CURSOR_PX..=MAX_CURSOR_PX).contains(&inherited));
+        assert_eq!(effective_size(MIN_CURSOR_PX), MIN_CURSOR_PX);
     }
 }

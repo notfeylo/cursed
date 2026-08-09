@@ -109,6 +109,26 @@ pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
         }
     }
 
+    // Background the edge flood cannot reach.
+    //
+    // Flooding inward only finds background *connected to the border*. The hole
+    // in an O, the gap between two fingers, the space inside a handle — all of
+    // that is enclosed by the subject, so it survived and the cut-out came back
+    // with patches of the old card still in it. That is the "background colour
+    // is still there" complaint, and it is not a tolerance problem: those pixels
+    // were never considered.
+    //
+    // They are cleared on the tight tolerance rather than the soft band, so a
+    // region has to actually be the background colour, not merely resemble it.
+    enclose_background(bitmap, background, &mut cleared);
+
+    // Single pixels of noise inside an otherwise clean background.
+    //
+    // A JPEG leaves ringing around a hard edge, so the flood stops at scattered
+    // pixels that are a shade off. Left alone they read as dirt in the
+    // transparent area — the "small gaps" in reverse.
+    despeckle(&mut cleared, w, h);
+
     let removed = cleared.iter().filter(|c| **c).count();
 
     // Refusing to gut the image is part of the job. If almost everything
@@ -192,6 +212,87 @@ pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
     log::debug!("{softened} pixels graded rather than cut");
 
     MatteReport { removed: fraction, already_had_alpha: false }
+}
+
+
+/// Clears regions of background colour that the border flood never reached.
+///
+/// Deliberately uses the tight tolerance. The soft band exists for pixels that
+/// are *part* background, which only makes sense against a real boundary; using
+/// it here would eat any subject colour that happened to sit near the
+/// background's.
+fn enclose_background(bitmap: &Bitmap, background: [u8; 4], cleared: &mut [bool]) {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let mut visited = vec![false; (w * h) as usize];
+
+    for sy in 0..h {
+        for sx in 0..w {
+            let start = (sy * w + sx) as usize;
+            if cleared[start] || visited[start] {
+                continue;
+            }
+            if distance(bitmap.pixel(sx, sy), background) > TOLERANCE {
+                continue;
+            }
+
+            // Gather the whole connected region before deciding, so the decision
+            // is made once for the region rather than per pixel.
+            let mut region = Vec::new();
+            let mut stack = vec![(sx, sy)];
+            visited[start] = true;
+            while let Some((x, y)) = stack.pop() {
+                region.push((x, y));
+                for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let (nx, ny) = (nx as u32, ny as u32);
+                    let i = (ny * w + nx) as usize;
+                    if visited[i] || cleared[i] {
+                        continue;
+                    }
+                    if distance(bitmap.pixel(nx, ny), background) <= TOLERANCE {
+                        visited[i] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+
+            for (x, y) in region {
+                cleared[(y * w + x) as usize] = true;
+            }
+        }
+    }
+}
+
+/// Clears lone opaque pixels stranded inside the background.
+///
+/// Only a pixel whose four neighbours are all background. Anything larger is
+/// part of something, and guessing about it is how a cut-out loses detail it
+/// should have kept.
+fn despeckle(cleared: &mut [bool], w: u32, h: u32) {
+    let mut lonely = Vec::new();
+    for y in 1..h.saturating_sub(1) {
+        for x in 1..w.saturating_sub(1) {
+            let i = (y * w + x) as usize;
+            if cleared[i] {
+                continue;
+            }
+            let neighbours = [
+                ((y - 1) * w + x) as usize,
+                ((y + 1) * w + x) as usize,
+                (y * w + x - 1) as usize,
+                (y * w + x + 1) as usize,
+            ];
+            if neighbours.iter().all(|&n| cleared[n]) {
+                lonely.push(i);
+            }
+        }
+    }
+    for i in lonely {
+        cleared[i] = true;
+    }
 }
 
 /// The dominant colour around the border.
@@ -331,18 +432,26 @@ mod tests {
         assert_eq!(b.pixel(16, 20), before, "nothing was touched");
     }
 
-    /// The subject's own colour appearing in the middle must survive, even when
-    /// it is exactly the background colour. Only pixels connected to the edge
-    /// are background.
+    /// Background enclosed by the subject is still background.
+    ///
+    /// This reverses an earlier decision here, deliberately. The first version
+    /// protected any region the border flood could not reach, on the theory that
+    /// a subject might legitimately contain the background's colour. In practice
+    /// that is what left patches of the old card inside a cut-out — the hole in
+    /// an O, the gap between two fingers — and "there is still white in it" is a
+    /// bug report, not a design choice.
+    ///
+    /// The safeguard is the tolerance: an enclosed region has to actually be the
+    /// background colour, not merely resemble it.
     #[test]
-    fn a_matching_colour_enclosed_by_the_subject_survives() {
+    fn background_enclosed_by_the_subject_is_removed_too() {
         let mut b = solid(32, 32, [255, 255, 255, 255]);
         for y in 8..24 {
             for x in 8..24 {
                 b.set_pixel(x, y, [10, 10, 10, 255]);
             }
         }
-        // A white window in the middle of the dark square.
+        // A hole in the middle of the subject, the colour of the card behind it.
         for y in 14..18 {
             for x in 14..18 {
                 b.set_pixel(x, y, [255, 255, 255, 255]);
@@ -351,7 +460,28 @@ mod tests {
         remove_background(&mut b);
 
         assert_eq!(b.alpha(0, 0), 0, "the outside went");
-        assert_eq!(b.alpha(15, 15), 255, "the enclosed white did not");
+        assert_eq!(b.alpha(15, 15), 0, "and so did the hole");
+        assert_eq!(b.alpha(10, 10), 255, "the subject itself is untouched");
+    }
+
+    /// A subject colour that is merely *near* the background must survive being
+    /// enclosed, or a cut-out loses its own light areas.
+    #[test]
+    fn an_enclosed_colour_that_only_resembles_the_background_survives() {
+        let mut b = solid(32, 32, [255, 255, 255, 255]);
+        for y in 8..24 {
+            for x in 8..24 {
+                b.set_pixel(x, y, [10, 10, 10, 255]);
+            }
+        }
+        // Well outside TOLERANCE of white, so it is the subject's own colour.
+        for y in 14..18 {
+            for x in 14..18 {
+                b.set_pixel(x, y, [170, 170, 170, 255]);
+            }
+        }
+        remove_background(&mut b);
+        assert_eq!(b.alpha(15, 15), 255, "a near-miss is not the background");
     }
 
     /// An image that is entirely background should come back untouched rather

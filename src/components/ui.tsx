@@ -45,6 +45,13 @@ export function Button({
   );
 }
 
+/**
+ * A row inside a card, separated from the one above it.
+ *
+ * Stacked toggles with no rule between them read as a single block of text, and
+ * which label belongs to which switch stops being obvious. The divider is on the
+ * row rather than the container so the first row does not get a stray line.
+ */
 export function Toggle({
   checked,
   onChange,
@@ -62,7 +69,7 @@ export function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center gap-3 py-2 text-left"
+      className="flex w-full items-center gap-4 border-t border-border/60 py-3 text-left first:border-t-0"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[12px] text-text">{label}</span>
@@ -105,7 +112,7 @@ export function Slider({
   return (
     <div className="w-full">
       {label && (
-        <div className="mb-1 flex items-baseline justify-between">
+        <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[11px] text-text-muted">{label}</span>
           <span className="mono text-[11px] text-accent-hi">
             {value}
@@ -136,10 +143,10 @@ export function Field({
   hint?: string;
 }) {
   return (
-    <label className="block py-2">
-      <span className="mb-1 block text-[11px] text-text-muted">{label}</span>
+    <label className="block py-3">
+      <span className="mb-2 block text-[11px] text-text-muted">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] text-text-dim">{hint}</span>}
+      {hint && <span className="mt-2 block text-[11px] text-text-dim">{hint}</span>}
     </label>
   );
 }
@@ -197,7 +204,7 @@ export function Select<T extends string>({
 
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <h2 className="display mt-5 mb-1 text-[10px] text-text-dim first:mt-0">{children}</h2>
+    <h2 className="display mt-6 mb-2 text-[11px] text-text-muted first:mt-0">{children}</h2>
   );
 }
 
@@ -209,7 +216,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cx("panel rounded-sm border border-border p-3", className)}>{children}</div>
+    <div className={cx("panel rounded-sm border border-border p-4", className)}>{children}</div>
   );
 }
 
@@ -225,7 +232,7 @@ export function Banner({
   return (
     <div
       className={cx(
-        "flex items-start gap-2 rounded-xs border px-3 py-2 text-[11px]",
+        "flex items-start gap-3 rounded-xs border px-3 py-2.5 text-[11px]",
         tone === "error"
           ? "border-danger/40 bg-danger/10 text-danger"
           : "border-success/40 bg-success/10 text-success",

@@ -227,7 +227,7 @@ function Tile({
       onMouseLeave={onLeave}
       onClick={onClick}
       title={pack.name}
-      className="group relative flex aspect-square flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-px hover:border-accent hover:bg-elevated"
+      className="group relative flex aspect-square flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 tile hover:tile-hover hover:bg-elevated"
     >
       {pack.animated && (
         <span className="absolute top-1.5 right-1.5 text-accent-hi" title="Animated">

@@ -150,7 +150,7 @@ function Tile({
     <button
       type="button"
       onClick={onClick}
-      className="panel flex flex-col items-center justify-center gap-1.5 rounded-sm border border-border py-3 text-text-dim transition-all duration-150 ease-out hover:-translate-y-px hover:border-accent hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+      className="panel flex flex-col items-center justify-center gap-1.5 rounded-sm border border-border py-3 text-text-dim tile hover:tile-hover hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
     >
       {icon}
       <span className="display text-[11px]">{label}</span>

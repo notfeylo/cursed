@@ -83,7 +83,7 @@ export function About() {
               key={d.kind}
               type="button"
               onClick={() => setDoc(d.kind)}
-              className="panel group flex items-center gap-3 rounded-sm border border-border px-3 py-2.5 text-left transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-px hover:border-accent"
+              className="panel group flex items-center gap-3 rounded-sm border border-border px-3 py-2.5 text-left tile hover:tile-hover"
             >
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xs border border-border bg-bg text-text-dim transition-colors duration-150 group-hover:border-accent/50 group-hover:text-accent-hi">
                 {d.icon}

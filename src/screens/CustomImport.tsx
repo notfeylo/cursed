@@ -143,6 +143,7 @@ export function CustomImport() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <DropZone busy={busy} onBrowse={() => void browse()} />
           <CustomLibrary />
+          <AcceptedFormats />
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -249,22 +250,78 @@ function presetHotspot(
 
 function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
   return (
-    <div className="flex flex-1 items-center justify-center p-4">
+    <div className="p-4">
+      {/* One invitation and nothing else inside the target.
+          The format list used to sit under the label inside the same button, so
+          three unrelated lines of text competed at the centre of the screen and
+          the actual instruction was the least prominent of them. The list is
+          reference material — it belongs at the bottom of the screen, out of the
+          way, not in the middle of the thing you are meant to click. */}
       <button
         type="button"
         onClick={onBrowse}
-        className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-sm border border-dashed border-border-hi bg-surface/40 transition-colors duration-150 hover:border-accent hover:bg-elevated/40"
+        aria-busy={busy}
+        className="tile hover:tile-hover flex h-44 w-full flex-col items-center justify-center gap-4 rounded-sm border border-dashed border-border-hi bg-surface/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
       >
-        <span className="grid h-12 w-12 place-items-center rounded-full border border-border-hi text-text-muted">
-          <Plus size={20} />
+        <span className="grid h-14 w-14 place-items-center rounded-full border border-border-hi text-text-muted">
+          <Plus size={22} strokeWidth={1.5} />
         </span>
-        <span className="text-[12px] text-text-muted">
-          {busy ? "Reading image…" : "Drop a PNG — or click to browse"}
+        <span className="text-[14px] text-text">
+          {busy ? "Reading image…" : "Drop an image or GIF"}
         </span>
-        <span className="text-[11px] text-text-dim">
-          PNG · JPEG · WebP · BMP · GIF — up to 20 MB
-        </span>
+        <span className="text-[11px] text-text-dim">or click to browse</span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * What the importer accepts, kept at the foot of the screen.
+ *
+ * It is reference material: worth being able to check, never worth competing
+ * with the one thing the screen is asking you to do.
+ */
+function AcceptedFormats() {
+  const stills = ["PNG", "JPEG", "WebP", "BMP", "ICO", "TIFF"];
+  const animated = ["GIF", "APNG"];
+
+  return (
+    <div className="border-t border-border px-4 py-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <span className="display text-[11px] text-text-muted">ACCEPTED</span>
+        <span className="mono text-[11px] text-text-dim">up to 20 MB</span>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mono w-16 shrink-0 text-[11px] text-text-dim">still</span>
+          {stills.map((format) => (
+            <span
+              key={format}
+              className="mono rounded-full border border-border px-3 py-1 text-[11px] text-text-muted"
+            >
+              {format}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mono w-16 shrink-0 text-[11px] text-text-dim">animated</span>
+          {animated.map((format) => (
+            <span
+              key={format}
+              className="mono rounded-full border border-accent/40 bg-accent-dim/40 px-3 py-1 text-[11px] text-accent-hi"
+            >
+              {format}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+        Backgrounds are removed automatically. Anything that already has
+        transparency is left exactly as it is.
+      </p>
     </div>
   );
 }
@@ -590,7 +647,7 @@ function CustomLibrary() {
             type="button"
             title={item.name}
             onClick={() => select(item)}
-            className="panel group flex min-w-0 flex-col items-center gap-2 rounded-sm border border-border p-3 transition-all duration-150 ease-out hover:-translate-y-px hover:border-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            className="panel group flex min-w-0 flex-col items-center gap-2 rounded-sm border border-border p-3 tile hover:tile-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
           >
             <span className="grid h-12 w-12 shrink-0 place-items-center">
               {item.preview ? (
