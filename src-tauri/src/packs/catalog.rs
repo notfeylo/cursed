@@ -169,8 +169,9 @@ fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBu
     let (hx, hy) = art::hotspot(role);
     let bytes = if animated {
         // `.ani` has no directory of resolutions, so it is built at the one size
-        // Windows is currently drawing (PRD §5.4).
-        let size = pipeline::nearest_size(spec.size);
+        // Windows is currently drawing (PRD §5.4) — which for the hand and the
+        // I-beam is capped, since those do not scale with the pointer.
+        let size = pipeline::nearest_size(role.size_from(spec.size));
         let frames: AppResult<Vec<(Bitmap, u32)>> = (0..ANIMATION_FRAMES)
             .map(|i| {
                 let phase = i as f32 / ANIMATION_FRAMES as f32;

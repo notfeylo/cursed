@@ -239,6 +239,16 @@ export function SettingsScreen() {
                 Follow the Windows size again
               </button>
             )}
+
+            {/* Said plainly, because otherwise it reads as the slider being
+                broken rather than as a decision. */}
+            {(settings.cursorSize ?? systemSize) > 32 && (
+              <p className="mt-2 text-[11px] leading-relaxed text-text-dim">
+                The link hand and the text I-beam stay at 32px. A pointer this
+                size is fine to aim with; an I-beam this size cannot be placed
+                between two characters.
+              </p>
+            )}
           </div>
 
           <Field label="Accent / tint colour">

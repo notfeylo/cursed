@@ -211,7 +211,11 @@ pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
 pub fn apply_live(set: &CursorSet, size: u32) -> AppResult<()> {
     let mut failures = Vec::new();
     for (role, path) in &set.files {
-        if let Err(e) = set_role(*role, path, size) {
+        // Per role, not one size for the set. A static `.cur` carries the whole
+        // resolution ladder, so which image Windows draws is decided by the size
+        // asked for here — passing the pointer's size would hand back a 128 px
+        // I-beam out of a file that also contains a 32 px one.
+        if let Err(e) = set_role(*role, path, role.size_from(size)) {
             failures.push(format!("{role}: {e}"));
         }
     }

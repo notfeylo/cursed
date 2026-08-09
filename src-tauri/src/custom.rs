@@ -321,7 +321,11 @@ pub fn build_set(
         ApplyMode::All => &ALL_ROLES,
     };
     for role in roles {
-        set.insert(*role, file.clone());
+        // The hand and the I-beam do not grow with the pointer, so for an
+        // animated custom cursor they take the file built at their own size
+        // rather than the pointer's.
+        let sized = file_for(cursor_id, role.size_from(spec.size)).unwrap_or_else(|_| file.clone());
+        set.insert(*role, sized);
     }
     Ok(set)
 }

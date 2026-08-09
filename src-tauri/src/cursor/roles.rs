@@ -49,6 +49,13 @@ pub const ALL_ROLES: [Role; 17] = [
     Role::Person,
 ];
 
+/// The size at which the link hand and the text I-beam stop growing.
+///
+/// 32 px is the Windows base metric — the size these have always been on a
+/// default install, and the size at which an I-beam still sits cleanly between
+/// two characters.
+pub const UNSCALED_ROLE_PX: u32 = 32;
+
 /// The roles a "Recommended" custom-cursor application touches.
 pub const RECOMMENDED_ROLES: [Role; 3] = [Role::Arrow, Role::Hand, Role::Crosshair];
 
@@ -114,6 +121,27 @@ impl Role {
         matches!(self, Role::NWPen | Role::Pin | Role::Person)
     }
 
+    /// The size this role should actually be drawn at.
+    ///
+    /// The size control scales **the pointer**. It does not scale the link hand
+    /// or the text I-beam, and that is deliberate rather than an oversight.
+    ///
+    /// Those two are tools, not the pointer wearing a hat. A 128 px I-beam
+    /// cannot be placed between two characters — the thing it exists to do — and
+    /// a hand blown up to match reads as a slab covering whatever it is hovering
+    /// over. Windows scales every role together, which is why a large pointer
+    /// has always come with those side effects.
+    ///
+    /// It is a cap rather than a fixed value, so choosing a *small* pointer does
+    /// not leave a comparatively enormous hand behind: at 10 px everything is
+    /// 10 px, and only growth past the comfortable size is held back.
+    pub fn size_from(self, requested: u32) -> u32 {
+        match self {
+            Role::Hand | Role::IBeam => requested.min(UNSCALED_ROLE_PX),
+            _ => requested,
+        }
+    }
+
     /// Filename stem used for this role inside a pack directory.
     pub const fn file_stem(self) -> &'static str {
         self.registry_value()
@@ -166,6 +194,32 @@ impl std::fmt::Display for Role {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The size control scales the pointer. A 128 px I-beam cannot be placed
+    /// between two characters, and a hand blown up to match covers whatever it
+    /// is hovering over.
+    #[test]
+    fn the_hand_and_the_ibeam_stop_growing_with_the_pointer() {
+        assert_eq!(Role::Arrow.size_from(128), 128);
+        assert_eq!(Role::Hand.size_from(128), UNSCALED_ROLE_PX);
+        assert_eq!(Role::IBeam.size_from(128), UNSCALED_ROLE_PX);
+
+        // Every other role still follows the pointer, including the ones that
+        // are the pointer wearing a hat.
+        for role in [Role::Wait, Role::AppStarting, Role::Help, Role::SizeAll] {
+            assert_eq!(role.size_from(96), 96, "{role} should follow the pointer");
+        }
+    }
+
+    /// It is a cap, not a fixed size. Choosing a small pointer must not leave a
+    /// comparatively enormous hand behind it.
+    #[test]
+    fn a_small_pointer_does_not_keep_a_full_size_hand() {
+        for requested in [10u32, 16, 24, 32] {
+            assert_eq!(Role::Hand.size_from(requested), requested);
+            assert_eq!(Role::IBeam.size_from(requested), requested);
+        }
+    }
     use std::collections::HashSet;
 
     #[test]
