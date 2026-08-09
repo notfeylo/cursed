@@ -442,6 +442,40 @@ mod tests {
     /// A user's imports live in their own `%APPDATA%`, so they cannot be what
     /// makes the catalog non-empty for anybody else. Only the compiled-in packs
     /// can, and this asserts they are actually offered.
+    /// The regression that made animated packs sit still for half a minute.
+    ///
+    /// An animated pack builds `.ani` files, and those have to survive the live
+    /// layer's loader with their frames intact. Applying one through the static
+    /// path installs a frozen first frame over the animated cursor Windows had
+    /// just loaded from the registry, and nothing moves until the watchdog
+    /// reloads the scheme.
+    ///
+    /// This builds a real animated pack and puts every file it produces through
+    /// the same loader `set_role` will use.
+    #[test]
+    fn an_animated_pack_produces_files_that_load_as_animated() {
+        let pack = styles::all()
+            .into_iter()
+            .find(|p| p.animated)
+            .expect("the catalog ships animated packs");
+
+        let set = build_set(pack.id, &spec()).expect("an animated pack builds");
+
+        let mut checked = 0usize;
+        for (role, path) in &set.files {
+            if !crate::cursor::engine::is_animated(path) {
+                continue;
+            }
+            assert!(
+                crate::cursor::engine::verify_loadable(path).is_ok(),
+                "{role} of {} did not load as an animated cursor",
+                pack.id
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "{} produced no .ani files at all", pack.id);
+    }
+
     #[test]
     fn the_built_in_catalog_is_never_empty() {
         // Deliberately goes through the same call the catalog screen makes,

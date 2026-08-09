@@ -15,8 +15,8 @@ use std::path::Path;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CopyIcon, DestroyCursor, LoadImageW, SetSystemCursor, HCURSOR, HICON, IMAGE_CURSOR,
-    LR_DEFAULTSIZE, LR_LOADFROMFILE, SYSTEM_CURSOR_ID,
+    CopyIcon, DestroyCursor, LoadCursorFromFileW, LoadImageW, SetSystemCursor, HCURSOR, HICON,
+    IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, SYSTEM_CURSOR_ID,
 };
 
 fn wide(path: &Path) -> Vec<u16> {
@@ -24,6 +24,62 @@ fn wide(path: &Path) -> Vec<u16> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+/// Whether this file is an animated cursor, which needs a different loader.
+pub fn is_animated(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("ani"))
+}
+
+/// Installs an animated cursor for one role, preserving its frames.
+///
+/// Deliberately does three things differently from the static path, and each one
+/// matters:
+///
+///  * `LoadCursorFromFileW`, not `LoadImageW`. It is the function documented for
+///    cursor files and it keeps the frame list. `LoadImageW` with a requested
+///    size has to rescale, an `.ani` cannot be rescaled, and what comes back is
+///    a single frame.
+///  * **No size.** There is nothing to choose between — an `.ani` holds one
+///    resolution, which is why the build step renders it at the target size
+///    rather than shipping a ladder.
+///  * **No `CopyIcon`.** The duplicate it returns is a still. The handle goes
+///    straight to `SetSystemCursor`, which takes ownership of it.
+fn set_animated_role(role: Role, path: &Path) -> AppResult<()> {
+    let wide_path = wide(path);
+
+    // SAFETY: `wide_path` is a NUL-terminated UTF-16 buffer that outlives the
+    // call, and the function only reads the file.
+    let cursor = unsafe { LoadCursorFromFileW(PCWSTR(wide_path.as_ptr())) }.map_err(|e| {
+        AppError::Win32(format!(
+            "{} could not be loaded as an animated cursor ({})",
+            path.file_name().unwrap_or_default().to_string_lossy(),
+            e.message()
+        ))
+    })?;
+
+    // SAFETY: ownership of `cursor` transfers to `SetSystemCursor` when it
+    // succeeds, so it must not be destroyed here on the happy path.
+    let result = unsafe { SetSystemCursor(cursor, SYSTEM_CURSOR_ID(role.ocr_id())) };
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // The call failed, so ownership did not transfer and the handle is
+            // still ours to release.
+            unsafe { DestroyCursor(cursor).ok() };
+            if role.live_layer_is_best_effort() {
+                Ok(())
+            } else {
+                Err(AppError::Win32(format!(
+                    "{role} could not be applied: {}",
+                    crate::error::describe_win32(&e)
+                )))
+            }
+        }
+    }
 }
 
 /// Loads a cursor file at a specific pixel size.
@@ -66,6 +122,24 @@ fn load(path: &Path, size: u32) -> AppResult<HANDLE> {
 /// accept. This is the difference between a clear error message and a machine
 /// left with an invisible pointer.
 pub fn verify_loadable(path: &Path) -> AppResult<()> {
+    // Verified through the same loader that will apply it. Checking an `.ani`
+    // with `LoadImageW` proves only that a still frame can be read out of it,
+    // which is not the question being asked.
+    if is_animated(path) {
+        let wide_path = wide(path);
+        // SAFETY: NUL-terminated buffer that outlives the call; read-only.
+        let cursor = unsafe { LoadCursorFromFileW(PCWSTR(wide_path.as_ptr())) }.map_err(|e| {
+            AppError::Win32(format!(
+                "{} is not a valid animated cursor ({})",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                e.message()
+            ))
+        })?;
+        // SAFETY: we own it; nothing else has taken it.
+        unsafe { DestroyCursor(cursor).ok() };
+        return Ok(());
+    }
+
     let handle = load(path, 0)?;
     // SAFETY: we own `handle` — nothing else has taken it — so destroying it here
     // is correct and required to avoid leaking a GDI object per verification.
@@ -81,6 +155,19 @@ pub fn verify_loadable(path: &Path) -> AppResult<()> {
 /// the session's cursor table. So we give it a `CopyIcon` duplicate and destroy
 /// our own original — every role, every apply, no exceptions.
 pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
+    // An animated cursor takes the other route, and has to.
+    //
+    // Applying an animated pack used to install a frozen first frame *over* the
+    // animated cursor Windows had already loaded from the registry moments
+    // earlier, because both `LoadImageW`-with-a-size and `CopyIcon` flatten an
+    // `.ani`. The animation only came back when the watchdog next reloaded the
+    // scheme — which is what the half-minute pause before anything moved
+    // actually was. The pack was never static; it was being flattened after the
+    // fact.
+    if is_animated(path) {
+        return set_animated_role(role, path);
+    }
+
     let original = load(path, size)?;
 
     // SAFETY: `original` is a live cursor handle we own. `CopyIcon` returns an
@@ -167,5 +254,33 @@ mod tests {
         std::fs::write(&path, b"this is plainly not a cursor").unwrap();
         assert!(verify_loadable(&path).is_err());
         let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[cfg(test)]
+mod animated_tests {
+    use super::*;
+
+    #[test]
+    fn only_ani_files_take_the_animated_path() {
+        assert!(is_animated(Path::new(r"C:\x\arrow.ani")));
+        assert!(is_animated(Path::new(r"C:\x\ARROW.ANI")), "extension is case-insensitive");
+        assert!(!is_animated(Path::new(r"C:\x\arrow.cur")));
+        assert!(!is_animated(Path::new(r"C:\x\arrow")));
+        // A name that merely contains "ani" is not an animated cursor.
+        assert!(!is_animated(Path::new(r"C:\x\animated-looking.cur")));
+    }
+
+    /// The regression this guards: an animated cursor applied through the
+    /// static path is flattened to its first frame, and the pack only starts
+    /// moving when the watchdog next reloads the scheme from the registry.
+    #[test]
+    fn a_real_animated_cursor_loads_with_its_frames_intact() {
+        let stock = Path::new(r"C:\Windows\Cursors\aero_busy.ani");
+        if !stock.exists() {
+            return; // not every Windows install ships the Aero set
+        }
+        assert!(is_animated(stock));
+        assert!(verify_loadable(stock).is_ok(), "Windows must accept its own busy cursor");
     }
 }
