@@ -70,13 +70,10 @@ pub fn stage(bytes: Vec<u8>) -> AppResult<ImportedImage> {
     // relative to each other and the hotspot means something different per frame.
     let normalised = match source {
         Source::Static(bitmap) => Source::Static(pipeline::prepare_master(&bitmap)?),
-        Source::Animated(frames) => {
-            let mut out = Vec::with_capacity(frames.len());
-            for (bitmap, delay) in frames {
-                out.push((bitmap.squared().padded(1), delay));
-            }
-            Source::Animated(out)
-        }
+        // Animations go through the same background removal as stills. They
+        // used to skip it entirely, so a GIF with a white card behind it became
+        // a cursor with a white card behind it.
+        Source::Animated(frames) => Source::Animated(pipeline::prepare_animation(&frames)?),
     };
 
     let first = normalised.first()?.clone();
@@ -117,8 +114,12 @@ fn take_staged(token: &str) -> AppResult<Source> {
 }
 
 /// Renders the preview ladder for a staged image without writing anything.
-pub fn preview(token: &str, outline: bool) -> AppResult<Vec<Preview>> {
-    let source = take_staged(token)?;
+pub fn preview(
+    token: &str,
+    outline: bool,
+    transform: &pipeline::Transform,
+) -> AppResult<Vec<Preview>> {
+    let source = transformed(take_staged(token)?, transform);
     let finish = Finish {
         tint: None,
         opacity: 1.0,
@@ -128,6 +129,26 @@ pub fn preview(token: &str, outline: bool) -> AppResult<Vec<Preview>> {
         .into_iter()
         .map(|(size, data_uri)| Preview { size, data_uri })
         .collect())
+}
+
+/// Applies the user's edits to every frame.
+///
+/// Every frame, not just the first: a flipped animation whose later frames were
+/// left alone would jump on the second frame, and that is the kind of fault that
+/// only shows up once the cursor is already applied.
+fn transformed(source: Source, transform: &pipeline::Transform) -> Source {
+    if transform.is_identity() {
+        return source;
+    }
+    match source {
+        Source::Static(bitmap) => Source::Static(transform.apply(&bitmap)),
+        Source::Animated(frames) => Source::Animated(
+            frames
+                .into_iter()
+                .map(|(bitmap, delay)| (transform.apply(&bitmap), delay))
+                .collect(),
+        ),
+    }
 }
 
 /// Where a custom cursor's files live. Resolving a location and creating one
@@ -146,8 +167,9 @@ pub fn build(
     hotspot: (f32, f32),
     outline: bool,
     speed: f32,
+    transform: &pipeline::Transform,
 ) -> AppResult<BuiltCursor> {
-    let source = take_staged(token)?;
+    let source = transformed(take_staged(token)?, transform);
     let id = format!("{}-{}", paths::slugify(name), &uuid::Uuid::new_v4().to_string()[..8]);
     let dir = cursor_dir(&id)?;
     std::fs::create_dir_all(&dir)?;

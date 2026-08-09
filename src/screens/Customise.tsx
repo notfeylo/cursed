@@ -167,14 +167,14 @@ export function Customise() {
           <Slider
             label="CURSOR SIZE"
             suffix="px"
-            min={32}
-            max={256}
-            step={8}
+            min={10}
+            max={128}
+            step={2}
             value={size}
             onChange={setSize}
           />
           <div className="mt-1 flex flex-wrap gap-1">
-            {[32, 48, 64, 96, 128].map((preset) => (
+            {[10, 16, 24, 32, 48, 64, 96, 128].map((preset) => (
               <button
                 key={preset}
                 type="button"

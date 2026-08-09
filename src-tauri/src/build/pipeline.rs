@@ -236,6 +236,112 @@ pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
     Ok(trimmed.squared().padded(1))
 }
 
+/// Geometric and tonal edits applied to a user's own artwork before it becomes
+/// a cursor.
+///
+/// Order matters and is fixed here rather than left to the caller: crop, then
+/// rotate, then flip, then invert. Cropping first means the rectangle the user
+/// drew on the preview is the rectangle taken, regardless of what is done to it
+/// afterwards; inverting last means it applies to whatever survived.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Transform {
+    /// Quarter turns clockwise, 0–3. Right angles only — an arbitrary angle
+    /// needs resampling, and at cursor sizes that softens every edge.
+    pub quarter_turns: u32,
+    pub flip_h: bool,
+    pub flip_v: bool,
+    pub invert: bool,
+    /// Crop rectangle in fractions of the image, or `None` for the whole thing.
+    pub crop: Option<[f32; 4]>,
+}
+
+impl Transform {
+    pub fn is_identity(&self) -> bool {
+        self.quarter_turns % 4 == 0
+            && !self.flip_h
+            && !self.flip_v
+            && !self.invert
+            && self.crop.is_none()
+    }
+
+    pub fn apply(&self, bitmap: &Bitmap) -> Bitmap {
+        let mut out = match self.crop {
+            Some([x0, y0, x1, y1]) => bitmap.cropped(x0, y0, x1, y1),
+            None => bitmap.clone(),
+        };
+        if self.quarter_turns % 4 != 0 {
+            out = out.rotated(self.quarter_turns);
+        }
+        if self.flip_h {
+            out = out.flipped_h();
+        }
+        if self.flip_v {
+            out = out.flipped_v();
+        }
+        if self.invert {
+            out = out.inverted();
+        }
+        out
+    }
+}
+
+
+/// Prepares every frame of an animation as one unit.
+///
+/// An animation cannot use `prepare_master` per frame. That trims each frame to
+/// its own content, so a frame where the subject is smaller comes back a
+/// different size and shifted — the cursor jitters, and the hotspot means
+/// something different on every frame.
+///
+/// So the background is removed from each frame independently, then the
+/// *union* of what survived decides one rectangle, and every frame is cropped to
+/// that same rectangle. Frames stay registered with each other and the hotspot
+/// keeps its meaning.
+pub fn prepare_animation(frames: &[(Bitmap, u32)]) -> AppResult<Vec<(Bitmap, u32)>> {
+    if frames.is_empty() {
+        return Err(AppError::invalid("the animation has no frames"));
+    }
+
+    let cut: Vec<(Bitmap, u32)> = frames
+        .iter()
+        .map(|(bitmap, delay)| {
+            let mut copy = bitmap.clone();
+            crate::build::matte::remove_background(&mut copy);
+            (copy, *delay)
+        })
+        .collect();
+
+    // One rectangle for the whole animation: the union of every frame's content.
+    let mut bounds: Option<(u32, u32, u32, u32)> = None;
+    for (bitmap, _) in &cut {
+        let Some((x0, y0, x1, y1)) = bitmap.opaque_bounds() else {
+            continue;
+        };
+        bounds = Some(match bounds {
+            None => (x0, y0, x1, y1),
+            Some((ax0, ay0, ax1, ay1)) => {
+                (ax0.min(x0), ay0.min(y0), ax1.max(x1), ay1.max(y1))
+            }
+        });
+    }
+
+    let Some((x0, y0, x1, y1)) = bounds else {
+        return Err(AppError::invalid(
+            "every frame is completely transparent, so there is nothing to make a cursor from",
+        ));
+    };
+
+    let (w, h) = (cut[0].0.width.max(1), cut[0].0.height.max(1));
+    let (fx0, fy0) = (x0 as f32 / w as f32, y0 as f32 / h as f32);
+    let (fx1, fy1) = ((x1 + 1) as f32 / w as f32, (y1 + 1) as f32 / h as f32);
+
+    Ok(cut
+        .into_iter()
+        .map(|(bitmap, delay)| (bitmap.cropped(fx0, fy0, fx1, fy1).squared().padded(1), delay))
+        .collect())
+}
+
 /// How a master is coloured before it becomes a cursor.
 #[derive(Debug, Clone)]
 pub struct Finish {
@@ -480,24 +586,93 @@ mod tests {
 
     #[test]
     fn size_ladders_do_not_upscale_a_small_source_into_a_huge_file() {
-        // A 128 px source gets the sizes up to 128 plus one step beyond.
-        let sizes = sizes_for_source(128, 128);
-        assert_eq!(sizes, vec![32, 48, 64, 96, 128, 160]);
-        assert!(!sizes.contains(&256), "256 from a 128px source is just blur");
+        // A 64 px source gets the sizes up to 64 plus one step beyond;
+        // anything past that is upscaled blur costing real bytes.
+        let sizes = sizes_for_source(64, 64);
+        assert!(sizes.contains(&64));
+        assert!(!sizes.contains(&128), "128 from a 64px source is just blur");
 
         // A large source still gets the full ladder.
         assert_eq!(sizes_for_source(512, 512), TARGET_SIZES.to_vec());
 
-        // A tiny source still produces something usable.
-        let tiny = sizes_for_source(16, 16);
-        assert!(!tiny.is_empty() && tiny[0] == 32);
+        // A tiny source still produces something usable, starting at the
+        // smallest rung rather than jumping straight to 32.
+        let tiny = sizes_for_source(12, 12);
+        assert!(!tiny.is_empty());
+        assert_eq!(tiny[0], TARGET_SIZES[0]);
+    }
+
+
+    /// The failure this guards: trimming each frame to its own content makes a
+    /// cursor that jitters, because a frame where the subject is smaller comes
+    /// back a different size and shifted.
+    #[test]
+    fn animated_frames_stay_registered_after_the_background_goes() {
+        let mut frames = Vec::new();
+        for step in 0..4u32 {
+            let mut frame = Bitmap::new(40, 40);
+            for y in 0..40 {
+                for x in 0..40 {
+                    frame.set_pixel(x, y, [255, 255, 255, 255]);
+                }
+            }
+            // A square that changes size frame to frame.
+            let half = 6 + step * 2;
+            for y in (20 - half)..(20 + half) {
+                for x in (20 - half)..(20 + half) {
+                    frame.set_pixel(x, y, [10, 20, 200, 255]);
+                }
+            }
+            frames.push((frame, 60));
+        }
+
+        let prepared = prepare_animation(&frames).expect("prepares");
+        assert_eq!(prepared.len(), 4);
+
+        // Every frame comes back the same size, or the animation jumps.
+        let first = (prepared[0].0.width, prepared[0].0.height);
+        for (frame, _) in &prepared {
+            assert_eq!((frame.width, frame.height), first, "frames must stay registered");
+        }
+
+        // And the white card is gone from all of them.
+        for (frame, _) in &prepared {
+            assert_eq!(frame.alpha(0, 0), 0, "the corner should be transparent");
+        }
+    }
+
+    #[test]
+    fn an_animation_with_no_content_is_refused_clearly() {
+        let frames = vec![(Bitmap::new(8, 8), 60u32), (Bitmap::new(8, 8), 60)];
+        assert!(prepare_animation(&frames).is_err());
+        assert!(prepare_animation(&[]).is_err());
     }
 
     #[test]
     fn nearest_size_snaps_to_a_shipped_resolution() {
         assert_eq!(nearest_size(30), 32);
         assert_eq!(nearest_size(50), 48);
-        assert_eq!(nearest_size(1_000), 256);
+        // The ladder reaches 10 px now, because the size control does.
+        assert_eq!(nearest_size(1), 10);
+        assert_eq!(nearest_size(11), 10);
+        assert_eq!(nearest_size(14), 16);
+        // And stops at 128, which is the largest Windows will draw for a
+        // pointer in practice. Asking for more produces a file nothing reads.
+        assert_eq!(nearest_size(1_000), 128);
+    }
+
+    /// Every size the settings slider can produce must land on a real rung,
+    /// otherwise a cursor is built at one resolution and drawn at another.
+    #[test]
+    fn every_size_the_ui_offers_snaps_onto_the_ladder() {
+        use crate::state::settings::{MAX_CURSOR_PX, MIN_CURSOR_PX};
+        for requested in MIN_CURSOR_PX..=MAX_CURSOR_PX {
+            let snapped = nearest_size(requested);
+            assert!(
+                TARGET_SIZES.contains(&snapped),
+                "{requested} snapped to {snapped}, which is not a shipped size"
+            );
+        }
     }
 
     #[test]

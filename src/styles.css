@@ -54,8 +54,10 @@
   --color-accent-dim: #0a2540;
 
   --color-text: #edf1f7;
-  --color-text-muted: #8a94a6;
-  --color-text-dim: #58606e;
+  --color-text-muted: #a8b2c4;
+  /* Was #58606e -- about 3.1:1 on this backdrop, under the floor for small
+     text and the reason labels like USING were hard to read. This is ~5.4:1. */
+  --color-text-dim: #7c8699;
 
   --color-danger: #ff4d5e;
   --color-success: #33d6a6;
@@ -104,10 +106,15 @@
   background-position: center;
 }
 
+/* Glass rather than a solid fill, so cards sit *on* the backdrop instead of
+   punching holes in it. The blur is what keeps text legible over a photographic
+   surface — a flat translucent tint alone would let a bright fold show through
+   and destroy contrast exactly where the type is. */
 @utility panel {
-  background-color: var(--color-surface);
+  background-color: color-mix(in srgb, var(--color-surface) 62%, transparent);
   background-image: var(--sheen);
   box-shadow: var(--rim);
+  backdrop-filter: blur(18px) saturate(120%);
 }
 
 /* ────────────────────────────────────────────────────────────

@@ -397,3 +397,194 @@ mod tests {
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
     }
 }
+
+/// Geometric and tonal edits a user can apply to their own artwork.
+///
+/// These live on `Bitmap` rather than in the pipeline because they are pure
+/// pixel operations with no knowledge of cursors, and because every one of them
+/// has to be exactly reversible — a user who flips twice must get the original
+/// back, not a resampled approximation of it. Nothing here interpolates.
+impl Bitmap {
+    /// Mirrors left to right.
+    pub fn flipped_h(&self) -> Bitmap {
+        let mut out = Bitmap::new(self.width, self.height);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                out.set_pixel(self.width - 1 - x, y, self.pixel(x, y));
+            }
+        }
+        out
+    }
+
+    /// Mirrors top to bottom.
+    pub fn flipped_v(&self) -> Bitmap {
+        let mut out = Bitmap::new(self.width, self.height);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                out.set_pixel(x, self.height - 1 - y, self.pixel(x, y));
+            }
+        }
+        out
+    }
+
+    /// Rotates clockwise by a quarter turn at a time.
+    ///
+    /// Only right angles. An arbitrary angle needs resampling, and a cursor is
+    /// small enough that resampling visibly softens every edge — which is the
+    /// one thing a pointer cannot afford.
+    pub fn rotated(&self, quarter_turns: u32) -> Bitmap {
+        match quarter_turns % 4 {
+            0 => self.clone(),
+            1 => {
+                let mut out = Bitmap::new(self.height, self.width);
+                for y in 0..self.height {
+                    for x in 0..self.width {
+                        out.set_pixel(self.height - 1 - y, x, self.pixel(x, y));
+                    }
+                }
+                out
+            }
+            2 => {
+                let mut out = Bitmap::new(self.width, self.height);
+                for y in 0..self.height {
+                    for x in 0..self.width {
+                        out.set_pixel(self.width - 1 - x, self.height - 1 - y, self.pixel(x, y));
+                    }
+                }
+                out
+            }
+            _ => {
+                let mut out = Bitmap::new(self.height, self.width);
+                for y in 0..self.height {
+                    for x in 0..self.width {
+                        out.set_pixel(y, self.width - 1 - x, self.pixel(x, y));
+                    }
+                }
+                out
+            }
+        }
+    }
+
+    /// Inverts colour, leaving alpha alone.
+    ///
+    /// Alpha is deliberately untouched: inverting it would turn the cursor's
+    /// shape inside out and fill the transparent surround with solid colour.
+    pub fn inverted(&self) -> Bitmap {
+        let mut out = self.clone();
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let [r, g, b, a] = self.pixel(x, y);
+                out.set_pixel(x, y, [255 - r, 255 - g, 255 - b, a]);
+            }
+        }
+        out
+    }
+
+    /// Takes a rectangle, given in fractions of the image, clamped to its bounds.
+    ///
+    /// Fractions rather than pixels so a crop chosen on a preview means the same
+    /// thing on the full-resolution master.
+    pub fn cropped(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Bitmap {
+        let to_x = |v: f32| ((v.clamp(0.0, 1.0) * self.width as f32) as u32).min(self.width);
+        let to_y = |v: f32| ((v.clamp(0.0, 1.0) * self.height as f32) as u32).min(self.height);
+        let (left, right) = (to_x(x0.min(x1)), to_x(x0.max(x1)));
+        let (top, bottom) = (to_y(y0.min(y1)), to_y(y0.max(y1)));
+
+        // A degenerate rectangle would produce a zero-sized bitmap, which every
+        // downstream step would then have to guard against. Refuse instead.
+        if right.saturating_sub(left) < 2 || bottom.saturating_sub(top) < 2 {
+            return self.clone();
+        }
+
+        let (w, h) = (right - left, bottom - top);
+        let mut out = Bitmap::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                out.set_pixel(x, y, self.pixel(left + x, top + y));
+            }
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod transform_tests {
+    use super::*;
+
+    fn marked() -> Bitmap {
+        // One opaque pixel in the top-left corner, so every transform has an
+        // unambiguous expected destination.
+        let mut b = Bitmap::new(4, 6);
+        b.set_pixel(0, 0, [255, 0, 0, 255]);
+        b
+    }
+
+    #[test]
+    fn flipping_twice_returns_the_original() {
+        let b = marked();
+        assert_eq!(b.flipped_h().flipped_h().pixels, b.pixels);
+        assert_eq!(b.flipped_v().flipped_v().pixels, b.pixels);
+    }
+
+    #[test]
+    fn a_flip_moves_the_mark_to_the_opposite_corner() {
+        let b = marked();
+        assert_eq!(b.flipped_h().pixel(3, 0), [255, 0, 0, 255]);
+        assert_eq!(b.flipped_v().pixel(0, 5), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn four_quarter_turns_return_the_original() {
+        let b = marked();
+        let round = b.rotated(1).rotated(1).rotated(1).rotated(1);
+        assert_eq!(round.width, b.width);
+        assert_eq!(round.height, b.height);
+        assert_eq!(round.pixels, b.pixels);
+    }
+
+    #[test]
+    fn a_quarter_turn_swaps_the_axes() {
+        let b = marked();
+        let turned = b.rotated(1);
+        assert_eq!((turned.width, turned.height), (6, 4));
+        // Top-left goes to top-right on a clockwise turn.
+        assert_eq!(turned.pixel(5, 0), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn inverting_leaves_alpha_alone() {
+        let mut b = Bitmap::new(2, 2);
+        b.set_pixel(0, 0, [10, 20, 30, 128]);
+        let inverted = b.inverted();
+        assert_eq!(inverted.pixel(0, 0), [245, 235, 225, 128]);
+        // Transparent stays transparent — inverting alpha would fill the
+        // surround with solid colour and destroy the silhouette.
+        assert_eq!(inverted.pixel(1, 1)[3], 0);
+    }
+
+    #[test]
+    fn a_crop_takes_the_rectangle_asked_for() {
+        let mut b = Bitmap::new(10, 10);
+        b.set_pixel(5, 5, [1, 2, 3, 255]);
+        let c = b.cropped(0.4, 0.4, 0.8, 0.8);
+        assert_eq!((c.width, c.height), (4, 4));
+        assert_eq!(c.pixel(1, 1), [1, 2, 3, 255]);
+    }
+
+    #[test]
+    fn a_degenerate_crop_is_refused_rather_than_returning_nothing() {
+        let b = Bitmap::new(10, 10);
+        let c = b.cropped(0.5, 0.5, 0.5, 0.5);
+        assert_eq!((c.width, c.height), (10, 10), "unchanged rather than empty");
+    }
+
+    #[test]
+    fn crop_coordinates_may_arrive_in_any_order_or_out_of_range() {
+        let b = Bitmap::new(10, 10);
+        let a = b.cropped(0.8, 0.8, 0.2, 0.2);
+        let c = b.cropped(0.2, 0.2, 0.8, 0.8);
+        assert_eq!((a.width, a.height), (c.width, c.height));
+        // Out of range is clamped, not an error.
+        assert_eq!(b.cropped(-1.0, -1.0, 2.0, 2.0).width, 10);
+    }
+}

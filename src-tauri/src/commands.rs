@@ -298,11 +298,18 @@ pub struct BuildArgs {
     pub hotspot: (f32, f32),
     pub outline: bool,
     pub animation_speed: f32,
+    /// Flip, rotate, invert and crop, chosen on the preview.
+    #[serde(default)]
+    pub transform: crate::build::pipeline::Transform,
 }
 
 #[tauri::command]
-pub fn preview_custom(token: String, outline: bool) -> AppResult<Vec<custom::Preview>> {
-    custom::preview(&token, outline)
+pub fn preview_custom(
+    token: String,
+    outline: bool,
+    transform: Option<crate::build::pipeline::Transform>,
+) -> AppResult<Vec<custom::Preview>> {
+    custom::preview(&token, outline, &transform.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -320,6 +327,7 @@ pub fn build_custom_cursor(args: BuildArgs) -> AppResult<custom::BuiltCursor> {
         ),
         args.outline,
         args.animation_speed.clamp(0.5, 2.0),
+        &args.transform,
     )
 }
 
@@ -348,9 +356,21 @@ pub fn apply_custom_cursor(app: AppHandle, args: ApplyCustomArgs) -> AppResult<(
         &spec,
     )?;
 
+    // The name the user typed, not the word "CUSTOM".
+    //
+    // Every custom cursor was committed under the same label, so the home
+    // screen said "USING CUSTOM" whether you had made one cursor or thirty —
+    // which is exactly the case where knowing which one is on is worth most.
+    let display_name = custom::list()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|c| c.id == args.cursor_id)
+        .map(|c| c.name)
+        .unwrap_or_else(|| "CUSTOM".to_owned());
+
     cursor::commit(
         set,
-        "CUSTOM",
+        &display_name,
         spec.size,
         args.blend_pack_id.clone(),
         args.tint.clone(),
@@ -361,7 +381,7 @@ pub fn apply_custom_cursor(app: AppHandle, args: ApplyCustomArgs) -> AppResult<(
             apply_mode: args.apply_mode,
             blend_pack_id: args.blend_pack_id,
         },
-        display_name: "CUSTOM".to_owned(),
+        display_name: display_name.clone(),
         tint: args.tint,
         size: spec.size,
         outline: args.outline,

@@ -185,6 +185,23 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 window_state::restore(&window);
+
+                // Set the window icon explicitly from the embedded asset.
+                //
+                // The taskbar button draws the *window* icon, and Windows will
+                // happily keep showing a previously cached one for an executable
+                // it has seen before — so an app whose logo changed shows the old
+                // mark to the one person most likely to notice. Setting it here
+                // sources it from the binary every launch, which no cache sits in
+                // front of.
+                match tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png")) {
+                    Ok(icon) => {
+                        if let Err(e) = window.set_icon(icon) {
+                            log::warn!("could not set the window icon: {e}");
+                        }
+                    }
+                    Err(e) => log::warn!("the embedded window icon could not be read: {e}"),
+                }
             }
 
             // An autostarted launch belongs in the tray. A launch the user asked

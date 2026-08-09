@@ -57,7 +57,7 @@ impl RenderSpec {
         format!(
             "{}-{}-{}",
             self.tint.trim_start_matches('#').to_ascii_lowercase(),
-            self.size.clamp(32, 256),
+            self.size.clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX),
             if self.outline { "o" } else { "n" }
         )
     }
@@ -536,6 +536,19 @@ mod tests {
                 "{} did not produce a data URI",
                 summary.id
             );
+        }
+    }
+
+    /// Two packs with the same name are indistinguishable in the catalog, in
+    /// the tray tooltip, and in "USING ...". The id keeps them apart internally;
+    /// only the name keeps them apart for the person choosing.
+    #[test]
+    fn built_in_pack_names_are_unique() {
+        let mut seen = std::collections::BTreeMap::new();
+        for pack in styles::all() {
+            if let Some(other) = seen.insert(pack.name.to_owned(), pack.id) {
+                panic!("{} and {} are both called {}", other, pack.id, pack.name);
+            }
         }
     }
 

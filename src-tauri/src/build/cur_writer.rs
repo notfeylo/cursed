@@ -203,7 +203,13 @@ pub fn build_multi_resolution(
 }
 
 /// Every size a catalog cursor ships (PRD §5.1).
-pub const TARGET_SIZES: [u32; 8] = [32, 48, 64, 96, 128, 160, 192, 256];
+/// The resolutions baked into every static cursor.
+///
+/// Reaches down to 10 px because the size control does: a cursor asked for at
+/// 10 px and only offered a 32 px image is downscaled by Windows, and a
+/// downscale of an already-small glyph is mud. The top is 128 px, which is the
+/// largest Windows will draw for a pointer on any DPI in practice.
+pub const TARGET_SIZES: [u32; 8] = [10, 16, 24, 32, 48, 64, 96, 128];
 
 #[cfg(test)]
 mod tests {

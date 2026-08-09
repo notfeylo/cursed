@@ -10,6 +10,7 @@ import { SettingsScreen } from "./screens/Settings";
 import { About } from "./screens/About";
 import { Specimen } from "./screens/Specimen";
 import { useStore } from "./store";
+import backdrop from "./assets/backdrop.png";
 
 /**
  * Dev-only, and absent from any build.
@@ -45,10 +46,16 @@ function MainApp() {
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden rounded-md border border-border bg-bg ${
+      className={`relative flex h-full flex-col overflow-hidden rounded-md border border-border bg-bg ${
         previewing ? "no-motion" : ""
       }`}
     >
+      {/* The backdrop belongs to the window, not to the home screen.
+          Everything above it is translucent, so the whole app shares one
+          surface instead of the title bar being a black strip laid over a
+          themed page. */}
+      <Backdrop />
+
       <TitleBar />
 
       {error && (
@@ -59,7 +66,7 @@ function MainApp() {
         </div>
       )}
 
-      <main className="min-h-0 flex-1 overflow-hidden">
+      <main className="relative min-h-0 flex-1 overflow-hidden">
         {!ready ? (
           <Booting />
         ) : view === "home" ? (
@@ -86,6 +93,42 @@ function Booting() {
   return (
     <div className="grid h-full place-items-center">
       <div className="h-px w-24 shimmer" />
+    </div>
+  );
+}
+
+/**
+ * The supplied artwork, held still, behind the entire app.
+ *
+ * Tinted toward the brand blue rather than left neutral grey, and darkened by a
+ * vignette so type and controls keep their contrast wherever a fold happens to
+ * be bright. Nothing animates: this window sits in the tray all day, and a
+ * moving background composites forever for the ten seconds anyone looks at it.
+ *
+ * The source arrived as a 659 KB screenshot. Blurred greyscale survives being
+ * halved and flattened to one channel with nothing visible lost — 126 KB, and it
+ * is scaled to fill the window regardless.
+ */
+function Backdrop() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <img
+        src={backdrop}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover opacity-[0.5]"
+      />
+      <div
+        className="absolute inset-0 mix-blend-color"
+        style={{ background: "linear-gradient(160deg, #2e8bff 0%, #123a72 100%)" }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 85% at 50% 35%, rgba(5,5,7,0.42) 0%, rgba(5,5,7,0.86) 60%, rgba(5,5,7,0.95) 100%)",
+        }}
+      />
     </div>
   );
 }

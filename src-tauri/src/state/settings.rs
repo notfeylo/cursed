@@ -6,6 +6,15 @@ use std::sync::{Mutex, OnceLock};
 /// The full §9 settings surface. Every field has a defined default, and an
 /// unreadable or partially-written file falls back to defaults rather than
 /// refusing to start — settings are a preference, never a blocker.
+/// The pointer size range the UI offers and the backend enforces.
+///
+/// 10 px is genuinely small — smaller than Windows' own minimum — and exists
+/// because people asked for a pointer that gets out of the way. 128 px is the
+/// largest Windows will draw for a cursor in practice; asking for more just
+/// produces a file nothing reads.
+pub const MIN_CURSOR_PX: u32 = 10;
+pub const MAX_CURSOR_PX: u32 = 128;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -96,7 +105,7 @@ impl Default for Settings {
 impl Settings {
     /// Clamps anything a hand-edited settings file could put out of range.
     pub fn sanitised(mut self) -> Self {
-        self.cursor_size = self.cursor_size.map(|s| s.clamp(32, 256));
+        self.cursor_size = self.cursor_size.map(|s| s.clamp(MIN_CURSOR_PX, MAX_CURSOR_PX));
         self.animation_speed = self.animation_speed.clamp(0.5, 2.0);
         self.watchdog_interval_secs = self.watchdog_interval_secs.clamp(3, 30);
         if crate::util::parse_hex_color(&self.tint).is_none() {
@@ -184,7 +193,7 @@ mod tests {
         }
         .sanitised();
 
-        assert_eq!(wild.cursor_size, Some(256));
+        assert_eq!(wild.cursor_size, Some(MAX_CURSOR_PX));
         assert_eq!(wild.animation_speed, 2.0);
         assert_eq!(wild.watchdog_interval_secs, 3);
         assert_eq!(wild.tint, "#2E8BFF");

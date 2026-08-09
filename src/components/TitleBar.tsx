@@ -28,13 +28,16 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-bg/80 pl-3 select-none"
+      // Glass, not a black strip. The bar was opaque over a themed page, so it
+      // read as a separate window bolted on top. Frosting it lets the backdrop
+      // carry through and the chrome merge with the page.
+      className="relative z-10 flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-white/[0.04] pl-3 backdrop-blur-xl select-none"
     >
       <div data-tauri-drag-region className="flex items-center gap-2">
         <Mark size={15} id="tb" />
-        <span data-tauri-drag-region className="display text-[10px] text-text-muted">
+        <span data-tauri-drag-region className="display text-[11px] text-text">
           CURSED
-          {view !== "home" && <span className="text-text-dim"> / {view}</span>}
+          {view !== "home" && <span className="text-text-muted"> / {view}</span>}
         </span>
       </div>
       <div className="flex h-full">
@@ -42,7 +45,7 @@ export function TitleBar() {
           type="button"
           onClick={minimize}
           aria-label="Minimize"
-          className="grid h-full w-11 place-items-center text-text-dim transition-colors duration-150 hover:bg-elevated hover:text-text"
+          className="grid h-full w-11 place-items-center text-text-muted transition-colors duration-150 hover:bg-white/10 hover:text-text"
         >
           <Minus size={13} strokeWidth={2} />
         </button>
@@ -50,7 +53,7 @@ export function TitleBar() {
           type="button"
           onClick={close}
           aria-label="Close"
-          className="grid h-full w-11 place-items-center text-text-dim transition-colors duration-150 hover:bg-danger hover:text-white"
+          className="grid h-full w-11 place-items-center text-text-muted transition-colors duration-150 hover:bg-danger hover:text-white"
         >
           <X size={13} strokeWidth={2} />
         </button>

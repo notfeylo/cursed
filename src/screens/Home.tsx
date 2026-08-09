@@ -4,7 +4,6 @@ import { useStore } from "../store";
 import { Button } from "../components/ui";
 import { Mark } from "../components/Mark";
 import * as ipc from "../lib/ipc";
-import backdrop from "../assets/backdrop.png";
 
 /**
  * The first thing anyone sees, so it earns its space.
@@ -52,7 +51,6 @@ export function Home() {
 
   return (
     <div className="screen-in relative flex h-full flex-col overflow-hidden">
-      <Backdrop />
 
       <div className="relative flex flex-1 flex-col items-center justify-center px-6">
         {/* No bloom behind the mark. The mark carries its own depth now — a
@@ -157,46 +155,5 @@ function Tile({
       {icon}
       <span className="display text-[11px]">{label}</span>
     </button>
-  );
-}
-
-/**
- * The supplied backdrop, held still.
- *
- * A single greyscale image — blurred folds of light — tinted toward the app's
- * ink and darkened at the edges so the controls that sit on top of it keep their
- * contrast. Nothing here animates: this window lives in the tray all day, and a
- * moving background would composite forever for the ten seconds anyone looks
- * at it.
- *
- * The source arrived as a 659 KB screenshot. It is blurred greyscale, so it
- * survives being halved and reduced to one channel with nothing visible lost —
- * 126 KB, and it is scaled to fill the window regardless.
- */
-function Backdrop() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <img
-        src={backdrop}
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full object-cover opacity-[0.55]"
-      />
-      {/* Pushes the greyscale toward the brand blue rather than leaving it
-          neutral, so the backdrop belongs to the app instead of sitting behind
-          it. */}
-      <div
-        className="absolute inset-0 mix-blend-color"
-        style={{ background: "linear-gradient(160deg, #2e8bff 0%, #123a72 100%)" }}
-      />
-      {/* A vignette, so the type and buttons never land on a bright fold. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 85% at 50% 40%, rgba(5,5,7,0.25) 0%, rgba(5,5,7,0.78) 62%, var(--color-bg) 100%)",
-        }}
-      />
-    </div>
   );
 }

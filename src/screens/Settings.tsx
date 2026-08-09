@@ -220,9 +220,9 @@ export function SettingsScreen() {
             <Slider
               label="CURSOR SIZE"
               suffix="px"
-              min={32}
-              max={256}
-              step={8}
+              min={10}
+              max={128}
+              step={2}
               value={settings.cursorSize ?? systemSize}
               onChange={(v) => void patch({ cursorSize: v })}
             />

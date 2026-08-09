@@ -119,56 +119,79 @@ pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
         return MatteReport { removed: 0.0, already_had_alpha: false };
     }
 
+    // Second pass: grade the boundary instead of cutting it.
+    //
+    // The flood decided which pixels are *reachable* background. This decides
+    // how much background each one is. A pixel deep inside the flood goes
+    // completely; one sitting on the boundary — a hair, an antialiased edge, the
+    // soft side of a shadow — keeps the partial alpha it always had, and has the
+    // background's colour taken back out of it so it does not read as a pale
+    // fringe.
+    let mut softened = 0usize;
     for y in 0..h {
         for x in 0..w {
-            if cleared[(y * w + x) as usize] {
+            let i = (y * w + x) as usize;
+            let pixel = bitmap.pixel(x, y);
+
+            if cleared[i] {
+                // Reachable background. Fully clear unless it sits against a
+                // kept pixel, where it is likely a blend of the two.
+                let touching_subject = [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)]
+                    .iter()
+                    .any(|(dx, dy)| {
+                        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                        nx >= 0
+                            && ny >= 0
+                            && nx < w as i32
+                            && ny < h as i32
+                            && !cleared[(ny as u32 * w + nx as u32) as usize]
+                    });
+                if touching_subject {
+                    let alpha = graded_alpha(distance(pixel, background));
+                    if alpha > 0 {
+                        bitmap.set_pixel(x, y, unblend(pixel, background, alpha));
+                        softened += 1;
+                        continue;
+                    }
+                }
                 bitmap.set_pixel(x, y, [0, 0, 0, 0]);
-            }
-        }
-    }
-
-    feather(bitmap, &cleared);
-
-    MatteReport { removed: fraction, already_had_alpha: false }
-}
-
-/// Softens the one-pixel boundary between kept and cleared.
-///
-/// A hard flood leaves a staircase, and a cursor is looked at closely at small
-/// sizes where that is the most obvious thing about it.
-fn feather(bitmap: &mut Bitmap, cleared: &[bool]) {
-    let (w, h) = (bitmap.width, bitmap.height);
-    let mut edges: Vec<(u32, u32, u8)> = Vec::new();
-
-    for y in 0..h {
-        for x in 0..w {
-            if cleared[(y * w + x) as usize] {
-                continue;
-            }
-            let mut neighbours = 0u32;
-            let mut clear = 0u32;
-            for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
-                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+            } else {
+                // Kept. Grading only ever applies at the boundary — a pixel has
+                // to actually touch the flood to be a blend of it.
+                //
+                // Grading every kept pixel that merely *resembles* the
+                // background destroys enclosed regions: a white window inside a
+                // dark subject is exactly the background colour and nowhere near
+                // the background, and it must stay opaque. The flood already
+                // encodes that distinction; adjacency is how to read it.
+                let touching_background = [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)]
+                    .iter()
+                    .any(|(dx, dy)| {
+                        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                        nx >= 0
+                            && ny >= 0
+                            && nx < w as i32
+                            && ny < h as i32
+                            && cleared[(ny as u32 * w + nx as u32) as usize]
+                    });
+                if !touching_background {
                     continue;
                 }
-                neighbours += 1;
-                if cleared[(ny as u32 * w + nx as u32) as usize] {
-                    clear += 1;
+                let d = distance(pixel, background);
+                if d < SOFT_TOLERANCE {
+                    let alpha = graded_alpha(d).max(1);
+                    let blended = unblend(pixel, background, alpha);
+                    let combined =
+                        [blended[0], blended[1], blended[2], alpha.min(pixel[3])];
+                    bitmap.set_pixel(x, y, combined);
+                    softened += 1;
                 }
-            }
-            if clear > 0 && neighbours > 0 {
-                let keep = 1.0 - (clear as f32 / neighbours as f32) * 0.55;
-                let alpha = bitmap.alpha(x, y) as f32 * keep;
-                edges.push((x, y, alpha as u8));
             }
         }
     }
+    log::debug!("{softened} pixels graded rather than cut");
 
-    for (x, y, alpha) in edges {
-        let [r, g, b, _] = bitmap.pixel(x, y);
-        bitmap.set_pixel(x, y, [r, g, b, alpha]);
-    }
+    MatteReport { removed: fraction, already_had_alpha: false }
 }
 
 /// The dominant colour around the border.
@@ -197,16 +220,69 @@ fn sample_border(bitmap: &Bitmap) -> Option<[u8; 4]> {
     Some([channel(0), channel(1), channel(2), 255])
 }
 
-/// Chebyshev distance in RGB, which is stricter than Euclidean on a single
-/// channel drifting — the way a coloured background usually differs.
-fn near(pixel: [u8; 4], background: [u8; 4]) -> bool {
-    if pixel[3] < 16 {
-        return true;
-    }
+/// Chebyshev distance from the background colour.
+///
+/// Chebyshev rather than Euclidean because a background usually differs from the
+/// subject in one channel more than the others, and Euclidean dilutes that by
+/// averaging it away.
+fn distance(pixel: [u8; 4], background: [u8; 4]) -> i32 {
     let d = |a: u8, b: u8| (a as i32 - b as i32).abs();
-    d(pixel[0], background[0]) <= TOLERANCE
-        && d(pixel[1], background[1]) <= TOLERANCE
-        && d(pixel[2], background[2]) <= TOLERANCE
+    d(pixel[0], background[0])
+        .max(d(pixel[1], background[1]))
+        .max(d(pixel[2], background[2]))
+}
+
+fn near(pixel: [u8; 4], background: [u8; 4]) -> bool {
+    pixel[3] < 16 || distance(pixel, background) <= TOLERANCE
+}
+
+/// Everything between `TOLERANCE` and `SOFT_TOLERANCE` is *partly* background.
+///
+/// This is what a hard threshold cannot do. A hair, an antialiased edge or a
+/// drop shadow is a blend of subject and background in one pixel, and any single
+/// cutoff either keeps it — leaving a pale fringe of the old background — or
+/// discards it, chewing a notch out of the edge. Grading the alpha across the
+/// band keeps the pixel and admits it is partial, which is what the original
+/// image already encoded.
+const SOFT_TOLERANCE: i32 = 96;
+
+/// Alpha for a pixel at a given distance from the background, 0–255.
+fn graded_alpha(distance: i32) -> u8 {
+    if distance <= TOLERANCE {
+        return 0;
+    }
+    if distance >= SOFT_TOLERANCE {
+        return 255;
+    }
+    let t = (distance - TOLERANCE) as f32 / (SOFT_TOLERANCE - TOLERANCE) as f32;
+    // Smoothstep rather than linear: a linear ramp leaves a visible band where
+    // it meets full opacity.
+    let eased = t * t * (3.0 - 2.0 * t);
+    (eased * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+/// Removes the background's colour from a partly-transparent pixel.
+///
+/// A pixel that is 40% subject over a white card is not 40% of the subject's
+/// colour — it is the subject blended *with* white, so it reads pale. Undoing
+/// that blend is what stops a cut-out having a bright halo everywhere its edge
+/// used to touch the background. This is the same correction compositors call
+/// despill, done against the sampled background rather than a fixed key colour.
+fn unblend(pixel: [u8; 4], background: [u8; 4], alpha: u8) -> [u8; 4] {
+    if alpha == 0 || alpha == 255 {
+        return [pixel[0], pixel[1], pixel[2], alpha];
+    }
+    let a = alpha as f32 / 255.0;
+    let recover = |c: u8, b: u8| -> u8 {
+        let value = (c as f32 - b as f32 * (1.0 - a)) / a;
+        value.clamp(0.0, 255.0) as u8
+    };
+    [
+        recover(pixel[0], background[0]),
+        recover(pixel[1], background[1]),
+        recover(pixel[2], background[2]),
+        alpha,
+    ]
 }
 
 #[cfg(test)]
@@ -286,6 +362,66 @@ mod tests {
         let report = remove_background(&mut b);
         assert_eq!(report.removed, 0.0);
         assert_eq!(b.alpha(12, 12), 255, "still opaque");
+    }
+
+    /// The complaint this exists to answer: "it still leaves some white".
+    ///
+    /// A subject drawn with an antialiased edge blends into its background over
+    /// a pixel or two. A hard threshold either keeps those — a pale rim of the
+    /// old card, visible against any dark desktop — or discards them, chewing a
+    /// notch out of the shape. Neither is acceptable on something magnified on
+    /// screen all day.
+    #[test]
+    fn an_antialiased_edge_leaves_no_pale_fringe() {
+        let mut b = solid(40, 40, [255, 255, 255, 255]);
+        // A dark disc with a soft, blended edge, the way any real artwork is.
+        let (cx, cy, r) = (20.0f32, 20.0f32, 12.0f32);
+        for y in 0..40 {
+            for x in 0..40 {
+                let d = (((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt() - r) / 2.0;
+                let coverage = (1.0 - d).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
+                }
+                // Subject over white, exactly as a renderer would composite it.
+                let v = (255.0 * (1.0 - coverage) + 20.0 * coverage) as u8;
+                b.set_pixel(x, y, [v, v, v, 255]);
+            }
+        }
+
+        let report = remove_background(&mut b);
+        assert!(report.removed > 0.4);
+
+        // Nothing may survive that is both mostly opaque and nearly white.
+        // That combination is the fringe, and it is what a hard cut leaves.
+        let mut fringe = 0;
+        for y in 0..40 {
+            for x in 0..40 {
+                let [r, g, bl, a] = b.pixel(x, y);
+                if a > 160 && r > 225 && g > 225 && bl > 225 {
+                    fringe += 1;
+                }
+            }
+        }
+        assert_eq!(fringe, 0, "{fringe} pixels of the old background survived");
+
+        // And the subject itself is still solid, not eaten away.
+        assert_eq!(b.alpha(20, 20), 255);
+    }
+
+    /// Partial pixels must come back as the subject's colour, not a pale
+    /// version of it blended with whatever used to be behind it.
+    #[test]
+    fn a_partial_pixel_has_the_background_taken_back_out_of_it() {
+        // Half-covered black over white reads as mid grey in the file.
+        let blended = [128u8, 128, 128, 255];
+        let recovered = unblend(blended, [255, 255, 255, 255], 128);
+        assert!(
+            recovered[0] < 30,
+            "expected near-black after unblending, got {}",
+            recovered[0]
+        );
+        assert_eq!(recovered[3], 128, "alpha is preserved");
     }
 
     #[test]

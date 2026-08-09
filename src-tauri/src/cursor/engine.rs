@@ -232,7 +232,7 @@ pub fn effective_size(configured: Option<u32>) -> u32 {
     configured
         .or_else(|| crate::cursor::scheme::read_base_size().ok())
         .unwrap_or(32)
-        .clamp(32, 256)
+        .clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX)
 }
 
 #[cfg(test)]
