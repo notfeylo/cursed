@@ -38,12 +38,12 @@ here; it is a property of the design.
 
 ## What it does
 
-- **205 full schemes**, each defining **all 17 pointer roles** — not just the
+- **291 full schemes**, each defining **all 17 pointer roles** — not just the
   arrow, so you never end up with a neon pointer and a stock hourglass.
-- **Every size, sharp.** Catalog cursors are rendered from vectors at 32, 48,
-  64, 96, 128, 160, 192 and 256 px into one multi-resolution `.cur`.
+- **Every size, sharp.** Catalog cursors are rendered from vectors at 10, 16,
+  24, 32, 48, 64, 96 and 128 px into one multi-resolution `.cur`.
 - **Any colour.** Artwork ships as greyscale masters and is tinted at apply
-  time, so 205 packs × any colour costs the installer nothing.
+  time, so 291 packs × any colour costs the installer nothing.
 - **Drop a PNG.** Hotspot picker with alpha-centroid and tip-detect, a 1:1
   preview of all eight sizes, and a real cursor in under three seconds. GIF and
   APNG become real animated `.ani` files.
@@ -71,6 +71,34 @@ terminal, no PowerShell.
 
 Every install carries the full built-in cursor library. Nothing is downloaded on
 first run and nothing needs importing.
+
+### Which build
+
+That link is x64, which is what almost every Windows PC is. The rest:
+
+| Build | For |
+| --- | --- |
+| [x64](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe) | Almost every PC |
+| [ARM64](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-ARM64.exe) | Snapdragon, Copilot+, Surface Pro X — native rather than emulated |
+| [32-bit](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-x86.exe) | Older PCs running 32-bit Windows, which cannot run the x64 build at all |
+| [x64, offline](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe) | An air-gapped machine, or a network that blocks Microsoft's download |
+
+The offline installer embeds the Edge WebView2 runtime, so it needs no network —
+211 MB against the normal 8.5 MB. Take it only if you need it: WebView2 is
+already on every Windows 11 and on any updated Windows 10, and the ordinary
+installer simply uses what is there.
+
+The app updates itself to the build it is already running, so an ARM64 install
+keeps getting ARM64.
+
+### Requirements
+
+**Windows 10 version 1803 (build 17134) or newer**, or Windows 11.
+
+That floor is not ours to move. Cursed's window is Edge WebView2; Microsoft
+ended WebView2 support for Windows 7, 8 and 8.1, and the runtime will not
+install there at all. The installer checks the build number and says so rather
+than installing an app that would start, show no window and exit.
 
 ## Build from source
 
