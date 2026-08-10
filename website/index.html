@@ -359,6 +359,15 @@
           </p>
 
           <p class="note">
+            <strong>Uninstalling leaves nothing behind.</strong> Every pointer role is restored to
+            the exact value it had before install, and the registry entries, cursor schemes,
+            startup entry and the WebView2 cache all go with it — including the folder most apps
+            built this way forget. You are asked whether to keep your presets and custom cursors;
+            the default is to remove them. A script in the repository checks all of it, and is run
+            before every release.
+          </p>
+
+          <p class="note">
             Verify your download against the checksums published with the release:<br />
             <a
               href="https://github.com/notfeylo/cursed/releases/latest/download/SHA256SUMS.txt"

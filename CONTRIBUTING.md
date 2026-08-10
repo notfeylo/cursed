@@ -33,7 +33,34 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run build
 ```
 
-All three must pass. CI runs the same three plus `cargo audit` and `npm audit`.
+All three must pass. CI runs the same three plus `cargo audit` and `npm audit`,
+and a clippy pass for ARM64 and 32-bit — releases ship all three architectures,
+and only the host one gets built above.
+
+## Cutting a release
+
+```bash
+npm run version:set 1.2.3   # all three files that carry a version
+npm run release             # x64 + ARM64 + 32-bit + offline, staged with checksums
+```
+
+Then the gate that needs a real machine, or a VM rolled back to a clean
+snapshot:
+
+```powershell
+powershell -File scripts/verify-uninstall.ps1 -Snapshot   # BEFORE installing
+# install, apply a cursor, import an image, save a preset, then uninstall
+powershell -File scripts/verify-uninstall.ps1
+```
+
+It must exit 0. It asserts every one of the seventeen pointer roles came back
+byte-identical to its pre-install value and that nothing remains — files,
+registry keys, cursor schemes, the autostart entry, shortcuts, and
+`%LOCALAPPDATA%\dev.feylo.cursed`, the WebView2 folder named after the bundle
+identifier rather than the product, which is the one that gets missed.
+
+Write the result to `docs/verification/v<version>.md` whether or not it passes.
+See `docs/verification/README.md`.
 
 ## House rules
 
