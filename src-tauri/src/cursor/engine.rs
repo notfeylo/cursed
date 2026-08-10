@@ -154,6 +154,22 @@ pub fn verify_loadable(path: &Path) -> AppResult<()> {
 /// us holding a dangling handle, and reusing that handle across roles corrupts
 /// the session's cursor table. So we give it a `CopyIcon` duplicate and destroy
 /// our own original — every role, every apply, no exceptions.
+/// The size Windows will load a cursor at when it is not told one.
+///
+/// `SM_CXCURSOR`. Read every time rather than cached, because it does change
+/// between sessions — it simply does not change *within* one, which is the
+/// property that matters here.
+fn system_cursor_px() -> u32 {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXCURSOR};
+    // SAFETY: no pointers, no allocation; reads one integer system metric.
+    let px = unsafe { GetSystemMetrics(SM_CXCURSOR) };
+    if px > 0 {
+        px as u32
+    } else {
+        32
+    }
+}
+
 pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
     // An animated cursor takes the other route, and has to.
     //
@@ -165,6 +181,34 @@ pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
     // actually was. The pack was never static; it was being flattened after the
     // fact.
     if is_animated(path) {
+        // ...and that route cannot be given a size, which decides whether it
+        // should run at all.
+        //
+        // `LoadCursorFromFileW` takes no dimensions. It loads at the system
+        // cursor metric, and `SM_CXCURSOR` does not follow `CursorBaseSize`
+        // inside a process that is already running — measured on Windows 11
+        // build 26200 it reports 32 whatever the registry says and however many
+        // times `SPI_SETCURSORS` is broadcast. So this path can only ever
+        // produce a 32 px cursor.
+        //
+        // Windows itself has no such trouble: loading the scheme from the
+        // registry, it applies `CursorBaseSize` correctly, animation and all. By
+        // the time this runs `commit` has already written the scheme, written
+        // the size and broadcast the change, so the correctly-sized animated
+        // cursor is *already on screen* — and installing a live override here
+        // replaces it with a 32 px one.
+        //
+        // That is the whole reason animated cursors ignored the size control
+        // while static ones obeyed it: a static `.cur` goes through `LoadImageW`
+        // with an explicit size and is unaffected by any of this.
+        //
+        // At the default size the override is still worth doing. It is instant,
+        // and it is what lets a hover preview animate without touching the
+        // registry at all.
+        if size != system_cursor_px() {
+            log::debug!("{role}: left to the registry, which can size an .ani ({size}px)");
+            return Ok(());
+        }
         return set_animated_role(role, path);
     }
 
