@@ -90,11 +90,35 @@ pub fn get_settings() -> AppResult<Settings> {
 
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> AppResult<Settings> {
+    let before = settings::get();
     let saved = settings::save(settings)?;
     settings::propagate(&saved);
     crate::autostart::apply(&app, saved.launch_on_startup)?;
     crate::hotkeys::register(&app, &saved)?;
     crate::tray::set_visible(&app, saved.show_tray_icon)?;
+
+    // Appearance settings describe the cursor that is already on screen, so
+    // changing one has to change it. Otherwise the setting saves, nothing looks
+    // different, and the only way to see the new colour is to go and pick the
+    // same cursor again — which is the app asking the user to finish the job.
+    //
+    // Only these three, and only when they actually moved: rebuilding a
+    // seventeen-role scheme on every toggle of "start minimised" would be work
+    // nobody asked for.
+    let appearance_changed = before.tint != saved.tint
+        || before.outline != saved.outline
+        || before.cursor_size != saved.cursor_size;
+
+    if appearance_changed {
+        let size = effective_size(saved.cursor_size.unwrap_or(0));
+        match session::reapply_with_appearance(&saved.tint, size, saved.outline) {
+            Ok(true) => crate::tray::refresh_tooltip(&app),
+            Ok(false) => {}
+            // A failure here must not lose the setting the user just saved.
+            Err(e) => log::warn!("settings saved, but the cursor could not be redrawn: {e}"),
+        }
+    }
+
     Ok(saved)
 }
 
@@ -344,6 +368,9 @@ pub struct BuildArgs {
     /// Flip, rotate, invert and crop, chosen on the preview.
     #[serde(default)]
     pub transform: crate::build::pipeline::Transform,
+    /// A second staged image for the link/hover cursor, if the user added one.
+    #[serde(default)]
+    pub hand_token: Option<String>,
 }
 
 #[tauri::command]
@@ -371,6 +398,7 @@ pub fn build_custom_cursor(args: BuildArgs) -> AppResult<custom::BuiltCursor> {
         args.outline,
         args.animation_speed.clamp(0.5, 2.0),
         &args.transform,
+        args.hand_token.as_deref(),
     )
 }
 

@@ -214,6 +214,61 @@ fn logo_sheets(args: &[String]) {
     std::process::exit(0);
 }
 
+/// `genpacks --roles <pack-id> <out.png>` renders one pack's roles side by side.
+///
+/// Artwork that is only ever seen 32 px wide, in motion, under the user's hand
+/// is very easy to ship broken. This puts the roles on one sheet so they can be
+/// looked at.
+fn role_sheet(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    use cursorforge_lib::cursor::roles::Role;
+    use cursorforge_lib::packs::{art, styles};
+
+    let id = args.get(2).cloned().unwrap_or_else(|| "minimal-arrow".into());
+    let out = args.get(3).cloned().unwrap_or_else(|| "logo-sheets/roles.png".into());
+    let Some(pack) = styles::find(&id) else {
+        eprintln!("no pack called {id}");
+        std::process::exit(1);
+    };
+
+    const SHOW: [Role; 6] = [Role::Arrow, Role::Hand, Role::IBeam, Role::Help, Role::No, Role::Wait];
+    const CELL: u32 = 96;
+    const PAD: u32 = 16;
+    let width = PAD + SHOW.len() as u32 * (CELL + PAD);
+    let height = PAD * 2 + CELL + 40;
+
+    let mut sheet = Bitmap::new(width, height);
+    for y in 0..height {
+        for x in 0..width {
+            sheet.set_pixel(x, y, [0x0b, 0x0d, 0x12, 0xff]);
+        }
+    }
+
+    for (i, role) in SHOW.iter().enumerate() {
+        let markup = art::render_role(&pack.style, *role, 0.0);
+        let Ok(m) = cursorforge_lib::build::svg::render(&markup, CELL) else { continue };
+        let ox = PAD + i as u32 * (CELL + PAD);
+        for y in 0..m.height {
+            for x in 0..m.width {
+                let s = m.pixel(x, y);
+                let a = s[3] as u32;
+                if a == 0 { continue; }
+                let (tx, ty) = (ox + x, PAD + y);
+                if tx >= width || ty >= height { continue; }
+                let d = sheet.pixel(tx, ty);
+                let mix = |s: u8, d: u8| ((s as u32 * a + d as u32 * (255 - a)) / 255) as u8;
+                sheet.set_pixel(tx, ty, [mix(s[0], d[0]), mix(s[1], d[1]), mix(s[2], d[2]), 255]);
+            }
+        }
+    }
+
+    if let Ok(png) = sheet.to_png(image::codecs::png::CompressionType::Default) {
+        let _ = std::fs::write(&out, &png);
+        println!("{out}  ({})", SHOW.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "));
+    }
+    std::process::exit(0);
+}
+
 /// `genpacks --flatten <in> <out.png> <rrggbb>` composites an image onto a
 /// solid card, destroying its alpha.
 ///
@@ -936,6 +991,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--shrink") {
         shrink_image(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--roles") {
+        role_sheet(&args);
     }
     if args.get(1).map(String::as_str) == Some("--cutout") {
         cutout(&args);

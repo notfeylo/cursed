@@ -26,3 +26,10 @@ desktop.ini
 # Releases — 5 MB of binaries has no business in git history.
 dist-release/
 release-notes.md
+
+# Review artefacts from the logo, matte and role tooling — `genpacks
+# --logo-sheet`, `--cutout`, `--roles` and friends all write here. They are
+# working output, regenerated on demand, and the tracked copies went stale the
+# moment the mark changed: a repo full of renders of a logo we no longer use is
+# worse than no renders at all.
+logo-sheets/

@@ -40,6 +40,11 @@ export function CustomImport() {
   // to drop it again — the cut happens at stage time, because the preview has
   // to show what will actually be built.
   const [lastSource, setLastSource] = useState<string | null>(null);
+  // The optional second image, used for the link/hover cursor. Staged the same
+  // way as the main one, so it goes through the same decode, background removal
+  // and validation — a hover cursor is a cursor.
+  const [hand, setHand] = useState<ImportedImage | null>(null);
+  const [handBusy, setHandBusy] = useState(false);
 
   const accept = useCallback(
     async (loader: () => Promise<ImportedImage>) => {
@@ -109,6 +114,28 @@ export function CustomImport() {
     await accept(() => ipc.importImage(lastSource, next ? "force" : "auto"));
   };
 
+  const browseHand = async () => {
+    if (!ipc.isDesktop()) return;
+    const picked = await open({
+      multiple: false,
+      filters: [
+        {
+          name: "Anything with a picture in it",
+          extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif", "tiff"],
+        },
+      ],
+    });
+    if (typeof picked !== "string") return;
+    setHandBusy(true);
+    try {
+      setHand(await ipc.importImage(picked, forceCut ? "force" : "auto"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That hover image could not be read.");
+    } finally {
+      setHandBusy(false);
+    }
+  };
+
   const refreshPreviews = async (nextOutline: boolean) => {
     setOutline(nextOutline);
     if (!image) return;
@@ -129,6 +156,7 @@ export function CustomImport() {
         hotspot,
         outline,
         animationSpeed: settings.animationSpeed,
+        handToken: hand?.token ?? null,
       });
       await ipc.applyCustomCursor({
         cursorId: built.id,
@@ -235,6 +263,51 @@ export function CustomImport() {
           </div>
 
           <div className="panel mt-4 rounded-sm border border-border p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <span className="display text-[11px] text-text-muted">HOVER CURSOR</span>
+              {hand && (
+                <button
+                  type="button"
+                  onClick={() => setHand(null)}
+                  className="display shrink-0 text-[11px] text-text-dim transition-colors duration-150 hover:text-text"
+                >
+                  REMOVE
+                </button>
+              )}
+            </div>
+
+            {hand ? (
+              <div className="flex items-center gap-4">
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xs border border-border bg-bg/40">
+                  <img src={hand.dataUri} alt="" className="max-h-12 max-w-12 object-contain" />
+                </span>
+                <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-text-dim">
+                  Used whenever you hover a link or a button. Its hotspot comes from its own
+                  artwork, not the pointer&apos;s — a link cursor that inherits the arrow&apos;s
+                  would point at the wrong pixel.
+                </p>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void browseHand()}
+                  disabled={handBusy}
+                  className="tile hover:tile-hover flex h-20 w-full flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border-hi bg-surface/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                >
+                  <Plus size={16} strokeWidth={1.5} className="text-text-muted" />
+                  <span className="text-[12px] text-text-muted">
+                    {handBusy ? "Reading image…" : "Add a hover image"}
+                  </span>
+                </button>
+                <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+                  Optional. Without one, links use the pack chosen below.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="panel mt-4 rounded-sm border border-border p-4">
             <span className="display mb-3 block text-[11px] text-text-muted">WHERE IT GOES</span>
 
             <Select<ApplyMode>
@@ -332,51 +405,22 @@ function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
 }
 
 /**
- * What the importer accepts, kept at the foot of the screen.
+ * What the importer accepts, in one line.
  *
- * It is reference material: worth being able to check, never worth competing
- * with the one thing the screen is asking you to do.
+ * This was a titled block with two labelled rows of chips and a paragraph — a
+ * quarter of the screen spent on a list nobody reads twice, and read as clutter
+ * rather than as reference. It says the same thing now: the formats, the size
+ * limit, and that backgrounds come off by themselves.
  */
 function AcceptedFormats() {
-  const stills = ["PNG", "JPEG", "WebP", "BMP", "ICO", "TIFF"];
-  const animated = ["GIF", "APNG"];
-
   return (
-    <div className="border-t border-border px-4 py-4">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <span className="display text-[11px] text-text-muted">ACCEPTED</span>
-        <span className="mono text-[11px] text-text-dim">up to 20 MB</span>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mono w-16 shrink-0 text-[11px] text-text-dim">still</span>
-          {stills.map((format) => (
-            <span
-              key={format}
-              className="mono rounded-full border border-border px-3 py-1 text-[11px] text-text-muted"
-            >
-              {format}
-            </span>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mono w-16 shrink-0 text-[11px] text-text-dim">animated</span>
-          {animated.map((format) => (
-            <span
-              key={format}
-              className="mono rounded-full border border-accent/40 bg-accent-dim/40 px-3 py-1 text-[11px] text-accent-hi"
-            >
-              {format}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-        Backgrounds are removed automatically. Anything that already has
-        transparency is left exactly as it is.
+    <div className="border-t border-border px-4 py-3">
+      <p className="text-[11px] leading-relaxed text-text-dim">
+        <span className="mono text-text-muted">
+          PNG · JPEG · WebP · BMP · ICO · TIFF · GIF · APNG
+        </span>{" "}
+        — up to 20&nbsp;MB. GIF and APNG become animated cursors, and backgrounds
+        are removed automatically.
       </p>
     </div>
   );
@@ -490,6 +534,7 @@ function PreviewLadder({ previews }: { previews: Preview[] }) {
  * back to one was to remember it existed. Listing them makes this a library of
  * the user's own work, which is what the screen was always doing anyway.
  */
+
 function CustomLibrary() {
   const [items, setItems] = useState<ipc.CustomEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);

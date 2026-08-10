@@ -28,8 +28,24 @@ use crate::build::bitmap::Bitmap;
 /// subject sharing a hue with its backdrop survives.
 const TOLERANCE: i32 = 38;
 
-/// Above this, the image is treated as already cut out.
-const ALREADY_TRANSPARENT: f32 = 0.06;
+/// How much a neighbouring pixel may differ and still count as the same
+/// surface. Small: this is the step across one pixel of a smooth gradient, not
+/// across an edge.
+const LOCAL_STEP: i32 = 14;
+
+/// How far the flood may drift from the sampled background in total.
+///
+/// The leash on local growing. However many small steps it takes, a pixel can
+/// only wander this far from where it started — otherwise a smooth ramp from
+/// white to black lets the flood walk straight through the subject.
+const MAX_DRIFT: i32 = 110;
+
+/// How much of the border must be transparent to call an image cut out.
+///
+/// Half. A subject that has been cut out leaves an edge that is mostly empty;
+/// an image with a background has an edge that is mostly not. The old value was
+/// 0.06 measured over the whole image, which rounded corners alone satisfied.
+const ALREADY_TRANSPARENT: f32 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MatteReport {
@@ -39,17 +55,43 @@ pub struct MatteReport {
     pub already_had_alpha: bool,
 }
 
-/// True when enough of the image is already transparent to call it cut out.
-pub fn has_transparency(bitmap: &Bitmap) -> bool {
-    let total = (bitmap.width * bitmap.height) as f32;
-    if total == 0.0 {
+/// True when the image already has its background removed.
+///
+/// Decided from the **border**, not from the image as a whole, and that
+/// distinction is the difference between working and not.
+///
+/// The old rule was "6% of all pixels are transparent". Rounded corners clear
+/// that. A soft drop shadow clears it. A sticker saved with a transparent margin
+/// clears it. All of those still have a solid background in the middle, and all
+/// of them were skipped entirely — the single most common reason a background
+/// "could not be removed" was that this returned true and nothing was even
+/// attempted.
+///
+/// A genuinely cut-out subject has a transparent *edge*: that is what cutting it
+/// out did. An image with a background has an opaque edge, whatever is going on
+/// inside it.
+pub fn already_cut_out(bitmap: &Bitmap) -> bool {
+    let (w, h) = (bitmap.width, bitmap.height);
+    if w < 3 || h < 3 {
         return false;
     }
-    let clear = (0..bitmap.height)
-        .flat_map(|y| (0..bitmap.width).map(move |x| (x, y)))
-        .filter(|&(x, y)| bitmap.alpha(x, y) < 16)
-        .count() as f32;
-    clear / total >= ALREADY_TRANSPARENT
+    let mut clear = 0usize;
+    let mut total = 0usize;
+    let count = |x: u32, y: u32, clear: &mut usize, total: &mut usize| {
+        *total += 1;
+        if bitmap.alpha(x, y) < 16 {
+            *clear += 1;
+        }
+    };
+    for x in 0..w {
+        count(x, 0, &mut clear, &mut total);
+        count(x, h - 1, &mut clear, &mut total);
+    }
+    for y in 0..h {
+        count(0, y, &mut clear, &mut total);
+        count(w - 1, y, &mut clear, &mut total);
+    }
+    total > 0 && (clear as f32 / total as f32) >= ALREADY_TRANSPARENT
 }
 
 /// Removes a flat or near-flat background, in place, returning what it did.
@@ -73,7 +115,7 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     if w < 3 || h < 3 {
         return MatteReport { removed: 0.0, already_had_alpha: false };
     }
-    if !force && has_transparency(bitmap) {
+    if !force && already_cut_out(bitmap) {
         return MatteReport { removed: 0.0, already_had_alpha: true };
     }
 
@@ -107,6 +149,7 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     }
 
     while let Some((x, y)) = stack.pop() {
+        let here = bitmap.pixel(x, y);
         for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x as i32 + dx, y as i32 + dy);
             if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
@@ -117,7 +160,29 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
             if cleared[i] {
                 continue;
             }
-            if near(bitmap.pixel(nx, ny), background) {
+            let pixel = bitmap.pixel(nx, ny);
+
+            // Two ways in, and the second is what makes a varied background
+            // come off whole.
+            //
+            // Matching the sampled background handles a flat card. But a
+            // gradient, a vignette, or a photo's blurred backdrop drifts well
+            // past any single tolerance, so a flood that only asks "is this the
+            // background colour" stops a third of the way in and leaves the rest
+            // behind. Asking instead whether this pixel continues smoothly from
+            // the one it was reached from follows that drift, while still
+            // stopping dead at a subject edge — which is precisely where the
+            // step between neighbouring pixels becomes large.
+            //
+            // The leash is `MAX_DRIFT`: however many small steps it takes, a
+            // pixel can only wander so far from the colour it started at. Without
+            // that, a smooth ramp from white to black would let the flood walk
+            // all the way across the subject.
+            let joins = near(pixel, background)
+                || (distance(pixel, here) <= LOCAL_STEP
+                    && distance(pixel, background) <= MAX_DRIFT);
+
+            if joins {
                 cleared[i] = true;
                 stack.push((nx, ny));
             }
@@ -431,20 +496,52 @@ mod tests {
         assert_eq!(b.alpha(16, 16), 255, "the subject survives untouched");
     }
 
+    /// A subject that has genuinely been cut out is left alone.
+    ///
+    /// The test for that is a transparent *border*, not a transparent count.
+    /// This image has a clear edge all the way round, which is what cutting a
+    /// subject out leaves behind.
     #[test]
-    fn an_image_that_already_has_alpha_is_left_alone() {
-        let mut b = solid(32, 32, [255, 255, 255, 255]);
-        for y in 0..12 {
-            for x in 0..32 {
-                b.set_pixel(x, y, [0, 0, 0, 0]);
+    fn an_image_that_is_already_cut_out_is_left_alone() {
+        let mut b = solid(32, 32, [0, 0, 0, 0]);
+        for y in 10..22 {
+            for x in 10..22 {
+                b.set_pixel(x, y, [20, 40, 200, 255]);
             }
         }
-        let before = b.pixel(16, 20);
+        let before = b.pixel(16, 16);
         let report = remove_background(&mut b);
 
         assert!(report.already_had_alpha);
         assert_eq!(report.removed, 0.0);
-        assert_eq!(b.pixel(16, 20), before, "nothing was touched");
+        assert_eq!(b.pixel(16, 16), before, "nothing was touched");
+    }
+
+    /// The bug this replaces: an image with a solid background and a little
+    /// transparency somewhere was skipped entirely.
+    ///
+    /// Rounded corners, a soft shadow, a transparent margin — any of those used
+    /// to satisfy "6% of pixels are transparent" and the background was never
+    /// even looked at. It is the border that decides, and this one is opaque.
+    #[test]
+    fn transparency_somewhere_does_not_excuse_a_background() {
+        let mut b = solid(32, 32, [255, 255, 255, 255]);
+        // A transparent notch, well away from the edges.
+        for y in 2..8 {
+            for x in 2..8 {
+                b.set_pixel(x, y, [0, 0, 0, 0]);
+            }
+        }
+        for y in 12..24 {
+            for x in 12..24 {
+                b.set_pixel(x, y, [10, 30, 190, 255]);
+            }
+        }
+        let report = remove_background(&mut b);
+
+        assert!(!report.already_had_alpha, "an opaque border means a background");
+        assert!(report.removed > 0.5, "only {:.2} removed", report.removed);
+        assert_eq!(b.alpha(16, 16), 255, "the subject survives");
     }
 
     /// Background enclosed by the subject is still background.

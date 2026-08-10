@@ -172,6 +172,7 @@ pub fn build(
     outline: bool,
     speed: f32,
     transform: &pipeline::Transform,
+    hand_token: Option<&str>,
 ) -> AppResult<BuiltCursor> {
     let source = transformed(take_staged(token)?, transform);
     let id = format!("{}-{}", paths::slugify(name), &uuid::Uuid::new_v4().to_string()[..8]);
@@ -215,6 +216,51 @@ pub fn build(
         .map(|(size, data_uri)| Preview { size, data_uri })
         .collect();
 
+    // The hover image, if one was given.
+    //
+    // Written as its own set of files rather than folded into the main cursor:
+    // the two are different artwork with different hotspots, and a link cursor
+    // that inherits the arrow's hotspot points at the wrong pixel. It uses the
+    // hotspot suggested for its own image, which is what the picker would have
+    // proposed had it been the main one.
+    let has_hand = match hand_token {
+        Some(token) => match take_staged(token) {
+            Ok(source) => {
+                let hand_source = transformed(source, transform);
+                let first = hand_source.first()?.clone();
+                let spot = hotspot::compute(&first, hotspot::suggest(&first));
+                match &hand_source {
+                    Source::Static(master) => {
+                        let bytes = pipeline::build_cur(master, spot, &finish, &TARGET_SIZES)?;
+                        write_verified(&dir.join("hand.cur"), &bytes)?;
+                    }
+                    Source::Animated(frames) => {
+                        let metadata = AniMetadata {
+                            name: Some(format!("{name} (hover)")),
+                            author: None,
+                        };
+                        for size in TARGET_SIZES {
+                            let bytes =
+                                pipeline::build_ani(frames, spot, &finish, size, speed, &metadata)?;
+                            write_verified(&dir.join(format!("hand-{size}.ani")), &bytes)?;
+                        }
+                    }
+                }
+                if let Ok(mut staged) = staging().lock() {
+                    staged.remove(token);
+                }
+                true
+            }
+            // A hover image that will not stage must not lose the cursor the
+            // user has already built.
+            Err(e) => {
+                log::warn!("the hover image was skipped: {e}");
+                false
+            }
+        },
+        None => false,
+    };
+
     // A manifest beside the files, so a saved cursor can be listed later.
     //
     // Without this the directory is a slug and a uuid: the name the user typed
@@ -226,6 +272,7 @@ pub fn build(
         name: name.chars().take(48).collect(),
         animated,
         created: crate::util::iso_now(),
+        has_hand,
     };
     std::fs::write(dir.join("cursor.json"), serde_json::to_string_pretty(&manifest)?)?;
 
@@ -262,7 +309,24 @@ fn write_verified(path: &std::path::Path, bytes: &[u8]) -> AppResult<()> {
 
 /// The file to use for a custom cursor at a given size.
 fn file_for(id: &str, size: u32) -> AppResult<PathBuf> {
+    file_for_role(id, size, false)
+}
+
+/// The same, but able to return the hover artwork when there is any.
+fn file_for_role(id: &str, size: u32, hand: bool) -> AppResult<PathBuf> {
     let dir = cursor_dir(id)?;
+    if hand {
+        let still = dir.join("hand.cur");
+        if still.exists() {
+            return Ok(still);
+        }
+        let animated = dir.join(format!("hand-{}.ani", pipeline::nearest_size(size)));
+        if animated.exists() {
+            return Ok(animated);
+        }
+        // No hover image: fall through to the main cursor, which is what a
+        // cursor without one has always used.
+    }
     let still = dir.join("cursor.cur");
     if still.exists() {
         return Ok(still);
@@ -318,8 +382,26 @@ pub fn build_set(
         Role::Person,
     ];
 
+    // Blend covers the hand too once there is artwork for it. Without one it
+    // stays with the base pack, because an arrow-shaped link cursor tells you
+    // nothing about what you are hovering over.
+    const POINTER_LIKE_WITH_HAND: [Role; 8] = [
+        Role::Arrow,
+        Role::AppStarting,
+        Role::Wait,
+        Role::Help,
+        Role::No,
+        Role::UpArrow,
+        Role::Person,
+        Role::Hand,
+    ];
+    let has_hand = cursor_dir(cursor_id)
+        .map(|d| d.join("hand.cur").exists() || d.join("hand-32.ani").exists())
+        .unwrap_or(false);
+
     let roles: &[Role] = match mode {
         ApplyMode::ArrowOnly => &[Role::Arrow],
+        ApplyMode::Blend if has_hand => &POINTER_LIKE_WITH_HAND,
         ApplyMode::Blend => &POINTER_LIKE,
         ApplyMode::Recommended => &RECOMMENDED_ROLES,
         ApplyMode::All => &ALL_ROLES,
@@ -328,7 +410,8 @@ pub fn build_set(
         // The hand and the I-beam do not grow with the pointer, so for an
         // animated custom cursor they take the file built at their own size
         // rather than the pointer's.
-        let sized = file_for(cursor_id, role.size_from(spec.size)).unwrap_or_else(|_| file.clone());
+        let sized = file_for_role(cursor_id, role.size_from(spec.size), *role == Role::Hand)
+            .unwrap_or_else(|_| file.clone());
         set.insert(*role, sized);
     }
     Ok(set)
@@ -347,6 +430,40 @@ pub fn remove(id: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hover image only matters if the hand role actually reaches for it.
+    ///
+    /// `file_for_role` is the whole mechanism: ask for the hand and get the hand
+    /// artwork, ask for anything else and get the pointer. If it silently
+    /// returned the pointer for both, adding a hover image would appear to work
+    /// -- files written, no error -- and change nothing on screen.
+    #[test]
+    fn the_hand_reaches_for_its_own_artwork_when_there_is_some() {
+        let id = "test-hover-routing";
+        let Ok(dir) = cursor_dir(id) else { return };
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+
+        std::fs::write(dir.join("cursor.cur"), b"pointer").expect("write");
+
+        // With no hover artwork, the hand falls back to the pointer -- which is
+        // what a cursor without one has always done.
+        let before = file_for_role(id, 32, true).expect("falls back");
+        assert!(before.ends_with("cursor.cur"));
+
+        std::fs::write(dir.join("hand.cur"), b"hover").expect("write");
+
+        assert!(
+            file_for_role(id, 32, true).expect("hand").ends_with("hand.cur"),
+            "the hand must take the hover artwork"
+        );
+        assert!(
+            file_for_role(id, 32, false).expect("arrow").ends_with("cursor.cur"),
+            "everything else keeps the pointer"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use std::io::Cursor as IoCursor;
 
     fn png(width: u32, height: u32) -> Vec<u8> {
@@ -450,6 +567,9 @@ pub struct CustomCursor {
     pub name: String,
     pub animated: bool,
     pub created: String,
+    /// Whether a second image was supplied for the link/hover role.
+    #[serde(default)]
+    pub has_hand: bool,
 }
 
 /// Every custom cursor still on disk, newest first.

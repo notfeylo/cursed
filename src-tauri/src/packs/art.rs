@@ -184,7 +184,11 @@ pub const fn hotspot(role: Role) -> (f32, f32) {
         | Role::Pin
         | Role::Person
         | Role::NWPen => (0.06, 0.04),
-        Role::Hand => (0.34, 0.06),
+        // The hover cursor is the brand wedge now, and its point is at the top
+        // right rather than a fingertip at the top left. A hotspot left at the
+        // old fingertip would put the click a third of the cursor away from the
+        // place the artwork says it is — visible immediately on any small target.
+        Role::Hand => (0.70, 0.19),
         Role::UpArrow => (0.5, 0.06),
         _ => (0.5, 0.5),
     }
@@ -538,10 +542,26 @@ fn reticle_core(style: &Style) -> String {
     }
 }
 
+/// The text cursor.
+///
+/// Three bare strokes before, which is the shape everyone draws and nobody
+/// looks at twice. The job of an I-beam is to say exactly where a character
+/// will land, so this one keeps a true vertical spine and gives the serifs a
+/// slight flare — wider at the ends than the middle — which reads as deliberate
+/// at 32 px and still resolves at 16.
+///
+/// The centre gap matters more than it looks: it lets you see the character
+/// underneath the cursor, which is the one thing you are trying to aim at.
 fn ibeam(style: &Style) -> String {
-    let w = (style.weight * 0.9).max(3.0);
+    let w = (style.weight * 0.85).max(2.6);
+    let serif = (style.weight * 1.05).max(3.2);
     format!(
-        r#"<path d="M38 14 L62 14 M50 14 L50 86 M38 86 L62 86" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linecap="round"/>"#
+        r#"<g stroke-linecap="round">
+  <path d="M36 12 L64 12" stroke="{EDGE}" stroke-width="{serif:.1}"/>
+  <path d="M50 16 L50 44" stroke="{EDGE}" stroke-width="{w:.1}"/>
+  <path d="M50 56 L50 84" stroke="{EDGE}" stroke-width="{w:.1}"/>
+  <path d="M36 88 L64 88" stroke="{EDGE}" stroke-width="{serif:.1}"/>
+</g>"#
     )
 }
 
@@ -593,12 +613,35 @@ fn up_arrow(style: &Style) -> String {
     )
 }
 
+/// The hover cursor: the brand wedge, marked as a link.
+///
+/// It was a generic pointing hand — the same one every cursor pack has drawn
+/// since 1995, and the thing most obviously *not* ours in a pack that is
+/// otherwise all ours.
+///
+/// The wedge alone would be wrong: hover has to be distinguishable from the
+/// ordinary pointer at a glance, and two identical silhouettes are not. So it
+/// carries a ring at the shoulder — the universal "this is a link" cue, read
+/// without thinking — while the silhouette stays the mark.
 fn hand(style: &Style) -> String {
-    let w = (style.weight * 0.5).max(2.0);
+    let w = (style.weight * 0.45).max(1.6);
     format!(
-        r#"<path d="M28 6 C34 6 38 10 38 16 L38 48 L44 48 L44 30 C44 25 48 22 52 22 C56 22 60 25 60 30 L60 50 L66 50 L66 36 C66 31 70 28 74 28 C78 28 82 31 82 36 L82 68 C82 82 72 94 56 94 L46 94 C34 94 26 86 22 74 L14 52 C12 46 15 41 20 39 C24 38 28 40 30 45 L34 54 L34 16 C34 10 22 6 28 6 Z" fill="{BODY}" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linejoin="round"/>"#
+        r#"<g transform="translate(6 4) scale(1.42)">
+  <path d="{MARK_PATH}" fill="{BODY}" stroke="{EDGE}" stroke-width="{w:.1}" stroke-linejoin="round"/>
+  <circle cx="52" cy="15" r="7.5" fill="none" stroke="{EDGE}" stroke-width="{ring:.1}"/>
+  <circle cx="52" cy="15" r="2.6" fill="{EDGE}"/>
+</g>"#,
+        ring = (style.weight * 0.5).max(2.2)
     )
 }
+
+/// The wedge from the brand mark, in this module's 100-unit box.
+///
+/// Kept in step with `brand::MARK` by hand rather than shared, because the two
+/// live in different coordinate systems and a shared constant would need a
+/// transform at every use anyway.
+const MARK_PATH: &str =
+    "M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z";
 
 /// Renders one role, at animation phase `t` (0.0-1.0; ignored by still roles).
 pub fn render_role(style: &Style, role: Role, t: f32) -> String {

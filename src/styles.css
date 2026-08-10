@@ -226,7 +226,10 @@
 }
 .overflow-y-auto,
 .overflow-auto {
-  scroll-behavior: smooth;
+  /* `scroll-behavior: smooth` is deliberately absent. The wheel is eased in JS
+     (see useGlideScroll), which sets scrollTop directly — and smooth behaviour
+     would animate each of those frames again, easing an ease and turning a
+     glide into lag. */
   overscroll-behavior: contain;
 }
 @media (prefers-reduced-motion: reduce) {

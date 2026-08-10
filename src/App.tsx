@@ -10,6 +10,7 @@ import { SettingsScreen } from "./screens/Settings";
 import { About } from "./screens/About";
 import { Specimen } from "./screens/Specimen";
 import { useStore } from "./store";
+import { useGlideScroll } from "./lib/useGlideScroll";
 import backdrop from "./assets/backdrop.png";
 
 /**
@@ -43,6 +44,9 @@ function MainApp() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  // Eased wheel scrolling for every scrollable panel, installed once.
+  useGlideScroll();
 
   return (
     <div

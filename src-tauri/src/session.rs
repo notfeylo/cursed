@@ -78,6 +78,66 @@ pub fn restore_in_background() {
         .ok();
 }
 
+
+/// Rebuilds and re-applies whatever is currently on, with new appearance
+/// settings.
+///
+/// Changing the tint used to do nothing visible: the setting was saved, but the
+/// cursor on screen had already been rendered with the old colour and nothing
+/// asked for it again. The only way to see a new colour was to go and pick the
+/// same cursor a second time, which is the app telling the user to do its job.
+///
+/// This rebuilds from the same descriptor the session already keeps, so it works
+/// for a catalog pack and a custom cursor alike, and it commits rather than
+/// adopts — the registry has to change, not just the live layer, or the colour
+/// reverts the next time anything reloads the scheme.
+pub fn reapply_with_appearance(tint: &str, size: u32, outline: bool) -> AppResult<bool> {
+    let Some(descriptor) = load() else {
+        return Ok(false);
+    };
+    let spec = RenderSpec {
+        tint: tint.to_owned(),
+        size,
+        outline,
+    };
+
+    let (set, pack_id) = match &descriptor.source {
+        AppliedSource::Pack { pack_id, apply_mode } => {
+            let roles = crate::commands::roles_for(*apply_mode);
+            (
+                catalog::build_roles(pack_id, roles, &spec)?,
+                Some(pack_id.clone()),
+            )
+        }
+        AppliedSource::Custom {
+            cursor_id,
+            apply_mode,
+            blend_pack_id,
+        } => (
+            custom::build_set(cursor_id, *apply_mode, blend_pack_id.as_deref(), &spec)?,
+            blend_pack_id.clone(),
+        ),
+    };
+
+    cursor::commit(
+        set,
+        &descriptor.display_name,
+        size,
+        pack_id,
+        tint.to_owned(),
+    )?;
+
+    // The stored descriptor has to move with it, or the next launch restores
+    // the old colour and it looks like the change was never saved.
+    save(&AppliedDescriptor {
+        tint: tint.to_owned(),
+        size,
+        outline,
+        ..descriptor
+    })?;
+    Ok(true)
+}
+
 fn restore() -> AppResult<()> {
     let Some(descriptor) = load() else {
         return Ok(());

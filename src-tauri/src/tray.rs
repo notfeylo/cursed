@@ -114,15 +114,14 @@ pub fn refresh_menu(app: &AppHandle) {
     }
 }
 
+/// Just the product name.
+///
+/// The tooltip used to read "Cursed — MY CURSOR · 45px". A tray tooltip is how
+/// you work out which of a dozen identical icons you are pointing at, and the
+/// answer to that is the name of the app. Which cursor is applied and at what
+/// size are already on the home screen, where there is room to read them.
 fn tooltip_text() -> String {
-    match crate::cursor::active_state() {
-        Ok(state) if !state.is_default => format!(
-            "Cursed — {} · {}px",
-            state.pack_name.unwrap_or_else(|| "CUSTOM".into()),
-            state.size
-        ),
-        _ => "Cursed — Windows default".to_owned(),
-    }
+    "Cursed".to_owned()
 }
 
 pub fn refresh_tooltip(app: &AppHandle) {

@@ -104,6 +104,8 @@ export interface BuildArgs {
   hotspot: [number, number];
   outline: boolean;
   animationSpeed: number;
+  /** A second staged image, used for the link/hover cursor. */
+  handToken?: string | null;
 }
 
 export const previewCustom = (token: string, outline: boolean) =>

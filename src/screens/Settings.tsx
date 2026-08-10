@@ -251,20 +251,11 @@ export function SettingsScreen() {
             )}
           </div>
 
-          <Field label="Accent / tint colour">
-            <div className="flex items-center gap-2">
-              <span
-                className="h-8 w-8 shrink-0 rounded-xs border border-border"
-                style={{ background: settings.tint }}
-              />
-              <TextInput
-                mono
-                value={settings.tint}
-                maxLength={7}
-                onChange={(v) => void patch({ tint: v })}
-                placeholder="#2E8BFF"
-              />
-            </div>
+          <Field
+            label="Accent / tint colour"
+            hint="Also colours the link hand and the text caret"
+          >
+            <TintField value={settings.tint} onCommit={(v) => void patch({ tint: v })} />
           </Field>
 
           <Toggle
@@ -499,4 +490,79 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * A hex colour field that can be typed into.
+ *
+ * The old one saved on every keystroke, and the backend rejects anything that
+ * is not a complete colour by resetting it to the default. So typing "#2" was
+ * immediately rewritten to "#2E8BFF" and the caret jumped — the field was
+ * unusable and looked frozen on blue.
+ *
+ * The backend sanitiser is right and stays. What was wrong was sending it half a
+ * value: the draft lives here until it is a colour, and only then is it saved.
+ */
+function TintField({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
+
+  // Adopt external changes (a preset applying, say) but never while the user is
+  // mid-edit — that is the same interruption in a different disguise.
+  useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+
+  const complete = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(draft);
+
+  const commit = (text: string) => {
+    const trimmed = text.trim();
+    const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(withHash)) {
+      setDraft(withHash);
+      onCommit(withHash);
+    } else {
+      setDraft(value); // put back what is actually in effect
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className="h-9 w-9 shrink-0 rounded-xs border border-border"
+        style={{ background: complete ? draft : value }}
+        title={complete ? draft : value}
+      />
+      <input
+        value={draft}
+        maxLength={7}
+        spellCheck={false}
+        placeholder="#2E8BFF"
+        onFocus={() => setFocused(true)}
+        onChange={(e) => {
+          setDraft(e.currentTarget.value);
+          // Saved the moment it becomes a colour, so the cursor updates as you
+          // finish typing rather than only when you click away.
+          const next = e.currentTarget.value.trim();
+          if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(next)) onCommit(next);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          commit(e.currentTarget.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className={`mono h-9 w-full rounded-xs border bg-bg px-3 text-[12px] text-text outline-none transition-colors duration-150 placeholder:text-text-dim focus:border-accent ${
+          draft.length > 0 && !complete ? "border-danger/60" : "border-border"
+        }`}
+      />
+    </div>
+  );
 }
