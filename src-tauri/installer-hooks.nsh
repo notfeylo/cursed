@@ -46,6 +46,26 @@
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; Asked here, before anything is removed, and acted on in POSTUNINSTALL once
+  ; the files are gone. `Var /GLOBAL` is how a variable gets declared from inside
+  ; a section, which is where these macros are expanded.
+  ;
+  ; The default is to remove everything: someone uninstalling has said they want
+  ; the app gone, and a folder of leftovers they never hear about again is not a
+  ; kindness. Keeping is a deliberate choice, so it is the one that takes a
+  ; click. MB_DEFBUTTON2 puts the focus on No, so Enter erases.
+  Var /GLOBAL CursedKeepData
+  StrCpy $CursedKeepData "0"
+
+  ; A silent uninstall has nobody to answer, and must never sit on a dialog
+  ; waiting. It takes the default: a complete removal.
+  IfSilent cursed_keep_decided
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+    "Keep your presets and custom cursors?$\r$\n$\r$\nChoose No to remove everything Cursed created and leave this PC exactly as it was before it was installed." \
+    IDNO cursed_keep_decided
+  StrCpy $CursedKeepData "1"
+  cursed_keep_decided:
+
   DetailPrint "Restoring your original Windows pointer scheme..."
   ; Runs synchronously and exits immediately; a failure here must not block the
   ; uninstall, so the exit code is popped and ignored.
@@ -64,9 +84,36 @@
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
-  ; Rendered cursors are disposable and can be large, so they go.
+  ; Uninstalling should return the machine to its pre-install state. Everything
+  ; below is something the stock per-user Tauri uninstaller does not remove.
+
+  ; The autostart entry. Written by the autostart plugin at runtime rather than
+  ; by the installer, so the uninstaller has no record of it — and a Run value
+  ; pointing at a deleted .exe is a failed launch on every sign-in, forever.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Cursed"
+
+  ; The WebView2 user-data folder. Keyed by bundle identifier, NOT by product
+  ; name, which is why looking for `$LOCALAPPDATA\Cursed` finds nothing and the
+  ; folder is missed: it is `$LOCALAPPDATA\dev.feylo.cursed\EBWebView` and it
+  ; measured 72 MB on the development machine. Nothing else writes there, so the
+  ; whole identifier directory goes.
+  RMDir /r "$LOCALAPPDATA\dev.feylo.cursed"
+
+  ; Rendered cursors and logs are disposable and are never worth keeping.
   RMDir /r "$APPDATA\Cursed\cache"
-  ; Presets, custom cursors and settings are the user's own work and are left
-  ; in place. `%APPDATA%\Cursed` can be deleted by hand if they want it
-  ; gone — the Privacy Policy says so in as many words.
+  RMDir /r "$APPDATA\Cursed\logs"
+
+  ; Everything else in %APPDATA%\Cursed is the user's own work — presets, the
+  ; cursors they built from their own images, their settings. $CursedKeepData is
+  ; set by the prompt in PREUNINSTALL, which defaults to removing it.
+  StrCmp $CursedKeepData "1" cursed_keep_data 0
+    RMDir /r "$APPDATA\Cursed"
+    Goto cursed_data_done
+  cursed_keep_data:
+    DetailPrint "Keeping your presets and custom cursors in $APPDATA\Cursed."
+  cursed_data_done:
+
+  ; Removes the parent only when it is already empty, so a sibling app's data is
+  ; never touched.
+  RMDir "$APPDATA\Cursed"
 !macroend

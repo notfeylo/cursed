@@ -63,7 +63,48 @@ pub fn show_main_window_eventually(app: &tauri::AppHandle) {
         .ok();
 }
 
+/// Writes a panic to the log before the process dies.
+///
+/// A GUI build has no console — `windows_subsystem = "windows"` sees to that —
+/// so the default panic handler prints its message to a stderr nobody is
+/// reading and the app simply vanishes. From the outside that is
+/// indistinguishable from "I clicked it and nothing happened", which is the
+/// least actionable bug report there is.
+///
+/// The default hook still runs afterwards, so a debug build keeps its console
+/// output and its backtrace.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // `panic::Location` gives file and line; the payload is the message.
+        // Both are best-effort — a panic with a non-string payload is rare but
+        // must not panic *this* hook, which would abort with no log at all.
+        let where_ = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "unknown location".to_owned());
+        let what = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown payload".to_owned());
+
+        log::error!("panic at {where_}: {what}");
+        // The log is a rotating file writer, and the process is about to end.
+        // Nothing here forces a flush, so this is the one place worth being
+        // explicit that the record has to reach disk before exit.
+        log::logger().flush();
+
+        default(info);
+    }));
+}
+
 pub fn run() {
+    // Installed before anything else so a panic during startup — the window
+    // that never appears — is still recorded.
+    log_panics();
+
     let settings = state::settings::get();
 
     let mut builder = tauri::Builder::default()
@@ -254,7 +295,7 @@ fn log_startup_record() {
     log::info!(
         "Cursed {} ({}, {}) starting",
         env!("CARGO_PKG_VERSION"),
-        option_env!("CURSORFORGE_COMMIT").unwrap_or("local"),
+        option_env!("CURSED_COMMIT").unwrap_or("local"),
         std::env::consts::ARCH
     );
 

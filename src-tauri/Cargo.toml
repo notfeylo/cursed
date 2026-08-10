@@ -4,7 +4,7 @@ version = "1.16.0"
 description = "Your pointer. Possessed."
 authors = ["feylo"]
 license = "MIT"
-repository = "https://github.com/notfeylo/cursorforge"
+repository = "https://github.com/notfeylo/cursed"
 edition = "2021"
 rust-version = "1.82"
 

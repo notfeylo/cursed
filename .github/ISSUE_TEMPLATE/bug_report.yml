@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in CursorForge behaves incorrectly
+description: Something in Cursed behaves incorrectly
 labels: [bug]
 body:
   - type: markdown
@@ -38,7 +38,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: CursorForge version
+      label: Cursed version
       description: Settings → About
       placeholder: "1.0.0"
     validations:

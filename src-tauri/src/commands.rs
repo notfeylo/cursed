@@ -556,7 +556,7 @@ pub struct BuildInfo {
 pub fn get_build_info() -> AppResult<BuildInfo> {
     Ok(BuildInfo {
         version: env!("CARGO_PKG_VERSION").to_owned(),
-        commit: option_env!("CURSORFORGE_COMMIT").unwrap_or("local").to_owned(),
+        commit: option_env!("CURSED_COMMIT").unwrap_or("local").to_owned(),
         target: std::env::consts::ARCH.to_owned(),
         built: env!("CURSED_BUILD_DATE").to_owned(),
         windows: windows_build(),
@@ -621,7 +621,7 @@ pub fn get_diagnostics() -> AppResult<String> {
         out,
         "version {}   commit {}   arch {}",
         env!("CARGO_PKG_VERSION"),
-        option_env!("CURSORFORGE_COMMIT").unwrap_or("local"),
+        option_env!("CURSED_COMMIT").unwrap_or("local"),
         std::env::consts::ARCH
     );
     let _ = writeln!(

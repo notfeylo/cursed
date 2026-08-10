@@ -36,34 +36,56 @@ jobs:
             exit 1
           fi
 
-      - name: Build
-        env:
-          # Stamped into Settings → About, so a bug report names an exact build.
-          CURSORFORGE_COMMIT: ${{ github.sha }}
-        run: npm run tauri build
-
+      # Builds x64, ARM64 and 32-bit, plus the x64 offline installer, stages them
+      # with an unversioned alias each, and writes SHA256SUMS.txt. Running the
+      # same script CI runs is the point: a release built by hand on one machine
+      # is a release nobody else can reproduce.
+      #
       # Unsigned until Azure Trusted Signing is in place (PRD §13.7). Publishing
       # checksums is what lets someone verify a download in the meantime.
-      - name: Checksums
+      - name: Build every installer
+        env:
+          # Stamped into Settings → About, so a bug report names an exact build.
+          CURSED_COMMIT: ${{ github.sha }}
+        run: npm run release
+
+      - name: Every architecture is present
         shell: bash
         run: |
-          mkdir -p dist
-          find src-tauri/target/release/bundle -type f \( -name '*-setup.exe' -o -name '*.msi' \) \
-            -exec cp {} dist/ \;
-          cd dist
-          sha256sum * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          # A missing target does not fail the build above — it fails by simply
+          # not being there, and the release then quietly ships one fewer
+          # architecture than the website offers.
+          missing=0
+          for f in Cursed-Setup.exe Cursed-Setup-ARM64.exe Cursed-Setup-x86.exe \
+                   Cursed-Setup-Offline-x64.exe SHA256SUMS.txt; do
+            if [[ ! -f "dist-release/$f" ]]; then
+              echo "::error::dist-release/$f was not produced"
+              missing=1
+            fi
+          done
+          ls -la dist-release
+          exit $missing
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist-release/*
           draft: true
           generate_release_notes: true
           body: |
             ### Install
 
-            Download the `-setup.exe` and double-click it. Per-user install, no
-            administrator prompt.
+            Download **`Cursed-Setup.exe`** and double-click it. Per-user
+            install, no administrator prompt.
+
+            | Build | For |
+            | --- | --- |
+            | `Cursed-Setup.exe` | Almost every PC (x64) |
+            | `Cursed-Setup-ARM64.exe` | Snapdragon, Copilot+, Surface Pro X — native rather than emulated |
+            | `Cursed-Setup-x86.exe` | Older PCs running 32-bit Windows |
+            | `Cursed-Setup-Offline-x64.exe` | No internet, or a network that blocks Microsoft's download. ~211 MB — only take it if you need it. |
+
+            Requires **Windows 10 version 1803 or newer**. The app updates
+            itself to the architecture it is already running.
 
             This build is **unsigned**, so Windows SmartScreen will warn on first
             run. Verify your download against `SHA256SUMS.txt`.

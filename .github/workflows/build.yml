@@ -81,11 +81,42 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cursorforge-installer
+          name: cursed-installers
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
+
+  # Releases ship x64, ARM64 and 32-bit. Only the host architecture is built
+  # above, so without this an arch-specific break — a pointer-width assumption,
+  # an intrinsic that is x86-only — stays invisible until release day, where it
+  # surfaces as one silently missing installer.
+  #
+  # Clippy per target rather than a full build: it type-checks and lints the
+  # whole tree for that architecture in a fraction of the time, and linking is
+  # not the thing at risk here.
+  cross-arch:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-pc-windows-msvc, i686-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `with: targets:` on purpose. src-tauri/rust-toolchain.toml pins the
+      # toolchain and lists every target, and rustup installs them from there.
+      # Adding one to a toolchain the build does not use is how you get "can't
+      # find crate for `std`" against a target rustup reports as installed.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
 
   audit:
     runs-on: windows-latest
