@@ -237,6 +237,25 @@ fn is_newer(latest: &str, current: &str) -> bool {
     false
 }
 
+/// The installer suffix Tauri gives a bundle built for *this* binary's
+/// architecture.
+///
+/// A release carries one installer per architecture, and the only one that can
+/// correctly replace this install is the one matching the binary now running.
+/// Matching on the running binary rather than on the machine is deliberate: an
+/// x64 build running under emulation on an ARM64 PC should keep updating to x64
+/// builds, because that is what is installed there.
+///
+/// Getting this wrong is quiet. An ARM64 user handed the x64 installer would
+/// see the download succeed, the hash verify, the installer run — and end up
+/// with a second, emulated copy of the app.
+#[cfg(target_arch = "x86_64")]
+const INSTALLER_SUFFIX: &str = "_x64-setup.exe";
+#[cfg(target_arch = "aarch64")]
+const INSTALLER_SUFFIX: &str = "_arm64-setup.exe";
+#[cfg(target_arch = "x86")]
+const INSTALLER_SUFFIX: &str = "_x86-setup.exe";
+
 /// An asset name we are willing to download and run.
 ///
 /// Deliberately strict: the name is used to build a URL and a filename, so it
@@ -244,7 +263,7 @@ fn is_newer(latest: &str, current: &str) -> bool {
 /// shipping a `.bat` cannot talk this into running it.
 fn is_our_installer(name: &str) -> bool {
     name.starts_with("Cursed_")
-        && name.ends_with("_x64-setup.exe")
+        && name.ends_with(INSTALLER_SUFFIX)
         && !name.contains('/')
         && !name.contains('\\')
         && !name.contains("..")
@@ -629,8 +648,8 @@ mod tests {
 
     #[test]
     fn only_our_own_installer_name_is_accepted() {
-        assert!(is_our_installer("Cursed_1.0.0_x64-setup.exe"));
-        assert!(is_our_installer("Cursed_10.2.34_x64-setup.exe"));
+        assert!(is_our_installer(&format!("Cursed_1.0.0{INSTALLER_SUFFIX}")));
+        assert!(is_our_installer(&format!("Cursed_10.2.34{INSTALLER_SUFFIX}")));
 
         // Anything that is not exactly our installer must be refused, because
         // the name becomes both a URL path segment and a file we execute.
@@ -648,6 +667,27 @@ mod tests {
             "",
         ] {
             assert!(!is_our_installer(bad), "should refuse {bad:?}");
+        }
+    }
+
+    /// A release carries one installer per architecture and exactly one of them
+    /// can replace this install.
+    ///
+    /// The failure this guards is silent rather than loud: a wrong-architecture
+    /// installer downloads, verifies against its published hash and runs — it is
+    /// a genuine, correctly-signed Cursed installer. It just installs the wrong
+    /// build, and the first sign of it is an ARM64 machine quietly running an
+    /// emulated app.
+    #[test]
+    fn an_installer_built_for_another_architecture_is_not_ours() {
+        for suffix in ["_x64-setup.exe", "_arm64-setup.exe", "_x86-setup.exe"] {
+            let name = format!("Cursed_1.0.0{suffix}");
+            assert_eq!(
+                is_our_installer(&name),
+                suffix == INSTALLER_SUFFIX,
+                "{name} on a {} build",
+                std::env::consts::ARCH
+            );
         }
     }
 

@@ -327,6 +327,44 @@ a:hover {
   color: var(--text-3);
 }
 
+/* The alternate builds. Closed by default and quiet when open: someone who
+   needs the ARM64 or the offline installer is already looking for it, and
+   everyone else is better served by one obvious button than four competing
+   ones. */
+.builds {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.builds summary {
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-2);
+  padding: 4px 0;
+  border-radius: 6px;
+}
+
+.builds summary:hover {
+  color: var(--text-1);
+}
+
+.builds ul {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  list-style: none;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  line-height: 1.55;
+}
+
+.builds li + li {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .spec {
   margin: 20px 0 18px;
   border-top: 1px solid var(--border);
@@ -334,7 +372,8 @@ a:hover {
 
 .spec > div {
   display: grid;
-  grid-template-columns: 74px 1fr;
+  /* Wide enough for ARCHITECTURE, the longest label, to stay on one line. */
+  grid-template-columns: 92px 1fr;
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);

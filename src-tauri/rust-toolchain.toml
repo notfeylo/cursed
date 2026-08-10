@@ -3,5 +3,13 @@
 [toolchain]
 channel = "1.96"
 components = ["clippy", "rustfmt"]
-targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+# Every architecture a release ships an installer for. Declared here rather than
+# installed by hand: `rustup target add` adds to whatever toolchain is *default*,
+# not to this pinned one, and the build then fails with "can't find crate for
+# `std`" against a target rustup cheerfully reports as installed.
+targets = [
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+  "i686-pc-windows-msvc",
+]
 profile = "minimal"

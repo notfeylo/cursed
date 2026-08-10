@@ -1,7 +1,7 @@
 {
   "name": "cursorforge",
   "private": true,
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Your pointer. Possessed.",
   "license": "MIT",
   "author": "feylo",
@@ -15,7 +15,8 @@
     "generate:icon": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --icon src-tauri/icons/source.png 1024",
     "lint:types": "tsc --noEmit",
     "version:set": "node scripts/set-version.mjs",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "release": "node scripts/build-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
