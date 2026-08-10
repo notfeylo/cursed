@@ -233,10 +233,27 @@ fn restore() -> AppResult<()> {
         ),
     };
 
-    // `size`, not `descriptor.size` — the set above was built at `size`, and
-    // recording a different number would leave the app believing the cursor on
-    // screen is a size it is not.
-    cursor::adopt(set, &descriptor.display_name, size, pack_id, descriptor.tint)
+    // `adopt` records what is already in the registry without rewriting it,
+    // which is right on a normal launch: nothing changed, and rewriting HKCU
+    // every time the app starts is churn for nothing.
+    //
+    // It is wrong when the size just moved. The files were rebuilt at the
+    // settings size, but `CursorBaseSize` and the stored descriptor still hold
+    // the old one — so Windows scales the new artwork to the old number, and
+    // the next launch logs the same correction again, forever. When the size has
+    // actually changed, commit it.
+    if size == descriptor.size {
+        return cursor::adopt(set, &descriptor.display_name, size, pack_id, descriptor.tint);
+    }
+
+    cursor::commit(
+        set,
+        &descriptor.display_name,
+        size,
+        pack_id,
+        descriptor.tint.clone(),
+    )?;
+    save(&AppliedDescriptor { size, ..descriptor })
 }
 
 /// Applies the default preset on first run, if one is set. Quiet on failure —
