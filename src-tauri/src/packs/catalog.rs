@@ -545,28 +545,35 @@ mod tests {
     ///
     /// This builds a real animated pack and puts every file it produces through
     /// the same loader `set_role` will use.
+    ///
+    /// The pack is built here rather than taken from the catalog. The catalog
+    /// used to ship eighteen animated packs and now ships none — it is one
+    /// static blend base — but nothing about the `.ani` writer or the loader
+    /// changed with it, and this is the test that caught an `.ani` being
+    /// flattened to a single frame. Deleting it along with the packs would have
+    /// thrown away the guard and kept the bug.
     #[test]
     fn an_animated_pack_produces_files_that_load_as_animated() {
-        let pack = styles::all()
-            .into_iter()
-            .find(|p| p.animated)
-            .expect("the catalog ships animated packs");
-
-        let set = build_set(pack.id, &spec()).expect("an animated pack builds");
+        let base = styles::find("precision-gap-cross").expect("the blend base");
+        let pack = styles::PackDef { animated: true, ..base };
 
         let mut checked = 0usize;
-        for (role, path) in &set.files {
-            if !crate::cursor::engine::is_animated(path) {
+        for role in crate::cursor::roles::ALL_ROLES {
+            if !role.is_animatable() {
                 continue;
             }
+            let path = build_role(&pack, role, &spec()).expect("an animated role builds");
             assert!(
-                crate::cursor::engine::verify_loadable(path).is_ok(),
-                "{role} of {} did not load as an animated cursor",
-                pack.id
+                crate::cursor::engine::is_animated(&path),
+                "{role} of an animated pack was not written as an .ani"
+            );
+            assert!(
+                crate::cursor::engine::verify_loadable(&path).is_ok(),
+                "{role} did not load as an animated cursor"
             );
             checked += 1;
         }
-        assert!(checked > 0, "{} produced no .ani files at all", pack.id);
+        assert!(checked > 0, "no animatable roles were exercised");
     }
 
     #[test]
@@ -577,10 +584,15 @@ mod tests {
         let summaries = list_summaries().expect("the catalog must load");
         let built_in = summaries.iter().filter(|s| s.author == "feylo").count();
 
+        // This used to demand a hundred. The generated catalog is one pack now —
+        // the blend base — and what a fresh machine actually receives is the
+        // bundled archives, which `bundled` guards with a count of its own.
+        // Repeating that here would assert the same thing twice, in the weaker
+        // of the two places.
         assert!(
-            built_in >= 100,
-            "only {built_in} built-in packs reached the catalog; a machine with \
-             no imports would look bare or empty"
+            built_in >= 1,
+            "the built-in blend base did not reach the catalog; every imported \
+             cursor depends on it for the roles it does not define"
         );
 
         // Every tile must arrive as a data URI. The webview holds no filesystem

@@ -297,7 +297,7 @@ mod tests {
         let base = Manifest {
             format: FORMAT_VERSION,
             name: "TEST".into(),
-            base_pack: "precision-plus".into(),
+            base_pack: "precision-gap-cross".into(),
             tint: "#2E8BFF".into(),
             size: 48,
             outline: true,

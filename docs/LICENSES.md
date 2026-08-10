@@ -5,8 +5,49 @@
 MIT License — Copyright (c) 2026 feylo. See `LICENSE` in the repository root, or
 the summary under Settings → About.
 
-All bundled cursor artwork is original work by feylo, licensed MIT alongside the
-source.
+The application's own artwork — the mark, the pointer, the link hand, the text
+I-beam and the `GAP-CROSS` blend base — is original work by feylo, licensed MIT
+alongside the source.
+
+**The bundled cursor packs are not.** See below.
+
+## Bundled cursor packs
+
+Thirty-six packs are embedded in the installer and unpacked on first run. Since
+the generated catalog was cut back to the single pack that fills unmapped roles,
+these are the catalog.
+
+### Licensed for redistribution — 2
+
+| Pack | Licence | Author |
+| --- | --- | --- |
+| Geared Brass | GPL-3.0 | piraker-grinor |
+| Geared Steel | GPL-3.0 | piraker-grinor |
+
+Both archives carry their own `LICENSE.txt` and `COPYRIGHT.txt`, extracted
+alongside the cursors. Cursed itself stays MIT; these sit beside it as
+separately-licensed data, which is what the GPL calls mere aggregation.
+
+### No stated licence — 34
+
+The remaining packs came from cursor-sharing sites and **state no licence**.
+Where a `readme.txt` or `COPYRIGHT.txt` exists it names an author without
+granting any right to redistribute; most name nobody at all.
+
+Several depict characters, logos or products owned by third parties, among them:
+Batman and the Batarang (DC Comics), Spider-Man and Venom (Marvel), Hello Kitty
+and Kuromi (Sanrio), Minecraft items and tools (Mojang/Microsoft), Skyrim
+(Bethesda), Hollow Knight and Silksong (Team Cherry), Jujutsu Kaisen and Naruto
+(Shueisha), Roblox, Supreme, BMW, Toyota, and the likeness of Cristiano Ronaldo.
+
+**No licence here permits shipping these in an installer.** It is a decision the
+project's owner took knowingly, having been given the position above first. It
+is written down rather than left unstated so that nobody — a contributor, a
+user, or a rights holder — has to discover it.
+
+If a rights holder objects, removal is one list: the `PACKS` array in
+`src-tauri/src/bundled.rs` and the matching archive under `assets/bundled/`.
+Nothing else in the application depends on which packs are present.
 
 ## Bundled fonts
 
