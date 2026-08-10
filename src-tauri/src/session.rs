@@ -65,6 +65,33 @@ pub fn forget() {
     }
 }
 
+/// The id of the custom cursor currently applied, if the applied thing is one.
+pub fn applied_custom_id() -> Option<String> {
+    match load()?.source {
+        AppliedSource::Custom { cursor_id, .. } => Some(cursor_id),
+        _ => None,
+    }
+}
+
+/// True when the descriptor names artwork that is no longer on disk.
+///
+/// A descriptor can outlive what it points at — a custom cursor deleted while
+/// applied, a pack directory removed by hand, a profile half-restored from a
+/// backup. Rebuilding from it then writes registry values naming files that do
+/// not exist, and Windows answers that by silently drawing its own arrow. The
+/// pointer looks stuck: it ignores the size control and the colour, because
+/// nothing being written is reaching a real file.
+///
+/// Checked before restoring rather than after, so a stale descriptor is dropped
+/// instead of being faithfully rebuilt into the same broken state on every
+/// launch.
+pub fn source_is_missing(descriptor: &AppliedDescriptor) -> bool {
+    match &descriptor.source {
+        AppliedSource::Custom { cursor_id, .. } => !crate::custom::exists(cursor_id),
+        _ => false,
+    }
+}
+
 /// Rebuilds the applied scheme from its descriptor and adopts it.
 ///
 /// Runs off the startup path because the first rebuild after a cache clear does
@@ -142,6 +169,19 @@ fn restore() -> AppResult<()> {
     let Some(descriptor) = load() else {
         return Ok(());
     };
+
+    // Rebuilding from a descriptor whose artwork is gone writes registry values
+    // naming files that do not exist, which Windows answers by drawing its own
+    // arrow while the app goes on believing the cursor is applied. Put the
+    // pointer back honestly and drop the descriptor instead, so this repairs
+    // itself on the next launch rather than repeating every launch.
+    if source_is_missing(&descriptor) {
+        log::warn!("the applied cursor's artwork is gone, so the pointer goes back to Windows");
+        let _ = crate::cursor::restore_default();
+        forget();
+        return Ok(());
+    }
+
     let spec = RenderSpec {
         tint: descriptor.tint.clone(),
         size: descriptor.size,

@@ -417,6 +417,29 @@ pub fn build_set(
     Ok(set)
 }
 
+/// True when this custom cursor still has usable artwork on disk.
+///
+/// The directory existing is not the test — a half-written build leaves one
+/// behind with nothing in it. What matters is whether a role can actually be
+/// pointed at a file, which means `cursor.cur` or a sized `.ani`.
+pub fn exists(id: &str) -> bool {
+    let Ok(dir) = cursor_dir(id) else {
+        return false;
+    };
+    if dir.join("cursor.cur").is_file() {
+        return true;
+    }
+    std::fs::read_dir(&dir).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| x.eq_ignore_ascii_case("ani"))
+        })
+    })
+}
+
 /// Removes a built custom cursor's files.
 pub fn remove(id: &str) -> AppResult<()> {
     let dir = paths::custom_dir()?.join(paths::validate_relative(id)?);

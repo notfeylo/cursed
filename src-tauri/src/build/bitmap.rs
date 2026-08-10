@@ -99,6 +99,31 @@ impl Bitmap {
         Bitmap::from_rgba(width, height, dst.into_vec())
     }
 
+    /// Places this bitmap, unscaled, in the middle of a larger square canvas.
+    ///
+    /// This is how a role keeps its own size while Windows scales everything.
+    /// `CursorBaseSize` is one global number — there is no per-role size — so
+    /// the only way to draw a 32 px hand while the pointer is 128 px is to hand
+    /// Windows a 128 px image with a 32 px hand in the middle of it. Windows
+    /// scales the canvas; the glyph inside arrives at the size it was drawn.
+    ///
+    /// Returns self unchanged if the canvas is not larger, so this is safe to
+    /// call unconditionally.
+    pub fn centred_in(&self, canvas: u32) -> Bitmap {
+        if canvas <= self.width || canvas <= self.height {
+            return self.clone();
+        }
+        let mut out = Bitmap::new(canvas, canvas);
+        let ox = (canvas - self.width) / 2;
+        let oy = (canvas - self.height) / 2;
+        for y in 0..self.height {
+            for x in 0..self.width {
+                out.set_pixel(ox + x, oy + y, self.pixel(x, y));
+            }
+        }
+        out
+    }
+
     /// Unsharp mask, for artwork that has just been shrunk a long way.
     ///
     /// A good downscale filter is a low-pass filter — that is what stops it

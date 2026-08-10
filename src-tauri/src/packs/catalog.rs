@@ -45,6 +45,18 @@ pub struct RenderSpec {
     pub outline: bool,
 }
 
+/// Bumped whenever the renderer produces different pixels for the same inputs.
+///
+/// The cache key covers the *choices* a user makes — colour, size, outline — and
+/// nothing about the code that turns them into a file. So a change to the
+/// renderer leaves every existing entry stale but still matching its key, and
+/// the fix silently never reaches anyone who had already applied that cursor.
+/// That is invisible from the developer's side, where the cache is usually
+/// empty, and permanent from the user's, where it is not.
+///
+/// v2: the hand and the I-beam stopped growing with the pointer.
+const RENDER_VERSION: u32 = 2;
+
 impl RenderSpec {
     fn rgb(&self) -> AppResult<[u8; 3]> {
         parse_hex_color(&self.tint)
@@ -55,7 +67,7 @@ impl RenderSpec {
     /// a stale cache entry cannot be served for a different choice.
     fn key(&self) -> String {
         format!(
-            "{}-{}-{}",
+            "v{RENDER_VERSION}-{}-{}-{}",
             self.tint.trim_start_matches('#').to_ascii_lowercase(),
             self.size.clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX),
             if self.outline { "o" } else { "n" }
@@ -194,19 +206,39 @@ fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBu
         // bitmap: this is what keeps 256 px genuinely sharp (PRD §5).
         let mut images = Vec::with_capacity(TARGET_SIZES.len());
         for size in TARGET_SIZES {
-            let rendered = role_bitmap(pack, role, size, 0.0)?;
+            // The hand and the I-beam do not grow with the pointer, and this is
+            // the only place that can honour it. `size_from` was applied on the
+            // animated branch alone, so every static ladder was rendered at the
+            // full pointer size and Windows drew a 128 px hand beside a 128 px
+            // arrow — which is what made a large pointer unusable.
+            //
+            // The glyph is drawn at its own size and centred in the entry's
+            // canvas, rather than the entry being made smaller. Windows picks an
+            // entry by `CursorBaseSize` and scales it, so a short ladder would
+            // just be scaled back up; a full-size canvas holding a small glyph
+            // comes through untouched.
+            let glyph = role.size_from(size);
+            let rendered = role_bitmap(pack, role, glyph, 0.0)?;
             let coloured = rendered.tinted(finish.tint.unwrap_or([255, 255, 255]));
-            let finished = if finish.outline {
+            let outlined = if finish.outline {
                 coloured.with_contrast_outline()
             } else {
                 coloured
             };
+            let finished = outlined.centred_in(size);
+
+            // The hotspot follows the glyph into the middle of the canvas. Left
+            // as a fraction of the whole canvas it would drift toward the centre
+            // as the pointer grew, so every click would land further from the
+            // tip the larger the cursor got.
             let max = (size - 1) as f32;
+            let offset = (size.saturating_sub(glyph) / 2) as f32;
+            let span = glyph.saturating_sub(1) as f32;
             images.push(CursorImage::new(
                 finished,
                 (
-                    (hx * max).round() as u16,
-                    (hy * max).round() as u16,
+                    (offset + hx * span).round().clamp(0.0, max) as u16,
+                    (offset + hy * span).round().clamp(0.0, max) as u16,
                 ),
             ));
         }
@@ -573,7 +605,17 @@ mod tests {
         assert_ne!(base.key(), bigger.key());
         assert_ne!(base.key(), plain.key());
         assert_ne!(base.key(), red.key());
-        assert_eq!(base.key(), "2e8bff-32-o");
+        assert_eq!(base.key(), format!("v{RENDER_VERSION}-2e8bff-32-o"));
+
+        // The renderer's version is in the key, not only the user's choices. A
+        // change to how a pixel is produced leaves every existing entry stale
+        // and still matching its key, so the fix reaches nobody who had already
+        // applied that cursor — invisible on a developer's empty cache and
+        // permanent on a user's full one.
+        assert!(
+            base.key().starts_with(&format!("v{RENDER_VERSION}-")),
+            "the render version has to be part of the cache key"
+        );
     }
 
     #[test]

@@ -495,9 +495,31 @@ pub struct CustomEntry {
     pub preview: String,
 }
 
+/// Deletes a custom cursor, and puts the pointer back if that was the one in use.
+///
+/// Deleting the applied cursor used to leave `HKCU\Control Panel\Cursors` naming
+/// files that no longer existed. Windows does not complain about that — it
+/// quietly falls back to its own arrow — so nothing looked wrong until the user
+/// tried to change something.
+///
+/// The failure it produced was baffling on purpose-built evidence: the pointer
+/// stopped responding to the size control, while the hand and the I-beam kept
+/// resizing, because those still pointed at real files. That reads as "sizing is
+/// broken for the main cursor" and sends you looking at the sizing code, which
+/// is fine. The stored descriptor was the thing that had gone stale.
 #[tauri::command]
 pub fn delete_custom_cursor(id: String) -> AppResult<()> {
-    custom::remove(&id)
+    let was_applied = session::applied_custom_id().is_some_and(|applied| applied == id);
+    custom::remove(&id)?;
+
+    if was_applied {
+        // Restore rather than re-apply: the artwork this pointer was made from
+        // is the thing that was just deleted, so there is nothing to go back to.
+        log::info!("the applied custom cursor was deleted, so the pointer goes back to Windows");
+        cursor::restore_default()?;
+        session::forget();
+    }
+    Ok(())
 }
 
 /* ── advanced / about ──────────────────────────────────────── */
