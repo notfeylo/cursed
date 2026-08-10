@@ -26,10 +26,10 @@ docs/               This, and everything else worth writing down.
 | `commands.rs` | **The only `#[tauri::command]` surface.** Every call the UI can make is here, and nowhere else. |
 | `cursor/` | The three layers: `engine` (live `SetSystemCursor`), `scheme` (the registry), `watchdog` (puts it back when Windows changes it), `restore` (undo, used by Settings *and* the uninstaller). |
 | `build/` | Turning artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`. Pure and unit-tested — no registry, no Win32. |
-| `packs/` | The built-in catalog. `styles.rs` is the 291 pack definitions, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it. |
+| `packs/` | `styles.rs` defines the single built-in blend base that fills roles an imported pack leaves unmapped, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it. The catalog itself is `bundled.rs`. |
 | `custom.rs` | Cursors built from the user's own images, including their optional hover artwork. |
 | `import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
-| `bundled.rs` | Packs embedded in the binary and installed on first run. Licence-checked; see `LICENSES.md`. |
+| `bundled.rs` | **The catalog.** 36 packs embedded in the binary and installed on first run. Two are licensed for redistribution and thirty-four state no licence — `LICENSES.md` says exactly which and why they ship anyway. |
 | `updates.rs` | The one network request the app makes. Architecture-aware asset matching, checksum verification. |
 | `paths.rs` | Every path the app writes. Nothing else builds one. |
 | `session.rs`, `state/` | What is applied now, and the settings behind it. |

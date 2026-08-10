@@ -38,12 +38,19 @@ here; it is a property of the design.
 
 ## What it does
 
-- **291 full schemes**, each defining **all 17 pointer roles** — not just the
-  arrow, so you never end up with a neon pointer and a stock hourglass.
-- **Every size, sharp.** Catalog cursors are rendered from vectors at 10, 16,
-  24, 32, 48, 64, 96 and 128 px into one multi-resolution `.cur`.
-- **Any colour.** Artwork ships as greyscale masters and is tinted at apply
-  time, so 291 packs × any colour costs the installer nothing.
+- **36 hand-made cursor packs**, in the installer. Nothing is downloaded on
+  first run and nothing needs importing.
+- **All 17 pointer roles, always.** Most packs define an arrow and a hand; the
+  remaining roles are filled from a plain built-in base, so you never end up
+  with a custom pointer and a stock Windows hourglass the moment your PC copies
+  a file.
+- **Every size, sharp.** Vector artwork is rendered at 10, 16, 24, 32, 48, 64,
+  96 and 128 px into one multi-resolution `.cur`, and photographs are sharpened
+  in proportion to how far they were shrunk.
+- **Any colour**, for the artwork that is ours — the base pack, the link hand
+  and the text I-beam ship as greyscale masters and are tinted at apply time.
+  Imported packs keep their own colours, because tinting somebody's finished
+  artwork only breaks it.
 - **Drop a PNG.** Hotspot picker with alpha-centroid and tip-detect, a 1:1
   preview of all eight sizes, and a real cursor in under three seconds. GIF and
   APNG become real animated `.ani` files.
