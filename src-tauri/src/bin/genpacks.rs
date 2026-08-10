@@ -960,8 +960,97 @@ fn blit(sheet: &mut cursorforge_lib::build::bitmap::Bitmap, over: &cursorforge_l
     }
 }
 
+/// Renders the exact ladder a cursor ships, magnified above and 1:1 below.
+///
+/// The point is to look at what Windows will actually draw. A master that looks
+/// perfect at 500 px says nothing about 24 px, and "the cursor is blurry" is a
+/// complaint about sizes that no preview shows large enough to judge.
+/// Nearest-neighbour for the magnification, deliberately — a smooth upscale
+/// would hide the very pixels being inspected.
+fn ladder(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    use cursorforge_lib::build::{cur_writer, pipeline};
+
+    let (Some(src), Some(dst)) = (args.get(2), args.get(3)) else {
+        eprintln!("usage: genpacks --ladder <in> <out.png>");
+        std::process::exit(2);
+    };
+
+    let decoded = match image::open(src) {
+        Ok(i) => i.to_rgba8(),
+        Err(e) => {
+            eprintln!("could not open {src}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (w, h) = (decoded.width(), decoded.height());
+    let bitmap = match Bitmap::from_rgba(w, h, decoded.into_raw()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    let master = match pipeline::prepare_master_with(&bitmap, pipeline::Cut::Auto) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    let images =
+        match cur_writer::build_multi_resolution(&master, (0.5, 0.5), &cur_writer::TARGET_SIZES, false) {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
+
+    const ZOOM: u32 = 4;
+    const PAD: u32 = 10;
+    let width: u32 = PAD + cur_writer::TARGET_SIZES.iter().map(|s| s * ZOOM + PAD).sum::<u32>();
+    let height = PAD + 128 * ZOOM + PAD + 128 + PAD;
+
+    let mut sheet = Bitmap::new(width, height);
+    for y in 0..height {
+        for x in 0..width {
+            // Mid grey: light and dark artwork are both legible on it, and
+            // neither is flattered.
+            sheet.set_pixel(x, y, [44, 46, 52, 255]);
+        }
+    }
+
+    let mut x = PAD;
+    for cursor in &images {
+        let side = cursor.bitmap.width;
+        let mut big = Bitmap::new(side * ZOOM, side * ZOOM);
+        for yy in 0..side * ZOOM {
+            for xx in 0..side * ZOOM {
+                big.set_pixel(xx, yy, cursor.bitmap.pixel(xx / ZOOM, yy / ZOOM));
+            }
+        }
+        blit(&mut sheet, &big, x, PAD);
+        // 1:1 beneath, which is the size that actually matters.
+        blit(&mut sheet, &cursor.bitmap, x, PAD + 128 * ZOOM + PAD);
+        x += side * ZOOM + PAD;
+    }
+
+    match sheet.to_png(image::codecs::png::CompressionType::Default) {
+        Ok(bytes) => match std::fs::write(dst, &bytes) {
+            Ok(()) => println!("wrote {dst} ({} sizes, master {}px)", images.len(), master.width),
+            Err(e) => eprintln!("could not write {dst}: {e}"),
+        },
+        Err(e) => eprintln!("{e}"),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--ladder") {
+        ladder(&args);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--icon") {
         render_icon(&args);
     }

@@ -166,6 +166,30 @@ pub fn write_cur(images: &[CursorImage]) -> AppResult<Vec<u8>> {
 /// Builds the whole ladder of sizes from one master, scaling the hotspot with
 /// it. The hotspot is carried as a normalised 0.0-1.0 pair precisely so this
 /// works: an absolute pixel hotspot is correct at exactly one size (PRD §5.3).
+/// How hard to sharpen a rendition, from how far it was shrunk to get there.
+///
+/// Scaled by the reduction rather than fixed, because the softness being
+/// corrected is caused by the reduction. A master that is already near the
+/// target size loses almost nothing and needs almost nothing put back;
+/// a 500 px photograph at 24 px has been through a 20× low-pass and needs a
+/// firm hand.
+///
+/// Capped well below 1.0. Past that an unsharp mask stops restoring contrast and
+/// starts drawing bright rims along every edge, which at 16 px is the entire
+/// image — trading blurry for crunchy is not a fix.
+fn sharpen_for(master_px: u32, target_px: u32) -> f32 {
+    if target_px == 0 || master_px <= target_px {
+        return 0.0;
+    }
+    let reduction = master_px as f32 / target_px as f32;
+    // Nothing below 2x: a gentle downscale is already sharp, and sharpening it
+    // only adds noise.
+    if reduction < 2.0 {
+        return 0.0;
+    }
+    ((reduction - 2.0) / 10.0).clamp(0.0, 0.55)
+}
+
 pub fn build_multi_resolution(
     master: &Bitmap,
     hotspot_normalised: (f32, f32),
@@ -182,7 +206,7 @@ pub fn build_multi_resolution(
         if size == 0 || size > 256 {
             return Err(AppError::invalid(format!("{size} is not a valid cursor size")));
         }
-        let scaled = master.resized(size, size)?;
+        let scaled = master.resized(size, size)?.sharpened(sharpen_for(master.width, size));
         // The outline is drawn per size so it is always exactly one pixel wide.
         let finished = if outline {
             scaled.with_contrast_outline()

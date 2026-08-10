@@ -99,6 +99,102 @@ impl Bitmap {
         Bitmap::from_rgba(width, height, dst.into_vec())
     }
 
+    /// Unsharp mask, for artwork that has just been shrunk a long way.
+    ///
+    /// A good downscale filter is a low-pass filter — that is what stops it
+    /// aliasing — so shrinking a detailed photograph to 32 px necessarily throws
+    /// away the high frequencies that read as *detail*. Lanczos3 already
+    /// reconstructs some of that, but past roughly 4× the result still lands
+    /// soft, and soft at cursor sizes reads as "blurry, low quality" because
+    /// there are no longer enough pixels for the eye to infer an edge.
+    ///
+    /// The fix is the one every icon pipeline uses: subtract a blurred copy to
+    /// put the local contrast back. It does not invent detail, it restores the
+    /// contrast the low-pass removed.
+    ///
+    /// Done in **premultiplied** space. Sharpening straight RGB samples the
+    /// colour of fully transparent pixels — which is arbitrary, and usually
+    /// black — so every edge against transparency would gain a dark rim: exactly
+    /// the halo the resize above is careful to avoid. Alpha is sharpened with it
+    /// so the silhouette stays crisp rather than the artwork gaining a hard edge
+    /// inside a soft outline.
+    pub fn sharpened(&self, amount: f32) -> Bitmap {
+        if amount <= 0.0 || self.width < 3 || self.height < 3 {
+            return self.clone();
+        }
+        let (w, h) = (self.width, self.height);
+
+        // Premultiply once, so both the blur and the recombination below are
+        // working on values where a transparent pixel genuinely contributes
+        // nothing rather than contributing black.
+        let premultiplied: Vec<f32> = self
+            .pixels
+            .chunks_exact(4)
+            .flat_map(|p| {
+                let a = p[3] as f32 / 255.0;
+                [p[0] as f32 * a, p[1] as f32 * a, p[2] as f32 * a, p[3] as f32]
+            })
+            .collect();
+
+        // A 3×3 tent blur is the right radius here: at these sizes anything
+        // wider stops being "local contrast" and starts ringing.
+        const KERNEL: [f32; 9] = [1.0, 2.0, 1.0, 2.0, 4.0, 2.0, 1.0, 2.0, 1.0];
+        const WEIGHT: f32 = 16.0;
+
+        let mut out = vec![0u8; self.pixels.len()];
+        for y in 0..h {
+            for x in 0..w {
+                let mut blurred = [0.0f32; 4];
+                let mut k = 0;
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as u32;
+                        let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as u32;
+                        let base = ((sy * w + sx) * 4) as usize;
+                        for c in 0..4 {
+                            blurred[c] += premultiplied[base + c] * KERNEL[k];
+                        }
+                        k += 1;
+                    }
+                }
+
+                let base = ((y * w + x) * 4) as usize;
+                let mut sharp = [0.0f32; 4];
+                for c in 0..4 {
+                    let original = premultiplied[base + c];
+                    sharp[c] = original + amount * (original - blurred[c] / WEIGHT);
+                }
+
+                let alpha = sharp[3].clamp(0.0, 255.0);
+                out[base + 3] = alpha.round() as u8;
+
+                // Back to straight alpha.
+                //
+                // Each premultiplied channel is clamped to the alpha first, and
+                // that clamp is doing real work rather than being defensive.
+                // Colour and alpha are sharpened independently, so at an edge
+                // where alpha was pulled *down* the colour can end up larger
+                // than its own coverage — a state no premultiplied pixel can
+                // legally be in. Dividing that by the smaller alpha sends it
+                // straight to white, which is precisely what turned black
+                // carbon fibre into a silver rim.
+                let a = alpha / 255.0;
+                for c in 0..3 {
+                    out[base + c] = if a > 0.004 {
+                        (sharp[c].clamp(0.0, alpha) / a).clamp(0.0, 255.0).round() as u8
+                    } else {
+                        // Under a pixel of coverage the division amplifies noise
+                        // into confetti, so these keep their colour and let alpha
+                        // carry the edge.
+                        self.pixels[base + c]
+                    };
+                }
+            }
+        }
+
+        Bitmap { width: w, height: h, pixels: out }
+    }
+
     /// Bounding box of everything not fully transparent.
     pub fn opaque_bounds(&self) -> Option<(u32, u32, u32, u32)> {
         let (mut min_x, mut min_y) = (u32::MAX, u32::MAX);

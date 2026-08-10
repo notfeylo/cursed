@@ -28,6 +28,14 @@ use crate::build::bitmap::Bitmap;
 /// subject sharing a hue with its backdrop survives.
 const TOLERANCE: i32 = 38;
 
+/// The tightest tolerance used, for a perfectly uniform background.
+///
+/// Not zero: even an exactly flat card has antialiasing along the subject's
+/// edge, and a keyed edge with no slack at all leaves a hard, jagged outline —
+/// the "pixels tearing up" look. This is enough to absorb that fringe and
+/// nothing more.
+const MIN_TOLERANCE: i32 = 10;
+
 /// How much a neighbouring pixel may differ and still count as the same
 /// surface. Small: this is the step across one pixel of a smooth gradient, not
 /// across an edge.
@@ -38,7 +46,31 @@ const LOCAL_STEP: i32 = 14;
 /// The leash on local growing. However many small steps it takes, a pixel can
 /// only wander this far from where it started — otherwise a smooth ramp from
 /// white to black lets the flood walk straight through the subject.
-const MAX_DRIFT: i32 = 110;
+///
+/// This was 110, which is most of the way from mid-grey to white, and it ate
+/// carbon fibre alive: the weave's bright specks are each within one small step
+/// of their neighbours, so the flood walked the highlights into the middle of
+/// the subject and shredded it. Paired with the texture gate below, a much
+/// shorter leash still follows any real gradient.
+const MAX_DRIFT: i32 = 96;
+
+/// The most a pixel's neighbourhood may vary for local growing to continue
+/// through it.
+///
+/// This is the difference between "the background carries on here" and "this is
+/// the subject, which happens to contain a pixel the colour of the backdrop".
+///
+/// A studio sweep, a vignette or a blurred photographic backdrop is *smooth* —
+/// neighbouring pixels differ by very little, which is exactly why local growing
+/// was needed to follow them. Carbon weave, knurling, mesh, glitter, printed
+/// text and stitching are the opposite: high-frequency detail whose bright
+/// specks sit within a step of a light background and whose dark ones sit within
+/// a step of a dark background. Colour alone cannot tell those apart. Local
+/// contrast can.
+///
+/// Generous enough to pass JPEG noise and film grain in a flat backdrop, tight
+/// enough to stop at a textured surface.
+const SMOOTH_ENOUGH: i32 = 34;
 
 /// How much of the border must be transparent to call an image cut out.
 ///
@@ -123,6 +155,12 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
         return MatteReport { removed: 0.0, already_had_alpha: false };
     };
 
+    // How much slack this particular image gets, from how uniform its border is.
+    // A flat card is keyed almost exactly; a noisy photographic backdrop is given
+    // room. See `border_spread`.
+    let tolerance = tolerance_for(border_spread(bitmap, background));
+    let soft = soft_for(tolerance);
+
     // Flood from the edges rather than clearing every matching pixel anywhere.
     // A white shirt in the middle of the subject matches the white background
     // exactly; the difference is that it is not connected to the edge.
@@ -133,7 +171,7 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
         if cleared[i] {
             return;
         }
-        if near(bitmap.pixel(x, y), background) {
+        if near(bitmap.pixel(x, y), background, tolerance) {
             cleared[i] = true;
             stack.push((x, y));
         }
@@ -178,9 +216,15 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
             // pixel can only wander so far from the colour it started at. Without
             // that, a smooth ramp from white to black would let the flood walk
             // all the way across the subject.
-            let joins = near(pixel, background)
+            // The texture gate is the third condition, and it is what stops a
+            // detailed subject being walked into. Local growing is only allowed
+            // to continue through a pixel that sits in a *smooth* neighbourhood;
+            // an exact match on the sampled background still gets through
+            // anywhere, because that is not a guess.
+            let joins = near(pixel, background, tolerance)
                 || (distance(pixel, here) <= LOCAL_STEP
-                    && distance(pixel, background) <= MAX_DRIFT);
+                    && distance(pixel, background) <= MAX_DRIFT
+                    && local_contrast(bitmap, nx, ny) <= SMOOTH_ENOUGH);
 
             if joins {
                 cleared[i] = true;
@@ -200,7 +244,7 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     //
     // They are cleared on the tight tolerance rather than the soft band, so a
     // region has to actually be the background colour, not merely resemble it.
-    enclose_background(bitmap, background, &mut cleared);
+    enclose_background(bitmap, background, &mut cleared, tolerance);
 
     // Single pixels of noise inside an otherwise clean background.
     //
@@ -247,7 +291,7 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
                             && !cleared[(ny as u32 * w + nx as u32) as usize]
                     });
                 if touching_subject {
-                    let alpha = graded_alpha(distance(pixel, background));
+                    let alpha = graded_alpha(distance(pixel, background), tolerance, soft);
                     if alpha > 0 {
                         bitmap.set_pixel(x, y, unblend(pixel, background, alpha));
                         softened += 1;
@@ -278,8 +322,8 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
                     continue;
                 }
                 let d = distance(pixel, background);
-                if d < SOFT_TOLERANCE {
-                    let alpha = graded_alpha(d).max(1);
+                if d < soft {
+                    let alpha = graded_alpha(d, tolerance, soft).max(1);
                     let blended = unblend(pixel, background, alpha);
                     let combined =
                         [blended[0], blended[1], blended[2], alpha.min(pixel[3])];
@@ -297,11 +341,28 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
 
 /// Clears regions of background colour that the border flood never reached.
 ///
-/// Deliberately uses the tight tolerance. The soft band exists for pixels that
-/// are *part* background, which only makes sense against a real boundary; using
-/// it here would eat any subject colour that happened to sit near the
-/// background's.
-fn enclose_background(bitmap: &Bitmap, background: [u8; 4], cleared: &mut [bool]) {
+/// A region has to *start* on an exact match — the seed is the claim that this
+/// is background at all, and it is not a guess worth making loosely. From there
+/// it grows by the same rule as the border flood: exact match, or a smooth step
+/// through untextured pixels within the drift leash.
+///
+/// It used to grow on the exact match alone, and that left a visible ring of old
+/// background inside anything with a hole in it. The two openings of a steering
+/// wheel are lit from one side, so the card behind them carries a soft shadow;
+/// the lit half matched and cleared, the shaded half did not, and what survived
+/// was a bright crescent stuck to the inside of the rim. The gradient there is
+/// the same kind of gradient the border flood already follows, and there was no
+/// reason for these two to disagree about it.
+///
+/// The texture gate is what makes that safe. Following a shadow across a smooth
+/// card is not the same permission as walking into a subject, because a subject
+/// with any detail in it fails the smoothness test at its own edge.
+fn enclose_background(
+    bitmap: &Bitmap,
+    background: [u8; 4],
+    cleared: &mut [bool],
+    tolerance: i32,
+) {
     let (w, h) = (bitmap.width, bitmap.height);
     let mut visited = vec![false; (w * h) as usize];
 
@@ -311,7 +372,7 @@ fn enclose_background(bitmap: &Bitmap, background: [u8; 4], cleared: &mut [bool]
             if cleared[start] || visited[start] {
                 continue;
             }
-            if distance(bitmap.pixel(sx, sy), background) > TOLERANCE {
+            if distance(bitmap.pixel(sx, sy), background) > tolerance {
                 continue;
             }
 
@@ -322,6 +383,7 @@ fn enclose_background(bitmap: &Bitmap, background: [u8; 4], cleared: &mut [bool]
             visited[start] = true;
             while let Some((x, y)) = stack.pop() {
                 region.push((x, y));
+                let here = bitmap.pixel(x, y);
                 for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
                     let (nx, ny) = (x as i32 + dx, y as i32 + dy);
                     if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
@@ -332,7 +394,12 @@ fn enclose_background(bitmap: &Bitmap, background: [u8; 4], cleared: &mut [bool]
                     if visited[i] || cleared[i] {
                         continue;
                     }
-                    if distance(bitmap.pixel(nx, ny), background) <= TOLERANCE {
+                    let pixel = bitmap.pixel(nx, ny);
+                    let joins = near(pixel, background, tolerance)
+                        || (distance(pixel, here) <= LOCAL_STEP
+                            && distance(pixel, background) <= MAX_DRIFT
+                            && local_contrast(bitmap, nx, ny) <= SMOOTH_ENOUGH);
+                    if joins {
                         visited[i] = true;
                         stack.push((nx, ny));
                     }
@@ -401,6 +468,37 @@ fn sample_border(bitmap: &Bitmap) -> Option<[u8; 4]> {
     Some([channel(0), channel(1), channel(2), 255])
 }
 
+/// How much the 3×3 neighbourhood around a pixel varies, as the largest
+/// per-channel spread across it.
+///
+/// Cheap on purpose — this runs for every candidate the flood considers, and a
+/// proper variance would cost a multiply per channel per neighbour to tell us
+/// the same thing. Spread answers the only question being asked: is this a flat
+/// region, or is there detail here?
+///
+/// Edge pixels clamp to the image rather than wrapping, so the border — where
+/// the flood starts, and where a backdrop is flattest — is never mistaken for
+/// texture.
+fn local_contrast(bitmap: &Bitmap, x: u32, y: u32) -> i32 {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let (mut lo, mut hi) = ([255i32; 3], [0i32; 3]);
+
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as u32;
+            let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as u32;
+            let pixel = bitmap.pixel(sx, sy);
+            for channel in 0..3 {
+                let value = pixel[channel] as i32;
+                lo[channel] = lo[channel].min(value);
+                hi[channel] = hi[channel].max(value);
+            }
+        }
+    }
+
+    (0..3).map(|c| hi[c] - lo[c]).max().unwrap_or(0)
+}
+
 /// Chebyshev distance from the background colour.
 ///
 /// Chebyshev rather than Euclidean because a background usually differs from the
@@ -413,8 +511,52 @@ fn distance(pixel: [u8; 4], background: [u8; 4]) -> i32 {
         .max(d(pixel[2], background[2]))
 }
 
-fn near(pixel: [u8; 4], background: [u8; 4]) -> bool {
-    pixel[3] < 16 || distance(pixel, background) <= TOLERANCE
+fn near(pixel: [u8; 4], background: [u8; 4], tolerance: i32) -> bool {
+    pixel[3] < 16 || distance(pixel, background) <= tolerance
+}
+
+/// How uniform the border is, as the median absolute deviation from the sampled
+/// background colour.
+///
+/// This is what decides how much slack the rest of the cut is allowed. The two
+/// kinds of background need opposite treatment and cannot share a constant:
+///
+/// - A **flat** backdrop — an exported card, a studio sweep, the grey overlay a
+///   background remover puts behind its preview — is uniform to within a couple
+///   of levels. It can be keyed exactly, and *must* be, because a subject that
+///   happens to be grey is only a few levels away and a loose tolerance eats it.
+/// - A **photographic** backdrop carries noise, grain and JPEG ringing. Keying
+///   it tightly leaves a confetti of speckles behind.
+///
+/// A single tolerance of 38 was the compromise, and it failed the first case
+/// badly: on a flat grey card it took the grey parts of the subject with it.
+fn border_spread(bitmap: &Bitmap, background: [u8; 4]) -> i32 {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let mut deviations: Vec<i32> = Vec::new();
+    for x in 0..w {
+        deviations.push(distance(bitmap.pixel(x, 0), background));
+        deviations.push(distance(bitmap.pixel(x, h - 1), background));
+    }
+    for y in 0..h {
+        deviations.push(distance(bitmap.pixel(0, y), background));
+        deviations.push(distance(bitmap.pixel(w - 1, y), background));
+    }
+    if deviations.is_empty() {
+        return 0;
+    }
+    deviations.sort_unstable();
+    // Median, not mean: a subject touching the edge shows up as a handful of
+    // enormous deviations, and a mean would let those declare a flat card noisy.
+    deviations[deviations.len() / 2]
+}
+
+/// The tolerance to use for an image, from how uniform its border is.
+///
+/// Floored well above zero so a perfectly flat card still absorbs its own
+/// antialiasing, and capped at the old fixed value so this can only ever be
+/// tighter than the behaviour it replaces, never looser.
+fn tolerance_for(spread: i32) -> i32 {
+    (MIN_TOLERANCE + spread * 3).clamp(MIN_TOLERANCE, TOLERANCE)
 }
 
 /// Everything between `TOLERANCE` and `SOFT_TOLERANCE` is *partly* background.
@@ -427,15 +569,26 @@ fn near(pixel: [u8; 4], background: [u8; 4]) -> bool {
 /// image already encoded.
 const SOFT_TOLERANCE: i32 = 96;
 
+/// The soft band for a given tolerance, keeping the original 38:96 proportion.
+///
+/// It scales with the tolerance rather than staying fixed, because the band's
+/// job is to cover the blend between subject and background — and on a flat card
+/// that blend is only a few levels wide. Holding it at 96 while the tolerance
+/// dropped to 10 would grade most of a grey subject to partial alpha, which
+/// looks exactly like the washed-out, see-through edge it exists to prevent.
+fn soft_for(tolerance: i32) -> i32 {
+    (tolerance * SOFT_TOLERANCE / TOLERANCE).max(tolerance + 1)
+}
+
 /// Alpha for a pixel at a given distance from the background, 0–255.
-fn graded_alpha(distance: i32) -> u8 {
-    if distance <= TOLERANCE {
+fn graded_alpha(distance: i32, tolerance: i32, soft: i32) -> u8 {
+    if distance <= tolerance {
         return 0;
     }
-    if distance >= SOFT_TOLERANCE {
+    if distance >= soft {
         return 255;
     }
-    let t = (distance - TOLERANCE) as f32 / (SOFT_TOLERANCE - TOLERANCE) as f32;
+    let t = (distance - tolerance) as f32 / (soft - tolerance) as f32;
     // Smoothstep rather than linear: a linear ramp leaves a visible band where
     // it meets full opacity.
     let eased = t * t * (3.0 - 2.0 * t);
@@ -683,5 +836,66 @@ mod tests {
         let report = remove_background(&mut b);
         assert!(report.removed > 0.6, "a soft ramp is still one background");
         assert_eq!(b.alpha(20, 20), 255);
+    }
+
+    /// A textured subject on a background of a similar tone must survive whole.
+    ///
+    /// This is the carbon-fibre case, and it is the one local growing got badly
+    /// wrong. The subject here is a weave: every other pixel is close to the
+    /// background's own grey, so there is a continuous path of
+    /// nearly-background-coloured pixels leading from the edge into the middle
+    /// of it. Following that path is exactly what shredded a steering wheel into
+    /// lace — each individual step looked like more background.
+    ///
+    /// What separates them is not colour, it is local contrast: the backdrop is
+    /// flat and the weave is not.
+    #[test]
+    fn a_textured_subject_is_not_walked_into_by_the_flood() {
+        let mut b = Bitmap::new(40, 40);
+        for y in 0..40 {
+            for x in 0..40 {
+                b.set_pixel(x, y, [128, 128, 128, 255]);
+            }
+        }
+        // A woven block: alternating light and dark, where the light threads sit
+        // within a step or two of the background.
+        for y in 10..30 {
+            for x in 10..30 {
+                let light = (x + y) % 2 == 0;
+                let v = if light { 140 } else { 30 };
+                b.set_pixel(x, y, [v, v, v, 255]);
+            }
+        }
+
+        let report = remove_background(&mut b);
+
+        assert!(report.removed > 0.4, "the flat surround should still go");
+        // Every thread of the weave, light ones included, has to survive.
+        let mut lost = 0;
+        for y in 12..28 {
+            for x in 12..28 {
+                if b.alpha(x, y) < 200 {
+                    lost += 1;
+                }
+            }
+        }
+        assert_eq!(lost, 0, "{lost} pixels of a textured subject were eaten");
+    }
+
+    /// Sharing a colour with the background is not the same as being it.
+    ///
+    /// A flat card keyed loosely takes the subject's mid-tones with it. The
+    /// tolerance is chosen from how uniform the border is, so an exactly flat
+    /// background is keyed tightly and a grey subject on a grey card survives.
+    #[test]
+    fn a_flat_background_is_keyed_tightly_enough_to_spare_a_similar_subject() {
+        assert_eq!(tolerance_for(0), MIN_TOLERANCE, "a flat card gets no slack");
+        assert!(
+            tolerance_for(0) < TOLERANCE,
+            "the old fixed tolerance is the ceiling, never the floor"
+        );
+        // A noisy photographic border earns its slack back, up to the old value.
+        assert_eq!(tolerance_for(50), TOLERANCE);
+        assert!(tolerance_for(4) > tolerance_for(0));
     }
 }
