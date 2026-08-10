@@ -30,6 +30,16 @@ pub struct Settings {
     pub cursor_size: Option<u32>,
     pub tint: String,
     pub outline: bool,
+    /// Whether the size control moves the hand and the text I-beam as well.
+    ///
+    /// Off by default, and the default is the point. The pointer is what a large
+    /// cursor is *for* — it is the thing being tracked across the screen. The
+    /// hand appears under whatever is already being pointed at, and the I-beam
+    /// sits between two characters of text; scaling those to 128 px covers the
+    /// very thing they exist to indicate. Anyone who wants all three to grow
+    /// together can ask for it, but nobody should have to ask for the sensible
+    /// one.
+    pub scale_all_roles: bool,
     pub apply_mode: ApplyMode,
     /// Fills the roles a custom or imported cursor does not define, so a
     /// one-role import does not leave fifteen stock Windows pointers behind it.
@@ -82,6 +92,7 @@ impl Default for Settings {
             cursor_size: None,
             tint: "#2E8BFF".to_owned(),
             outline: true,
+            scale_all_roles: false,
             apply_mode: ApplyMode::Blend,
             blend_pack: "precision-gap-cross".to_owned(),
             tint_previews: false,

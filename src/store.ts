@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cursorSize: null,
   tint: "#2E8BFF",
   outline: true,
+  scaleAllRoles: false,
   applyMode: "Blend",
   blendPack: "precision-gap-cross",
   tintPreviews: false,

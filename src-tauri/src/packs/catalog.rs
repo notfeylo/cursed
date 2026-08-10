@@ -57,6 +57,24 @@ pub struct RenderSpec {
 /// v2: the hand and the I-beam stopped growing with the pointer.
 const RENDER_VERSION: u32 = 2;
 
+/// Whether the user has asked for every role to follow the size control.
+fn scale_all_roles() -> bool {
+    crate::state::settings::get().scale_all_roles
+}
+
+/// The pixel size a role's artwork is drawn at, for a given ladder entry.
+///
+/// One place, so the ladder, the animated build and the live override cannot
+/// disagree about how large a hand is — which is how a cursor ends up one size
+/// until the watchdog reloads it and another size afterwards.
+pub fn glyph_size(role: Role, entry: u32) -> u32 {
+    if scale_all_roles() {
+        entry
+    } else {
+        role.size_from(entry)
+    }
+}
+
 impl RenderSpec {
     fn rgb(&self) -> AppResult<[u8; 3]> {
         parse_hex_color(&self.tint)
@@ -67,10 +85,15 @@ impl RenderSpec {
     /// a stale cache entry cannot be served for a different choice.
     fn key(&self) -> String {
         format!(
-            "v{RENDER_VERSION}-{}-{}-{}",
+            "v{RENDER_VERSION}-{}-{}-{}{}",
             self.tint.trim_start_matches('#').to_ascii_lowercase(),
             self.size.clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX),
-            if self.outline { "o" } else { "n" }
+            if self.outline { "o" } else { "n" },
+            // Whether the hand and I-beam scale changes their pixels, so it has
+            // to change their cache entry. Read here rather than carried through
+            // every RenderSpec because it is one global preference, not a
+            // property of the thing being rendered.
+            if scale_all_roles() { "-a" } else { "" }
         )
     }
 }
@@ -183,7 +206,7 @@ fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBu
         // `.ani` has no directory of resolutions, so it is built at the one size
         // Windows is currently drawing (PRD §5.4) — which for the hand and the
         // I-beam is capped, since those do not scale with the pointer.
-        let size = pipeline::nearest_size(role.size_from(spec.size));
+        let size = pipeline::nearest_size(glyph_size(role, spec.size));
         let frames: AppResult<Vec<(Bitmap, u32)>> = (0..ANIMATION_FRAMES)
             .map(|i| {
                 let phase = i as f32 / ANIMATION_FRAMES as f32;
@@ -217,7 +240,7 @@ fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBu
             // entry by `CursorBaseSize` and scales it, so a short ladder would
             // just be scaled back up; a full-size canvas holding a small glyph
             // comes through untouched.
-            let glyph = role.size_from(size);
+            let glyph = glyph_size(role, size);
             let rendered = role_bitmap(pack, role, glyph, 0.0)?;
             let coloured = rendered.tinted(finish.tint.unwrap_or([255, 255, 255]));
             let outlined = if finish.outline {

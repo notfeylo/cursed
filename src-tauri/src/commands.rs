@@ -107,7 +107,12 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> AppResult<Settings> 
     // nobody asked for.
     let appearance_changed = before.tint != saved.tint
         || before.outline != saved.outline
-        || before.cursor_size != saved.cursor_size;
+        || before.cursor_size != saved.cursor_size
+        // This one changes the hand and the I-beam rather than the pointer, so
+        // it is easy to leave out and impossible to notice missing: the toggle
+        // moves, the setting saves, and the cursor on screen does not change
+        // until something else happens to trigger a rebuild.
+        || before.scale_all_roles != saved.scale_all_roles;
 
     if appearance_changed {
         let size = effective_size(saved.cursor_size.unwrap_or(0));

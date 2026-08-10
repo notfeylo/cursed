@@ -90,6 +90,8 @@ export interface Settings {
   cursorSize: number | null;
   tint: string;
   outline: boolean;
+  /** Whether the size control moves the link hand and the text I-beam too. */
+  scaleAllRoles: boolean;
   applyMode: ApplyMode;
   blendPack: string;
   /** Recolour catalog tiles to the tint. Off by default — see Settings. */

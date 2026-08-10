@@ -241,14 +241,24 @@ export function SettingsScreen() {
             )}
 
             {/* Said plainly, because otherwise it reads as the slider being
-                broken rather than as a decision. */}
+                broken rather than as a decision — and the toggle sits directly
+                underneath, so the answer is where the question gets asked. */}
             {(settings.cursorSize ?? systemSize) > 32 && (
               <p className="mt-2 text-[11px] leading-relaxed text-text-dim">
-                The link hand and the text I-beam stay at 32px. A pointer this
-                size is fine to aim with; an I-beam this size cannot be placed
-                between two characters.
+                {settings.scaleAllRoles
+                  ? "The link hand and the text I-beam grow with the pointer. At this size an I-beam can be hard to place between two characters."
+                  : "The link hand and the text I-beam stay at 32px. A pointer this size is fine to aim with; an I-beam this size cannot be placed between two characters."}
               </p>
             )}
+
+            <div className="mt-3">
+              <Toggle
+                checked={settings.scaleAllRoles}
+                onChange={(v) => void patch({ scaleAllRoles: v })}
+                label="Resize the hand and I-beam too"
+                hint="Off, only the pointer follows the size above"
+              />
+            </div>
           </div>
 
           <Field

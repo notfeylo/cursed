@@ -215,7 +215,7 @@ pub fn apply_live(set: &CursorSet, size: u32) -> AppResult<()> {
         // resolution ladder, so which image Windows draws is decided by the size
         // asked for here — passing the pointer's size would hand back a 128 px
         // I-beam out of a file that also contains a 32 px one.
-        if let Err(e) = set_role(*role, path, role.size_from(size)) {
+        if let Err(e) = set_role(*role, path, crate::packs::catalog::glyph_size(*role, size)) {
             failures.push(format!("{role}: {e}"));
         }
     }
