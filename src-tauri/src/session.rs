@@ -182,9 +182,30 @@ fn restore() -> AppResult<()> {
         return Ok(());
     }
 
+    // The size comes from settings, not from the descriptor.
+    //
+    // The descriptor records the size the cursor was applied at, which is a
+    // snapshot; the setting is what the user currently wants. They are supposed
+    // to move together, and when anything stops them — a re-apply that failed, a
+    // profile restored from a backup, a crash between the two writes — the
+    // descriptor wins on every launch afterwards and the size control looks
+    // permanently dead. It saves, the number moves, and the pointer never
+    // changes, because the very next restore puts the old size back.
+    //
+    // Settings is the intent, so settings decides. The descriptor keeps the
+    // colour and the outline, which have no equivalent second source.
+    let settings = crate::state::settings::get();
+    let size = crate::cursor::engine::effective_size(settings.cursor_size);
+    if size != descriptor.size {
+        log::info!(
+            "restoring at the size in settings ({size}px), not the one stored with the cursor ({}px)",
+            descriptor.size
+        );
+    }
+
     let spec = RenderSpec {
         tint: descriptor.tint.clone(),
-        size: descriptor.size,
+        size,
         outline: descriptor.outline,
     };
 
@@ -212,13 +233,10 @@ fn restore() -> AppResult<()> {
         ),
     };
 
-    cursor::adopt(
-        set,
-        &descriptor.display_name,
-        descriptor.size,
-        pack_id,
-        descriptor.tint,
-    )
+    // `size`, not `descriptor.size` — the set above was built at `size`, and
+    // recording a different number would leave the app believing the cursor on
+    // screen is a size it is not.
+    cursor::adopt(set, &descriptor.display_name, size, pack_id, descriptor.tint)
 }
 
 /// Applies the default preset on first run, if one is set. Quiet on failure —
