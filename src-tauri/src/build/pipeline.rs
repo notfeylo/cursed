@@ -133,14 +133,28 @@ fn decode_inner(bytes: &[u8], format: image::ImageFormat) -> AppResult<Source> {
         image::ImageFormat::Gif => decode_gif(bytes),
         image::ImageFormat::Png => decode_png(bytes),
         _ => {
-            let reader = image::ImageReader::with_format(Cursor::new(bytes), format);
-            let (width, height) = reader
-                .into_dimensions()
+            let mut decoder = image::ImageReader::with_format(Cursor::new(bytes), format)
+                .into_decoder()
                 .map_err(|e| AppError::invalid(format!("unreadable image: {e}")))?;
+            let (width, height) = decoder.dimensions();
             guard_dimensions(width, height)?;
 
-            let decoded = image::load_from_memory_with_format(bytes, format)
+            // What the camera recorded, which is not what it stored.
+            //
+            // A phone writes its sensor's pixels in the sensor's own order and
+            // adds an EXIF tag saying how to turn them upright. Every viewer
+            // applies it, so the photograph *is* upright everywhere the user has
+            // ever seen it — and a decoder that ignores the tag produces an
+            // image rotated a quarter turn, or mirrored, with no warning.
+            //
+            // Imported as a cursor that is not a subtle quality problem: the
+            // pointer is sideways. It also breaks the cut, because the flood
+            // starts at the border and a rotated frame puts the subject there.
+            let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+            let mut decoded = image::DynamicImage::from_decoder(decoder)
                 .map_err(|e| AppError::invalid(format!("unreadable image: {e}")))?;
+            decoded.apply_orientation(orientation);
+
             Ok(Source::Static(to_bitmap(decoded.to_rgba8())?))
         }
     }
@@ -223,6 +237,40 @@ pub enum Cut {
     Keep,
 }
 
+/// The largest resolution anything downstream of the import actually uses.
+///
+/// A phone photograph arrives at twelve megapixels and leaves as a 128 px
+/// cursor. Everything in between — the flood that cuts the background, the
+/// eight resamples that build the ladder, the preview — pays for those pixels
+/// in full, and the cut is the expensive one: it visits every pixel several
+/// times and cannot be vectorised, so a 12 MP import spends seconds on detail
+/// that is discarded before anything is written.
+///
+/// 1024 is deliberate rather than round. Sharpening is chosen from how far the
+/// artwork was shrunk and saturates at a reduction of 7.5×; the largest cursor
+/// is 128 px, and 1024/128 is 8. So every target size still lands in the
+/// saturated part of that curve and gets exactly the sharpening it did before —
+/// the cap changes what the work costs and not what it produces.
+pub const WORKING_CAP: u32 = 1024;
+
+/// Brings an oversized import down to the working resolution, longest edge
+/// first, preserving the aspect ratio.
+fn working_copy(bitmap: &Bitmap) -> AppResult<Bitmap> {
+    let longest = bitmap.width.max(bitmap.height);
+    if longest <= WORKING_CAP {
+        return Ok(bitmap.clone());
+    }
+    let scale = WORKING_CAP as f32 / longest as f32;
+    let width = ((bitmap.width as f32 * scale).round() as u32).max(1);
+    let height = ((bitmap.height as f32 * scale).round() as u32).max(1);
+    log::debug!(
+        "working from {width}x{height} rather than {}x{}",
+        bitmap.width,
+        bitmap.height
+    );
+    bitmap.resized(width, height)
+}
+
 pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
     prepare_master_with(bitmap, Cut::Auto)
 }
@@ -236,7 +284,7 @@ pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
     //
     // An image that already carries transparency is left exactly as it was; see
     // `matte` for that rule and for what this deliberately does not attempt.
-    let mut source = bitmap.clone();
+    let mut source = working_copy(bitmap)?;
     let report = match cut {
         Cut::Auto => crate::build::matte::remove_background(&mut source),
         Cut::Force => crate::build::matte::remove_background_forced(&mut source),
@@ -335,7 +383,10 @@ pub fn prepare_animation_with(
     let cut: Vec<(Bitmap, u32)> = frames
         .iter()
         .map(|(bitmap, delay)| {
-            let mut copy = bitmap.clone();
+            // Every frame takes the same cap, so frames that started identical
+            // in size stay identical in size and the union rectangle below still
+            // means something.
+            let mut copy = working_copy(bitmap).unwrap_or_else(|_| bitmap.clone());
             match cut {
                 Cut::Auto => {
                     crate::build::matte::remove_background(&mut copy);
@@ -494,14 +545,34 @@ pub fn target_sizes() -> &'static [u32] {
 /// BGRA, so the top three sizes alone are about 80% of the bytes — for a 128 px
 /// source that is half a megabyte per cursor buying nothing.
 ///
-/// One size above the source is kept so the cursor still has something to offer
-/// at high DPI rather than being upscaled by the OS from its largest entry.
+/// Sizes above the source are kept up to `MAX_UPSCALE`, because *somebody* has
+/// to do that enlargement and it should not be Windows.
+///
+/// Stopping one size above the source was leaving the pointer soft for anyone
+/// running a large cursor: a 48 px import at the 128 px setting hands Windows a
+/// 48 px bitmap to stretch, and the shell's stretch is a bilinear one with no
+/// premultiplication and no gamma correction. Ours is Lanczos3 in linear light
+/// with premultiplied alpha, which is visibly sharper and cleaner at the same
+/// enlargement — so we do it, and Windows is handed a bitmap at the size it
+/// asked for.
+///
+/// It stops at 4× because past that there is genuinely nothing left to recover
+/// and the only thing another entry adds is bytes: a `.cur` stores every size as
+/// uncompressed BGRA, and the 128 px entry alone is 80 KB.
+const MAX_UPSCALE: u32 = 4;
+
 pub fn sizes_for_source(width: u32, height: u32) -> Vec<u32> {
-    let longest = width.max(height).max(32);
-    let mut out: Vec<u32> = TARGET_SIZES.into_iter().filter(|&s| s <= longest).collect();
-    if let Some(&next) = TARGET_SIZES.iter().find(|&&s| s > longest) {
-        out.push(next);
-    }
+    let source = width.max(height).max(1);
+    // The enlargement limit is measured against the pixels that actually exist,
+    // while the floor below keeps a very small source from being left with a
+    // ladder too short to be useful. Taking the ceiling from the floored value
+    // instead would make every source, however tiny, eligible for 128.
+    let longest = source.max(32);
+    let ceiling = source.saturating_mul(MAX_UPSCALE).max(32);
+    let mut out: Vec<u32> = TARGET_SIZES
+        .into_iter()
+        .filter(|&s| s <= longest || s <= ceiling)
+        .collect();
     if out.is_empty() {
         out.push(32);
     }
@@ -622,15 +693,24 @@ mod tests {
     }
 
     #[test]
-    fn size_ladders_do_not_upscale_a_small_source_into_a_huge_file() {
-        // A 64 px source gets the sizes up to 64 plus one step beyond;
-        // anything past that is upscaled blur costing real bytes.
+    fn size_ladders_enlarge_up_to_a_limit_and_then_stop() {
+        // A 64 px source covers the whole ladder: 128 is a 2x enlargement, and
+        // ours is a better one than the stretch Windows would apply instead.
         let sizes = sizes_for_source(64, 64);
         assert!(sizes.contains(&64));
-        assert!(!sizes.contains(&128), "128 from a 64px source is just blur");
+        assert!(
+            sizes.contains(&128),
+            "a large cursor from a 64px source should be enlarged by us, not by the shell"
+        );
 
-        // A large source still gets the full ladder.
+        // A large source still gets the full ladder and nothing more.
         assert_eq!(sizes_for_source(512, 512), TARGET_SIZES.to_vec());
+
+        // Past 4x there is nothing left to recover, so the top rungs are
+        // dropped rather than storing 80 KB of blur.
+        let small = sizes_for_source(16, 16);
+        assert!(small.contains(&64), "64 is a 4x enlargement of 16 and is allowed");
+        assert!(!small.contains(&96), "96 from a 16px source is 6x and is only bytes");
 
         // A tiny source still produces something usable, starting at the
         // smallest rung rather than jumping straight to 32.
