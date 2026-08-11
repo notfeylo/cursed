@@ -10,6 +10,39 @@ use crate::error::{AppError, AppResult};
 use fast_image_resize::images::Image as FirImage;
 use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
 
+/// sRGB → linear light, for all 256 encoded levels.
+///
+/// A table rather than a `powf` per channel: the input is a `u8`, so there are
+/// only 256 possible answers, and the source of a resize can be sixteen
+/// megapixels. The reverse direction is computed rather than tabulated because
+/// it only ever runs over the *destination*, which is a cursor.
+fn srgb_to_linear() -> &'static [f32; 256] {
+    static TABLE: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table = [0.0f32; 256];
+        for (level, value) in table.iter_mut().enumerate() {
+            let c = level as f32 / 255.0;
+            *value = if c <= 0.040_448_237 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
+        }
+        table
+    })
+}
+
+/// Linear light → an sRGB byte.
+fn linear_to_srgb(value: f32) -> u8 {
+    let v = value.clamp(0.0, 1.0);
+    let encoded = if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    };
+    (encoded * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bitmap {
     pub width: u32,
@@ -73,7 +106,30 @@ impl Bitmap {
         self.width == 0 || self.height == 0 || self.pixels.iter().skip(3).step_by(4).all(|&a| a == 0)
     }
 
-    /// Lanczos3 resample with premultiplied alpha handled by the resizer.
+    /// Lanczos3 resample, in **linear light**, with premultiplied alpha.
+    ///
+    /// Resampling means averaging pixels, and an sRGB value is not a quantity of
+    /// light — it is a quantity of light raised to roughly 1/2.2, which is how
+    /// eight bits are made to cover a range the eye can use. Averaging those
+    /// encoded numbers averages the wrong thing. Mid-grey in sRGB is 128, but
+    /// half the light of white is 188: shrink a black-and-white checker in
+    /// encoded space and it comes out at 128 — a full 60 levels too dark.
+    ///
+    /// Every edge in the image is that checker in miniature. Done in encoded
+    /// space, a downscale darkens every boundary between light and dark, which
+    /// is exactly the muddy, dirty look a photograph gets on the way to 32 px:
+    /// highlights lose their brightness, thin bright details disappear into
+    /// their surroundings, and the result reads as low quality without any one
+    /// pixel being obviously wrong.
+    ///
+    /// So: decode to linear, resample there, encode back. The intermediate is
+    /// 16-bit because 8-bit linear has visible steps in the darks — the whole
+    /// reason sRGB is curved in the first place.
+    ///
+    /// Alpha is premultiplied for the resample and undone after. Without that,
+    /// an edge pixel is averaged against transparent black and glowing artwork
+    /// gains a dark halo (PRD §5.6). Alpha itself is *not* gamma-encoded and is
+    /// scaled linearly.
     pub fn resized(&self, width: u32, height: u32) -> AppResult<Bitmap> {
         if width == 0 || height == 0 {
             return Err(AppError::invalid("cannot resize to a zero dimension"));
@@ -82,21 +138,49 @@ impl Bitmap {
             return Ok(self.clone());
         }
 
-        let src = FirImage::from_vec_u8(self.width, self.height, self.pixels.clone(), PixelType::U8x4)
-            .map_err(|e| AppError::invalid(format!("source image rejected: {e}")))?;
-        let mut dst = FirImage::new(width, height, PixelType::U8x4);
+        let to_linear = srgb_to_linear();
+        let mut src = FirImage::new(self.width, self.height, PixelType::U16x4);
+        for (pixel, out) in self
+            .pixels
+            .chunks_exact(4)
+            .zip(src.buffer_mut().chunks_exact_mut(8))
+        {
+            let linear = [
+                (to_linear[pixel[0] as usize] * 65535.0).round() as u16,
+                (to_linear[pixel[1] as usize] * 65535.0).round() as u16,
+                (to_linear[pixel[2] as usize] * 65535.0).round() as u16,
+                // 257 == 65535 / 255 exactly, so 0 and 255 map to 0 and 65535.
+                pixel[3] as u16 * 257,
+            ];
+            for (channel, bytes) in linear.iter().zip(out.chunks_exact_mut(2)) {
+                bytes.copy_from_slice(&channel.to_ne_bytes());
+            }
+        }
 
+        let mut dst = FirImage::new(width, height, PixelType::U16x4);
         let options = ResizeOptions::new()
             .resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3))
-            // Premultiply -> resample -> unpremultiply. Without this, edge pixels
-            // blend against transparent black and glowing artwork gains a halo.
             .use_alpha(true);
 
         Resizer::new()
             .resize(&src, &mut dst, &options)
             .map_err(|e| AppError::msg(format!("resample failed: {e}")))?;
 
-        Bitmap::from_rgba(width, height, dst.into_vec())
+        let mut pixels = vec![0u8; (width as usize) * (height as usize) * 4];
+        for (out, chunk) in pixels
+            .chunks_exact_mut(4)
+            .zip(dst.buffer().chunks_exact(8))
+        {
+            let channel = |i: usize| -> u16 {
+                u16::from_ne_bytes([chunk[i * 2], chunk[i * 2 + 1]])
+            };
+            out[0] = linear_to_srgb(channel(0) as f32 / 65535.0);
+            out[1] = linear_to_srgb(channel(1) as f32 / 65535.0);
+            out[2] = linear_to_srgb(channel(2) as f32 / 65535.0);
+            out[3] = ((channel(3) as u32 + 128) / 257) as u8;
+        }
+
+        Bitmap::from_rgba(width, height, pixels)
     }
 
     /// Places this bitmap, unscaled, in the middle of a larger square canvas.
@@ -507,6 +591,52 @@ mod tests {
         let small = block.resized(32, 32).unwrap();
         assert_eq!((small.width, small.height), (32, 32));
         assert_eq!(small.pixel(16, 16), [255, 255, 255, 255]);
+    }
+
+    /// The one measurement that says a resample is done in light rather than in
+    /// encoded values, and the reason a photograph stops looking muddy at 32 px.
+    ///
+    /// A black-and-white checker is, physically, half the light of white. Half
+    /// the light is **188** in sRGB, not 128 — the curve is not linear, so the
+    /// midpoint of the encoding is nowhere near the midpoint of the light.
+    /// Averaging the stored bytes gives 128 and darkens every edge in the image.
+    #[test]
+    fn downscaling_averages_light_and_not_encoded_values() {
+        let mut checker = Bitmap::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let white = (x + y) % 2 == 0;
+                let value = if white { 255 } else { 0 };
+                checker.set_pixel(x, y, [value, value, value, 255]);
+            }
+        }
+
+        let grey = checker.resized(1, 1).unwrap().pixel(0, 0)[0];
+        assert!(
+            (180..=196).contains(&grey),
+            "a 50% checker resolved to {grey}; light-space averaging gives ~188, \
+             encoded-space averaging gives ~128"
+        );
+    }
+
+    #[test]
+    fn resizing_keeps_the_ends_of_the_alpha_range_exact() {
+        let mut b = Bitmap::new(16, 16);
+        for y in 0..16 {
+            for x in 0..16 {
+                // Opaque red on the left half, fully transparent on the right.
+                let opaque = x < 8;
+                b.set_pixel(x, y, if opaque { [255, 0, 0, 255] } else { [0, 0, 0, 0] });
+            }
+        }
+        let small = b.resized(8, 8).unwrap();
+        assert_eq!(small.alpha(0, 4), 255, "opaque must stay opaque");
+        assert_eq!(small.alpha(7, 4), 0, "empty must stay empty");
+        assert_eq!(
+            small.pixel(0, 4)[0],
+            255,
+            "the colour under full alpha must survive the round trip"
+        );
     }
 
     #[test]
