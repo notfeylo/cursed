@@ -14,6 +14,11 @@
 //!     from every edge inward, clearing anything close enough to it.
 //!  3. Feather the boundary by one pixel so the result has a soft edge rather
 //!     than a staircase.
+//!  4. Sweep up what is left: islands of background too small and too close to
+//!     the background's colour to be anything else, and single faint pixels
+//!     with nothing around them. This is the difference between a cut that is
+//!     correct and one that looks clean — the eye finds one grey fleck on a
+//!     transparent background immediately.
 //!
 //! It is honest about what it is: this removes *a* background — flat, gradient,
 //! or near-flat — and it will not cut a subject out of a busy photograph. It
@@ -253,6 +258,17 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     // transparent area — the "small gaps" in reverse.
     despeckle(&mut cleared, w, h);
 
+    // Everything bigger than one pixel that is still background.
+    //
+    // `despeckle` only ever clears a pixel whose four neighbours are all
+    // background, which means it removes specks of exactly one pixel and
+    // nothing else. Two adjacent survivors protect each other and stay
+    // forever — and compression debris does not arrive one pixel at a time. It
+    // arrives as flecks along a hard edge, as the last few pixels of a shadow,
+    // as a fringe of a colour that fell just outside the tolerance. Those are
+    // the crumbs and spots left on an otherwise clean cut.
+    remove_crumbs(bitmap, &mut cleared, background, soft);
+
     let removed = cleared.iter().filter(|c| **c).count();
 
     // Refusing to gut the image is part of the job. If almost everything
@@ -335,7 +351,66 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     }
     log::debug!("{softened} pixels graded rather than cut");
 
+    sweep_dust(bitmap);
+
     MatteReport { removed: fraction, already_had_alpha: false }
+}
+
+/// The alpha below which a pixel standing entirely on its own is dust.
+///
+/// A tenth of full opacity. Anything fainter than this contributes almost
+/// nothing where it belongs, and where it does not belong it is a grey fleck on
+/// a checkerboard.
+const DUST_ALPHA: u8 = 26;
+
+/// Clears faint pixels that ended up with no opaque neighbour at all.
+///
+/// The grading pass keeps boundary pixels and admits they are partial, which is
+/// right where the boundary is a real edge — a hair, an antialiased outline, the
+/// soft side of a shadow. Where the "boundary" was one stray pixel of
+/// compression noise, it produces a pixel at eight percent alpha with nothing
+/// around it: invisible against a white page, obvious against a dark one, and
+/// exactly the speckling people describe as spots.
+///
+/// The test is deliberately absolute. Not "faint and small" or "faint and near
+/// the background", but faint **and completely alone** — all eight neighbours
+/// fully transparent. A pixel with any opaque neighbour is part of something and
+/// is left alone, whatever its alpha.
+fn sweep_dust(bitmap: &mut Bitmap) {
+    let (w, h) = (bitmap.width, bitmap.height);
+    if w < 3 || h < 3 {
+        return;
+    }
+
+    let mut dust = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            let alpha = bitmap.alpha(x, y);
+            if alpha == 0 || alpha > DUST_ALPHA {
+                continue;
+            }
+            let alone = (-1i32..=1).all(|dy| {
+                (-1i32..=1).all(|dx| {
+                    if dx == 0 && dy == 0 {
+                        return true;
+                    }
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    nx < 0
+                        || ny < 0
+                        || nx >= w as i32
+                        || ny >= h as i32
+                        || bitmap.alpha(nx as u32, ny as u32) == 0
+                })
+            });
+            if alone {
+                dust.push((x, y));
+            }
+        }
+    }
+
+    for (x, y) in dust {
+        bitmap.set_pixel(x, y, [0, 0, 0, 0]);
+    }
 }
 
 
@@ -410,6 +485,103 @@ fn enclose_background(
                 cleared[(y * w + x) as usize] = true;
             }
         }
+    }
+}
+
+/// The largest island of leftover background that still counts as a crumb,
+/// as a fraction of the image: one part in two thousand.
+///
+/// On a 1024×1024 working image that is about five hundred pixels — a blob of
+/// roughly 22×22. That sounds generous until you consider what has to be true
+/// for a region to reach this code: it survived the flood, it survived the
+/// enclosed-background pass, it is not connected to anything else that
+/// survived, **and** its colour is still within the soft band of the sampled
+/// background. A real detail that happens to be detached — the dot of an i, a
+/// spark, a highlight — fails the colour test long before the size one.
+const CRUMB_FRACTION: usize = 2_000;
+
+/// The smallest crumb limit, for images too small for the fraction to mean
+/// anything. Sixteen pixels is a 4×4 speck.
+const MIN_CRUMB: usize = 16;
+
+/// Clears small isolated islands that are still the background colour.
+///
+/// Runs on connected components rather than on neighbourhoods, because that is
+/// the shape of the problem: a crumb is *disconnected* background, and its size
+/// is a property of the whole island, not of any pixel in it. Eight-connected,
+/// so a diagonal chain of debris counts as one island rather than as a handful
+/// of survivors propping each other up.
+///
+/// Two conditions, and both are needed:
+///
+/// - **Small**, relative to the image. Anything large is part of the picture.
+/// - **Still the background colour**, on average across the island. This is what
+///   keeps the pass from eating detached artwork. A crumb is background that got
+///   away; something that is not the background's colour is not a crumb, however
+///   small and however isolated it is.
+///
+/// The largest island is never touched whatever it measures, because on a small
+/// image with a small subject it can satisfy both conditions — and clearing the
+/// subject is a worse failure than leaving a speck.
+fn remove_crumbs(bitmap: &Bitmap, cleared: &mut [bool], background: [u8; 4], soft: i32) {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let total = (w as usize) * (h as usize);
+    let limit = (total / CRUMB_FRACTION).max(MIN_CRUMB);
+
+    let mut seen = vec![false; total];
+    let mut islands: Vec<(Vec<usize>, i64)> = Vec::new();
+
+    for sy in 0..h {
+        for sx in 0..w {
+            let start = (sy * w + sx) as usize;
+            if cleared[start] || seen[start] {
+                continue;
+            }
+
+            let mut island = Vec::new();
+            let mut drift = 0i64;
+            let mut stack = vec![(sx, sy)];
+            seen[start] = true;
+            while let Some((x, y)) = stack.pop() {
+                island.push((y * w + x) as usize);
+                drift += distance(bitmap.pixel(x, y), background) as i64;
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let i = (ny as u32 * w + nx as u32) as usize;
+                        if seen[i] || cleared[i] {
+                            continue;
+                        }
+                        seen[i] = true;
+                        stack.push((nx as u32, ny as u32));
+                    }
+                }
+            }
+
+            islands.push((island, drift));
+        }
+    }
+
+    let largest = islands.iter().map(|(pixels, _)| pixels.len()).max().unwrap_or(0);
+    let mut swept = 0usize;
+    for (pixels, drift) in islands {
+        if pixels.len() >= largest || pixels.len() > limit {
+            continue;
+        }
+        let mean = drift / pixels.len() as i64;
+        if mean > soft as i64 {
+            continue;
+        }
+        swept += pixels.len();
+        for i in pixels {
+            cleared[i] = true;
+        }
+    }
+    if swept > 0 {
+        log::debug!("{swept} pixels of leftover background swept up as crumbs");
     }
 }
 
@@ -897,5 +1069,88 @@ mod tests {
         // A noisy photographic border earns its slack back, up to the old value.
         assert_eq!(tolerance_for(50), TOLERANCE);
         assert!(tolerance_for(4) > tolerance_for(0));
+    }
+
+    /// Compression debris: a few pixels of not-quite-background left in the
+    /// clear area, in clumps of more than one so `despeckle` cannot touch them.
+    #[test]
+    fn clumps_of_leftover_background_are_swept_up() {
+        let mut b = solid(64, 64, [255, 255, 255, 255]);
+        for y in 20..44 {
+            for x in 20..44 {
+                b.set_pixel(x, y, [20, 30, 200, 255]);
+            }
+        }
+        // Three crumbs, each too big for a single-pixel despeckle and each just
+        // off the background colour, the way JPEG ringing leaves them.
+        for (cx, cy) in [(6u32, 6u32), (54, 8), (10, 52)] {
+            for dy in 0..2 {
+                for dx in 0..3 {
+                    b.set_pixel(cx + dx, cy + dy, [238, 240, 243, 255]);
+                }
+            }
+        }
+
+        let report = remove_background(&mut b);
+        assert!(report.removed > 0.5);
+
+        for (cx, cy) in [(6u32, 6u32), (54, 8), (10, 52)] {
+            for dy in 0..2 {
+                for dx in 0..3 {
+                    assert_eq!(
+                        b.alpha(cx + dx, cy + dy),
+                        0,
+                        "a crumb survived at {},{}",
+                        cx + dx,
+                        cy + dy
+                    );
+                }
+            }
+        }
+        assert_eq!(b.alpha(32, 32), 255, "the subject is untouched");
+    }
+
+    /// The other half of the rule: something small and detached that is *not*
+    /// the background's colour is artwork, and artwork stays.
+    #[test]
+    fn a_detached_detail_that_is_not_the_background_colour_survives() {
+        let mut b = solid(64, 64, [255, 255, 255, 255]);
+        for y in 24..40 {
+            for x in 24..40 {
+                b.set_pixel(x, y, [10, 10, 10, 255]);
+            }
+        }
+        // The dot of an i: four pixels, nowhere near the subject, nowhere near
+        // white either.
+        for dy in 0..2 {
+            for dx in 0..2 {
+                b.set_pixel(8 + dx, 8 + dy, [220, 30, 30, 255]);
+            }
+        }
+
+        remove_background(&mut b);
+
+        for dy in 0..2 {
+            for dx in 0..2 {
+                assert_eq!(
+                    b.alpha(8 + dx, 8 + dy),
+                    255,
+                    "a detached red detail must not be swept up as a crumb"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_single_faint_pixel_with_nothing_around_it_is_dust() {
+        let mut b = Bitmap::new(16, 16);
+        b.set_pixel(4, 4, [180, 180, 180, 12]);
+        b.set_pixel(9, 9, [180, 180, 180, 200]);
+        b.set_pixel(9, 10, [180, 180, 180, 200]);
+
+        sweep_dust(&mut b);
+
+        assert_eq!(b.alpha(4, 4), 0, "a lone 5% pixel is dust");
+        assert_eq!(b.alpha(9, 9), 200, "a pixel with a neighbour is not dust");
     }
 }
