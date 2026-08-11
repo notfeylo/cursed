@@ -4,8 +4,8 @@
 
 ## Checklist
 
-- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` passes
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml` passes
+- [ ] `cargo clippy --all-targets -- -D warnings` passes, run from `src-tauri/`
+- [ ] `cargo test` passes, run from `src-tauri/`
 - [ ] `npm run build` passes
 - [ ] No `unwrap()`, `expect()` or `panic!()` in a command path
 - [ ] No new capability granted to the webview, and no new path or registry key

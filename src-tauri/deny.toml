@@ -1,3 +1,20 @@
+# Only the architectures a release ships. Without this, cargo-deny walks the
+# whole dependency graph for every platform Tauri supports, and judges crates
+# that never compile into a Windows build: the GTK and WebKit tree for Linux,
+# the objc2 tree for macOS, and `reqwest`, which Tauri pulls in for platforms
+# whose updater needs an HTTP client. The ban below then fires on a networking
+# stack no Windows build contains.
+#
+# Keep this list identical to `targets` in rust-toolchain.toml. A crate that is
+# only ever compiled for a platform we do not ship is not a supply-chain fact
+# about this app, and treating it as one trains everybody to ignore the job.
+[graph]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "i686-pc-windows-msvc",
+]
+
 [licenses]
 version = 2
 # Permissive plus the file-level copyleft that resvg / tiny-skia use. Anything
@@ -22,8 +39,10 @@ confidence-threshold = 0.9
 multiple-versions = "warn"
 wildcards = "deny"
 
-# Nothing here should ever pull in a networking stack. If one appears, it means
-# a dependency started phoning home and that is a decision, not an upgrade.
+# Nothing here should ever pull in a networking stack. If one appears in a
+# *Windows* build, it means a dependency started phoning home and that is a
+# decision, not an upgrade. The app's own one network request — the update
+# check — goes through the Windows HTTP stack, not a bundled client.
 [[bans.deny]]
 name = "reqwest"
 

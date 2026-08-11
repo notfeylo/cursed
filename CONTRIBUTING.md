@@ -28,14 +28,22 @@ build tools.
 ## Before you open a pull request
 
 ```bash
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
+cd src-tauri
+cargo clippy --all-targets -- -D warnings
+cargo test
+cd ..
 npm run build
 ```
 
 All three must pass. CI runs the same three plus `cargo audit` and `npm audit`,
 and a clippy pass for ARM64 and 32-bit — releases ship all three architectures,
 and only the host one gets built above.
+
+Run cargo from `src-tauri/` rather than from the root with `--manifest-path`.
+Rustup reads a toolchain from the current directory, and the pinned toolchain
+and its target list live in `src-tauri/rust-toolchain.toml`: from the root you
+get whatever `stable` is installed, and a cross-target build fails with "can't
+find crate for `std`" against a target rustup says is installed.
 
 ## Cutting a release
 
