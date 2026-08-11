@@ -95,6 +95,59 @@
             pointer, click to apply. That is the whole flow.
           </p>
 
+          <!-- The screenshots. A cursor app with no pictures asks people to
+               imagine the product, which is a lot to ask just before downloading
+               an unsigned installer. Width and height are set on every image so
+               the column cannot reflow as they load, and everything below the
+               first is lazy — that one is the only one near the fold. -->
+          <figure class="shots">
+            <div class="shots-grid">
+              <a class="shot" href="shots/home.png">
+                <img
+                  src="shots/home.png"
+                  width="413"
+                  height="656"
+                  alt="The Cursed home screen, showing the cursor currently in use and buttons for the catalog, custom imports, saved presets and settings."
+                  decoding="async"
+                />
+                <figcaption>Home — what you're using now</figcaption>
+              </a>
+              <a class="shot" href="shots/catalog.png">
+                <img
+                  src="shots/catalog.png"
+                  width="409"
+                  height="656"
+                  alt="The catalog, a searchable grid of cursor packs with filter tabs."
+                  loading="lazy"
+                  decoding="async"
+                />
+                <figcaption>Catalog — search, filter, hover to preview</figcaption>
+              </a>
+              <a class="shot" href="shots/custom.png">
+                <img
+                  src="shots/custom.png"
+                  width="412"
+                  height="654"
+                  alt="The custom screen, with a drop zone for an image or GIF above a grid of cursors built from the user's own pictures."
+                  loading="lazy"
+                  decoding="async"
+                />
+                <figcaption>Custom — drop an image, get a cursor</figcaption>
+              </a>
+              <a class="shot" href="shots/customise.png">
+                <img
+                  src="shots/customise.png"
+                  width="416"
+                  height="658"
+                  alt="The customise screen, with a cursor size slider, size presets, and a control choosing which pointer roles the size applies to."
+                  loading="lazy"
+                  decoding="async"
+                />
+                <figcaption>Customise — size, colour, which roles</figcaption>
+              </a>
+            </div>
+          </figure>
+
           <h3>It never draws a cursor</h3>
           <p>
             This is the decision everything else follows from. The obvious way to build a

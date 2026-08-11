@@ -232,6 +232,70 @@ a:hover {
   color: var(--text);
 }
 
+/* Screenshots.
+   Two per row on desktop, one on a narrow screen. The images are portrait —
+   the app window is 420px wide — so a wide row would leave them tiny. */
+.shots {
+  margin: 26px 0 30px;
+}
+
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.shot {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  text-decoration: none;
+  /* The link carries an underline from the global `a` rule; these are pictures. */
+  border-bottom: 1px solid var(--border);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shot:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  border-bottom-color: var(--border-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  /* The intrinsic width/height attributes reserve the box before the file
+     arrives, so nothing below jumps as the images load. */
+  height: auto;
+}
+
+.shot figcaption {
+  padding: 9px 12px 11px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .shots-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shot,
+  .shot:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
 .facts {
   list-style: none;
   margin: 0;

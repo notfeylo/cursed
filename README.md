@@ -8,6 +8,13 @@ multi-resolution cursor scheme, turns any image you drop on it into a real
 
 No administrator rights. No overlay. No added input latency.
 
+| | |
+| :---: | :---: |
+| <img src="website/shots/home.png" width="330" alt="The home screen, showing the cursor currently in use."> | <img src="website/shots/catalog.png" width="330" alt="The catalog, a searchable grid of cursor packs."> |
+| **Home** — what you're using now | **Catalog** — search, filter, hover to preview |
+| <img src="website/shots/custom.png" width="330" alt="The custom screen, with a drop zone above cursors built from the user's own images."> | <img src="website/shots/customise.png" width="330" alt="The customise screen, with a size slider and a control for which pointer roles it applies to."> |
+| **Custom** — drop an image, get a cursor | **Customise** — size, colour, which roles |
+
 ---
 
 ## Why
