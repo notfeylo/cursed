@@ -66,7 +66,36 @@ jobs:
           ls -la dist-release
           exit $missing
 
+      # Whether this tag has already been released by hand.
+      #
+      # This guard exists because the step below would otherwise **unpublish a
+      # live release**. `action-gh-release` finds the release for the tag and
+      # patches it with the inputs given here — including `draft: true` — so a
+      # tag that was already published by hand comes back as a draft. GitHub's
+      # `releases/latest` does not return drafts, so every installed copy of the
+      # app would silently start comparing itself against the *previous*
+      # release: anyone on the newest version is told they are up to date
+      # forever, and everyone else is offered a downgrade. Nothing in the app
+      # can detect that, because from its side the answer looks legitimate.
+      #
+      # The run has been cancelled by hand at each of the last two releases for
+      # exactly this reason. A race that has to be won manually every time is
+      # not a race that stays won.
+      - name: Has this tag already been released?
+        id: existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null | grep -qx false; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_REF_NAME is already published; leaving it exactly as it is."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: softprops/action-gh-release@v2
+        if: steps.existing.outputs.published != 'true'
         with:
           files: dist-release/*
           draft: true
@@ -82,7 +111,7 @@ jobs:
             | `Cursed-Setup.exe` | Almost every PC (x64) |
             | `Cursed-Setup-ARM64.exe` | Snapdragon, Copilot+, Surface Pro X — native rather than emulated |
             | `Cursed-Setup-x86.exe` | Older PCs running 32-bit Windows |
-            | `Cursed-Setup-Offline-x64.exe` | No internet, or a network that blocks Microsoft's download. ~211 MB — only take it if you need it. |
+            | `Cursed-Setup-Offline-x64.exe` | No internet, or a network that blocks Microsoft's download. ~214 MB — only take it if you need it. |
 
             Requires **Windows 10 version 1803 or newer**. The app updates
             itself to the architecture it is already running.
