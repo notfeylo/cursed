@@ -18,302 +18,388 @@
       content="Your pointer. Possessed. 36 hand-made cursor packs, all 17 pointer roles, sharp at every DPI. Free, no account, no telemetry."
     />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="shots/home.png" />
   </head>
 
   <body>
-    <header class="masthead">
-      <span class="mark" aria-hidden="true">
-        <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
-        <svg viewBox="0 0 64 64" width="34" height="34">
-          <defs>
-            <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
-              <stop offset="0" stop-color="#5cb8ff" />
-              <stop offset="1" stop-color="#2e8bff" />
-            </linearGradient>
-            <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
-              <stop offset="0" stop-color="#2e8bff" />
-              <stop offset="1" stop-color="#123a72" />
-            </linearGradient>
-            <filter id="cast" x="-25%" y="-25%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="1.4" />
-            </filter>
-          </defs>
-          <g filter="url(#cast)" opacity="0.5">
+    <!-- The moving background. Three blurred blobs on long, offset drifts, plus a
+         grid and a grain layer. All transform/opacity, all composited, none of it
+         reading layout — so it costs a paint and nothing else. -->
+    <div class="bg" aria-hidden="true">
+      <div class="bg-grid"></div>
+      <div class="blob blob-a"></div>
+      <div class="blob blob-b"></div>
+      <div class="blob blob-c"></div>
+      <div class="bg-vignette"></div>
+    </div>
+
+    <!-- ------------------------------------------------------------ HEADER -->
+    <header class="site-header">
+      <a class="brand" href="#top">
+        <span class="brand-mark" aria-hidden="true">
+          <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
+          <svg viewBox="0 0 64 64" width="26" height="26">
+            <defs>
+              <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
+                <stop offset="0" stop-color="#5cb8ff" />
+                <stop offset="1" stop-color="#2e8bff" />
+              </linearGradient>
+              <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
+                <stop offset="0" stop-color="#2e8bff" />
+                <stop offset="1" stop-color="#123a72" />
+              </linearGradient>
+            </defs>
             <path
               d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-              fill="#000000"
-              transform="translate(2.4 3)"
+              fill="url(#face)"
             />
-          </g>
-          <path
-            class="logo-blade"
-            d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-            fill="url(#face)"
-          />
-          <path
-            class="logo-blade"
-            d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z"
-            fill="url(#fold)"
-          />
-        </svg>
-      </span>
-      <svg class="wordmark-svg" viewBox="33 33 67 28" height="17" aria-hidden="true" fill="currentColor">
-        <path fill-rule="evenodd" d="M4.17 33.33 L9.90 33.33 L13.02 35.42 L13.54 42.19 L9.90 42.19 L9.38 38.54 L8.33 37.50 L5.73 37.50 L4.69 38.54 L4.69 55.73 L8.85 56.25 L9.38 52.08 L13.02 51.56 L13.02 58.85 L10.42 60.42 L3.12 60.42 L0.52 57.81 L0.00 38.02 L0.52 35.94 L3.65 33.85 Z"/>
-        <path fill-rule="evenodd" d="M17.71 36.98 L21.88 37.50 L22.40 56.25 L26.56 55.73 L26.56 37.50 L30.73 37.50 L30.73 57.29 L29.69 59.38 L27.60 60.42 L20.31 60.42 L17.71 58.33 L17.71 37.50 Z"/>
-        <path fill-rule="evenodd" d="M34.90 36.98 L44.79 36.98 L47.92 40.10 L47.92 50.00 L45.83 52.60 L47.92 60.42 L43.75 60.42 L41.67 53.13 L38.54 53.65 L38.54 60.42 L34.90 60.42 L34.90 37.50 Z M39.06 41.15 L43.23 41.67 L42.71 48.96 L39.06 48.96 L39.06 41.67 Z"/>
-        <path fill-rule="evenodd" d="M54.69 36.98 L61.46 36.98 L64.58 39.06 L64.58 44.27 L60.94 44.27 L60.94 42.19 L59.38 40.62 L55.73 41.67 L56.25 45.83 L64.58 48.44 L64.58 58.33 L63.54 59.90 L54.69 60.42 L51.56 57.29 L52.08 53.13 L55.21 53.13 L56.77 56.77 L59.90 56.77 L60.94 55.73 L60.42 51.04 L52.60 48.96 L51.56 47.92 L51.56 40.10 L54.17 37.50 Z"/>
-        <path fill-rule="evenodd" d="M68.75 36.98 L81.77 36.98 L81.77 41.15 L72.92 41.67 L73.44 46.88 L80.21 47.40 L79.69 51.04 L72.92 51.56 L72.92 55.73 L81.25 56.25 L81.77 60.42 L68.75 60.42 L68.75 37.50 Z"/>
-        <path fill-rule="evenodd" d="M85.94 36.98 L95.83 36.98 L98.44 38.54 L99.48 42.19 L99.48 55.73 L98.44 58.85 L96.35 60.42 L85.94 60.42 L85.94 37.50 Z M90.62 41.67 L94.79 42.19 L94.27 55.73 L90.62 55.73 L90.62 42.19 Z"/>
-      </svg>
-      <span class="visually-hidden">Cursed</span>
+            <path
+              d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z"
+              fill="url(#fold)"
+            />
+          </svg>
+        </span>
+        <span class="brand-word">CURSED</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Sections">
+        <a href="#see">See it</a>
+        <a href="#how">How</a>
+        <a href="#cursors">Cursors</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <a class="header-cta" href="#download">Download</a>
     </header>
 
-    <main>
-      <!-- ------------------------------------------------ ABOUT (scrolls) -->
-      <section class="about" id="about" aria-labelledby="about-h">
-        <div class="about-inner">
-          <h2 class="section-label" id="about-h">About</h2>
+    <main id="top">
+      <!-- -------------------------------------------------------------- HERO -->
+      <section class="hero" aria-labelledby="hero-h">
+        <!-- The flying cursors. Decorative, so aria-hidden and no alt text: a
+             screen reader announcing six drifting pictures of nothing would be
+             noise. Each drifts on its own duration and delay, so they never
+             fall into step and never look like a loop. -->
+        <div class="fliers" aria-hidden="true">
+          <img class="flier f1" src="shots/fly/trump.png" alt="" width="128" height="128" />
+          <img class="flier f2" src="shots/fly/elon.png" alt="" width="128" height="128" />
+          <img class="flier f3" src="shots/fly/f1.png" alt="" width="128" height="128" />
+          <img class="flier f4" src="shots/fly/wheel.png" alt="" width="128" height="128" />
+          <img class="flier f5" src="shots/fly/trump2.png" alt="" width="128" height="128" />
+          <img class="flier f6" src="shots/fly/gun.png" alt="" width="128" height="128" />
+        </div>
 
-          <p class="lead">
-            Cursed is a Windows application that replaces your mouse pointer — all
-            seventeen of its roles — with a crisp, multi-resolution cursor scheme. It also
-            turns any image you drop on it into a real Windows cursor file.
+        <p class="eyebrow reveal">Windows 10 &amp; 11 · Free · No account</p>
+
+        <h1 class="hero-title" id="hero-h">
+          <span class="line reveal">YOUR POINTER.</span>
+          <span class="line reveal delay-1"><em>POSSESSED.</em></span>
+        </h1>
+
+        <p class="hero-sub reveal delay-2">
+          Replace all seventeen Windows pointer roles with a real cursor scheme — or drop in
+          any image and turn it into one. No overlay. No added input latency.
+        </p>
+
+        <div class="hero-actions reveal delay-3">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
+            download
+            rel="noopener noreferrer"
+          >
+            <span>Download for Windows</span>
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <path
+                d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </a>
+          <a class="btn btn-ghost" href="#see">See how it looks</a>
+        </div>
+
+        <p class="hero-meta reveal delay-4">
+          <span class="mono">v<span id="rel-version">1.17.0</span></span>
+          <span class="dot">·</span>
+          <span class="mono" id="rel-size">8.45 MB</span>
+          <span class="dot">·</span>
+          <span class="mono" id="rel-date">2026-08-10</span>
+        </p>
+
+        <p class="hero-hint reveal delay-5">
+          Move your pointer around this page — it changes as you go.
+        </p>
+      </section>
+
+      <!-- ------------------------------------------------------------ STATS -->
+      <section class="stats" aria-label="At a glance">
+        <div class="stat reveal"><b>36</b><span>cursor packs, in the installer</span></div>
+        <div class="stat reveal delay-1"><b>17</b><span>pointer roles, every one</span></div>
+        <div class="stat reveal delay-2"><b>0 ms</b><span>added input latency</span></div>
+        <div class="stat reveal delay-3"><b>0</b><span>accounts, trackers, telemetry</span></div>
+      </section>
+
+      <!-- ---------------------------------------------------------- SEE IT -->
+      <section class="section" id="see" aria-labelledby="see-h">
+        <header class="section-head reveal">
+          <p class="kicker">See it</p>
+          <h2 id="see-h">The whole app is four screens</h2>
+          <p class="section-lede">
+            No dashboard, no wizard, no sign-in. Open it, pick a cursor, close it — it
+            keeps running in the tray.
           </p>
+        </header>
 
-          <p>
-            Changing a cursor in Windows today means burrowing into Settings → Bluetooth &amp;
-            devices → Mouse → Additional mouse settings → Pointers, then changing seventeen
-            roles one at a time in a file dialog that has not moved on since 1998. Most people
-            give up. Third-party packs arrive as zip files full of loose
-            <span class="mono">.cur</span> files, replace only the arrow, ship a single 32×32
-            bitmap that turns to mush at 150% scaling, and get wiped by the next theme change.
-          </p>
-
-          <p>
-            Cursed fixes all of that in one window. Open it, click
-            <strong>Enhance your cursor</strong>, hover a cursor to preview it on your actual
-            pointer, click to apply. That is the whole flow.
-          </p>
-
-          <!-- The screenshots. A cursor app with no pictures asks people to
-               imagine the product, which is a lot to ask just before downloading
-               an unsigned installer. Width and height are set on every image so
-               the column cannot reflow as they load, and everything below the
-               first is lazy — that one is the only one near the fold. -->
-          <figure class="shots">
-            <div class="shots-grid">
-              <a class="shot" href="shots/home.png">
-                <img
-                  src="shots/home.png"
-                  width="413"
-                  height="656"
-                  alt="The Cursed home screen, showing the cursor currently in use and buttons for the catalog, custom imports, saved presets and settings."
-                  decoding="async"
-                />
-                <figcaption>Home — what you're using now</figcaption>
-              </a>
-              <a class="shot" href="shots/catalog.png">
-                <img
-                  src="shots/catalog.png"
-                  width="409"
-                  height="656"
-                  alt="The catalog, a searchable grid of cursor packs with filter tabs."
-                  loading="lazy"
-                  decoding="async"
-                />
-                <figcaption>Catalog — search, filter, hover to preview</figcaption>
-              </a>
-              <a class="shot" href="shots/custom.png">
-                <img
-                  src="shots/custom.png"
-                  width="412"
-                  height="654"
-                  alt="The custom screen, with a drop zone for an image or GIF above a grid of cursors built from the user's own pictures."
-                  loading="lazy"
-                  decoding="async"
-                />
-                <figcaption>Custom — drop an image, get a cursor</figcaption>
-              </a>
-              <a class="shot" href="shots/customise.png">
-                <img
-                  src="shots/customise.png"
-                  width="416"
-                  height="658"
-                  alt="The customise screen, with a cursor size slider, size presets, and a control choosing which pointer roles the size applies to."
-                  loading="lazy"
-                  decoding="async"
-                />
-                <figcaption>Customise — size, colour, which roles</figcaption>
-              </a>
-            </div>
+        <div class="shots-grid">
+          <figure class="shot reveal">
+            <a href="shots/home.png">
+              <img
+                src="shots/home.png"
+                width="413"
+                height="656"
+                alt="The Cursed home screen, showing the cursor currently in use and buttons for the catalog, custom imports, saved presets and settings."
+                decoding="async"
+              />
+            </a>
+            <figcaption><b>Home</b> What you're using now</figcaption>
           </figure>
-
-          <h3>It never draws a cursor</h3>
-          <p>
-            This is the decision everything else follows from. The obvious way to build a
-            cursor tool is a transparent always-on-top window that follows the mouse and paints
-            a sprite. That approach is permanently laggy: the window is composited by the
-            desktop compositor at your monitor's refresh interval, so it trails the real pointer
-            by one to two frames — 8 to 33 ms — on any hardware, forever. It also breaks in
-            fullscreen games and fights with anything else drawing on screen.
-          </p>
-          <p>
-            Cursed does not do that. Every cursor it produces is a real
-            <span class="mono">.cur</span> or <span class="mono">.ani</span> file registered
-            with Windows, which means it is drawn by the graphics card's dedicated hardware
-            cursor plane — the same path Windows uses for its own arrow. It updates at your
-            mouse's polling rate with no compositing step at all.
-            <strong>Zero added input latency is not a target here; it is a property of the
-            design.</strong>
-          </p>
-
-          <h3>Free, and private by design</h3>
-          <p>
-            Cursed is free. No paid tier, no trial, no licence key, no advertising, no
-            account.
-          </p>
-          <p>
-            <strong
-              >It does not collect, store or transmit any information about you, your computer
-              or your hardware.</strong
-            >
-            There is no telemetry, no analytics, no crash reporting and no fingerprinting. Your
-            settings, presets and imported cursors live in a folder on your own machine and
-            never leave it. The only network request the app can make is checking GitHub for a
-            new version, and that can be switched off.
-          </p>
-          <p>The source is public under the MIT licence, so none of this has to be taken on trust.</p>
-
-          <h3>What it changes</h3>
-          <p>
-            Only per-user pointer settings, under
-            <span class="mono">HKCU\Control Panel\Cursors</span> — the same settings the Windows
-            Settings app exposes. It needs no administrator rights, never writes machine-wide
-            settings, installs no driver or service, and injects no code into any other process.
-          </p>
-          <p>
-            Before it changes anything, it snapshots your existing pointer scheme.
-            <strong>Restore Windows Default</strong> replays that snapshot exactly, and the
-            uninstaller runs the same routine automatically before removing anything.
-          </p>
-
-          <h3>Features</h3>
-          <ul class="facts">
-            <li>
-              <span class="k">Catalog</span>
-              <span class="v"
-                >36 hand-made packs, in the installer — animated sets, game and film artwork,
-                pixel art and vehicles. Most define an arrow and a hand; the other roles come
-                from a plain built-in base, so you never end up with a custom pointer and a
-                stock Windows hourglass the moment your PC copies a file.</span
-              >
-            </li>
-            <li>
-              <span class="k">Sharp</span>
-              <span class="v"
-                >Catalog cursors are vectors, rendered at 10, 16, 24, 32, 48, 64, 96 and 128
-                pixels into one multi-resolution file. Windows picks the right one, so they stay
-                crisp at any scaling and at any accessibility cursor size.</span
-              >
-            </li>
-            <li>
-              <span class="k">Any colour</span>
-              <span class="v"
-                >Our own artwork — the base pack, the link hand, the text caret — ships as greyscale
-                masters and is recoloured when you apply it. Imported packs keep their own
-                colours, because tinting somebody's finished artwork only breaks it.</span
-              >
-            </li>
-            <li>
-              <span class="k">Live preview</span>
-              <span class="v"
-                >Hovering a cursor in the catalog applies it to your real pointer immediately.
-                Move away and it reverts. Click to keep it.</span
-              >
-            </li>
-            <li>
-              <span class="k">Your cursors</span>
-              <span class="v"
-                >Already have a folder of cursors? Point Cursed at it and they join the
-                catalog. <span class="mono">.cur</span>, <span class="mono">.ani</span>,
-                <span class="mono">.png</span> and <span class="mono">.zip</span> all work,
-                paired cursor and pointer files merge into one entry, and animated cursors stay
-                animated. They live on your machine and are never uploaded.</span
-              >
-            </li>
-            <li>
-              <span class="k">Your images</span>
-              <span class="v"
-                >Drop in a PNG, JPEG, WebP or BMP and get a real cursor in seconds, with a
-                draggable hotspot picker and a preview of all eight sizes at actual size. GIF and
-                animated PNG become real animated cursors.</span
-              >
-            </li>
-            <li>
-              <span class="k">Blend</span>
-              <span class="v"
-                >Use your own image as the arrow and a catalog scheme for the other sixteen
-                roles — the mode that turns one picture into a coherent pointer set.</span
-              >
-            </li>
-            <li>
-              <span class="k">It stays</span>
-              <span class="v"
-                >Theme changes, personalisation resets and Windows updates silently revert custom
-                cursors. A lightweight watchdog notices and puts yours back.</span
-              >
-            </li>
-            <li>
-              <span class="k">Presets</span>
-              <span class="v"
-                >Save the whole pointer — scheme, colour, size, outline — and switch between
-                saved presets from the tray or a global hotkey. Export and share them as a single
-                file.</span
-              >
-            </li>
-            <li>
-              <span class="k">Footprint</span>
-              <span class="v"
-                >A 2.5 MB installer that needs no administrator rights, runs from the tray, and
-                adds nothing to your system's render path.</span
-              >
-            </li>
-          </ul>
-
-          <h3>Requirements</h3>
-          <p>
-            Windows 10 or 11, 64-bit. Nothing else to install — the installer fetches the
-            WebView2 runtime automatically if your machine does not already have it, which almost
-            every Windows 11 machine does.
-          </p>
-
-          <h3>What it cannot do</h3>
-          <p>
-            Some applications draw their own pointer instead of asking Windows for one. Many
-            games using raw mouse input, some remote-desktop sessions, and a few
-            hardware-accelerated canvases fall into this category, and no cursor tool can change
-            those without injecting code into them — which Cursed will never do, because
-            that is what trips anti-cheat systems and antivirus heuristics. This is an explicit
-            non-goal, not an oversight.
-          </p>
-          <p>
-            Secure surfaces — the administrator prompt, Ctrl+Alt+Delete, the sign-in screen —
-            always use the system cursors. That is Windows working correctly.
-          </p>
-          <p>
-            Cursor trails and click ripples would need exactly the always-on-top overlay this
-            app refuses to use, so they are not offered.
-          </p>
+          <figure class="shot reveal delay-1">
+            <a href="shots/catalog.png">
+              <img
+                src="shots/catalog.png"
+                width="409"
+                height="656"
+                alt="The catalog, a searchable grid of cursor packs with filter tabs."
+                loading="lazy"
+                decoding="async"
+              />
+            </a>
+            <figcaption><b>Catalog</b> Search, filter, hover to preview</figcaption>
+          </figure>
+          <figure class="shot reveal">
+            <a href="shots/custom.png">
+              <img
+                src="shots/custom.png"
+                width="412"
+                height="654"
+                alt="The custom screen, with a drop zone for an image or GIF above a grid of cursors built from the user's own pictures."
+                loading="lazy"
+                decoding="async"
+              />
+            </a>
+            <figcaption><b>Custom</b> Drop an image, get a cursor</figcaption>
+          </figure>
+          <figure class="shot reveal delay-1">
+            <a href="shots/customise.png">
+              <img
+                src="shots/customise.png"
+                width="416"
+                height="658"
+                alt="The customise screen, with a cursor size slider, size presets, and a control choosing which pointer roles the size applies to."
+                loading="lazy"
+                decoding="async"
+              />
+            </a>
+            <figcaption><b>Customise</b> Size, colour, which roles</figcaption>
+          </figure>
         </div>
       </section>
 
-      <!-- --------------------------------------------- DOWNLOAD (static) -->
-      <aside class="download" id="download" aria-labelledby="download-h">
-        <div class="download-inner">
-          <h2 class="section-label" id="download-h">Download</h2>
+      <!-- ------------------------------------------------------------- HOW -->
+      <section class="section" id="how" aria-labelledby="how-h">
+        <header class="section-head reveal">
+          <p class="kicker">How it works</p>
+          <h2 id="how-h">Three steps, then forget it exists</h2>
+        </header>
+
+        <ol class="steps">
+          <li class="step reveal">
+            <span class="step-n">01</span>
+            <h3>Pick a cursor</h3>
+            <p>
+              Hover a tile and it previews on your actual pointer, live. Click to apply.
+              Nothing is downloaded — every pack is already in the installer.
+            </p>
+          </li>
+          <li class="step reveal delay-1">
+            <span class="step-n">02</span>
+            <h3>Or make your own</h3>
+            <p>
+              Drop a PNG, JPEG or GIF. The background is removed, the hotspot is found,
+              and you get a real <span class="mono">.cur</span> or
+              <span class="mono">.ani</span> in about a second.
+            </p>
+          </li>
+          <li class="step reveal delay-2">
+            <span class="step-n">03</span>
+            <h3>It stays put</h3>
+            <p>
+              Windows resets pointers on theme changes and updates. A watchdog notices and
+              puts yours back, so the choice survives.
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <!-- --------------------------------------------------------- CURSORS -->
+      <section class="section" id="cursors" aria-labelledby="cursors-h">
+        <header class="section-head reveal">
+          <p class="kicker">Anything is a cursor</p>
+          <h2 id="cursors-h">Yes, really anything</h2>
+          <p class="section-lede">
+            These are real cursors, built by the app from ordinary images. Backgrounds
+            removed automatically, rendered at eight sizes so they stay sharp.
+          </p>
+        </header>
+
+        <!-- The orbit. Six cursors on one slowly rotating ring, each
+             counter-rotated by the same duration so the artwork stays upright
+             while the ring turns. -->
+        <div class="orbit reveal" aria-hidden="true">
+          <div class="orbit-ring">
+            <span class="orbit-item o1"><img src="shots/fly/trump.png" alt="" width="128" height="128" /></span>
+            <span class="orbit-item o2"><img src="shots/fly/elon.png" alt="" width="128" height="128" /></span>
+            <span class="orbit-item o3"><img src="shots/fly/f1.png" alt="" width="128" height="128" /></span>
+            <span class="orbit-item o4"><img src="shots/fly/wheel.png" alt="" width="128" height="128" /></span>
+            <span class="orbit-item o5"><img src="shots/fly/trump2.png" alt="" width="128" height="128" /></span>
+            <span class="orbit-item o6"><img src="shots/fly/gun.png" alt="" width="128" height="128" /></span>
+          </div>
+          <div class="orbit-core">
+            <svg viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">
+              <!-- Its own fill, not url(#face): that gradient is defined in the
+                   header's SVG, and a cross-element reference breaks the moment
+                   the header is removed or reordered. -->
+              <path
+                d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
+                fill="#5cb8ff"
+              />
+            </svg>
+          </div>
+        </div>
+
+        <ul class="facts">
+          <li class="reveal">
+            <span class="k">Sharp</span>
+            <span class="v"
+              >Vector artwork renders at 10, 16, 24, 32, 48, 64, 96 and 128 px into one
+              multi-resolution file. Photographs are sharpened in proportion to how far they
+              were shrunk, because a good downscale filter is a blur by design.</span
+            >
+          </li>
+          <li class="reveal">
+            <span class="k">All 17 roles</span>
+            <span class="v"
+              >Most packs draw an arrow and a hand; the rest are filled from a plain built-in
+              base. You never end up with a custom pointer and a stock Windows hourglass the
+              moment your PC copies a file.</span
+            >
+          </li>
+          <li class="reveal">
+            <span class="k">No latency</span>
+            <span class="v"
+              >Every cursor is a real file registered with Windows, drawn by the graphics
+              card's hardware cursor plane — the same path Windows uses for its own arrow.
+              An overlay window would trail your pointer by a frame or two, forever.</span
+            >
+          </li>
+        </ul>
+      </section>
+
+      <!-- ------------------------------------------------------------- FAQ -->
+      <section class="section" id="faq" aria-labelledby="faq-h">
+        <header class="section-head reveal">
+          <p class="kicker">Questions</p>
+          <h2 id="faq-h">The things people ask</h2>
+        </header>
+
+        <div class="faq">
+          <details class="reveal">
+            <summary>Is it really free?</summary>
+            <p>
+              Yes. No paid tier, no trial, no licence key, no advertising, no account. The
+              source is public under the MIT licence, so none of that has to be taken on
+              trust.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Windows says "Windows protected your PC". Is it safe?</summary>
+            <p>
+              That is SmartScreen warning you the installer is not code-signed yet — a
+              reputation warning shown to all new unsigned software, not a detection of
+              anything harmful. Select <strong>More info</strong>, then
+              <strong>Run anyway</strong>. You can verify your download against the
+              published checksums, and build it yourself from source if you would rather.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Does it collect anything about me?</summary>
+            <p>
+              No. No telemetry, no analytics, no crash reporting, no fingerprinting. Your
+              settings, presets and imported cursors live in a folder on your own machine
+              and never leave it. The only network request the app can make is checking
+              GitHub for a new version, and that can be switched off.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Will it slow my mouse down?</summary>
+            <p>
+              It cannot. Cursed never draws a cursor — it tells Windows which cursor to
+              draw, and Windows renders it on the hardware cursor plane. Tools that paint a
+              sprite in an always-on-top window are composited by the desktop compositor and
+              trail the real pointer by 8–33 ms on any hardware. That is the reason this app
+              is built the way it is.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Do my cursors work in games?</summary>
+            <p>
+              In anything that uses the normal Windows pointer, yes — browsers, Office, File
+              Explorer, most windowed games. A fullscreen game that draws its own crosshair
+              from raw input is drawing its own crosshair; nothing outside that game can
+              change it without injecting code into it, which Cursed will never do.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>What happens when I uninstall?</summary>
+            <p>
+              Every pointer role is restored to the exact value it had before install, and
+              the registry entries, cursor schemes, startup entry and the WebView2 cache go
+              with it. You are asked whether to keep your presets and custom cursors. A
+              script in the repository verifies all of that before each release.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Does it need administrator rights?</summary>
+            <p>
+              No, and it never will. Everything is per-user: the install goes under your own
+              profile and only <span class="mono">HKCU</span> is written. There is no UAC
+              prompt at any point, including updates.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Which Windows do I need?</summary>
+            <p>
+              Windows 10 version 1803 or newer, or Windows 11. That floor is not ours to
+              move: the app's window is Microsoft Edge WebView2, and Microsoft ended
+              WebView2 support for Windows 7, 8 and 8.1. Builds ship for x64, ARM64 and
+              32-bit.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- DOWNLOAD -->
+      <section class="section download" id="download" aria-labelledby="download-h">
+        <div class="download-card reveal">
+          <p class="kicker">Download</p>
+          <h2 id="download-h">Get Cursed</h2>
 
           <a
-            class="download-btn"
+            class="btn btn-primary btn-wide"
             href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
             download
             rel="noopener noreferrer"
@@ -333,15 +419,17 @@
 
           <p class="price">Free. No account, no telemetry.</p>
 
-          <!-- The button above is x64, which is what an unknown visitor almost
-               always runs. These are the rest, deliberately not four equal
-               buttons: making everyone identify their own CPU to download an app
-               is a worse default than getting it right for nearly everyone and
-               offering an out.
+          <div class="trust" aria-label="Privacy">
+            <span>No telemetry</span>
+            <span>No account</span>
+            <span>No admin</span>
+            <span>100% local</span>
+          </div>
 
-               Every href here is an unversioned alias staged by
+          <!-- The button above is x64, which is what an unknown visitor almost
+               always runs. Every href is an unversioned alias staged by
                scripts/build-release.mjs, so publishing a release does not turn
-               this list into four 404s. -->
+               this list into 404s. -->
           <details class="builds">
             <summary>Not an x64 PC, or no internet on it?</summary>
             <ul>
@@ -352,7 +440,8 @@
                   rel="noopener noreferrer"
                   >ARM64</a
                 >
-                — Snapdragon and Copilot+ laptops, Surface Pro X. Runs native instead of emulated.
+                — Snapdragon and Copilot+ laptops, Surface Pro X. Runs native instead of
+                emulated.
               </li>
               <li>
                 <a
@@ -370,29 +459,14 @@
                   rel="noopener noreferrer"
                   >Offline installer</a
                 >
-                — x64 with the Edge WebView2 runtime built in (~211 MB). For an air-gapped machine
-                or a network that blocks Microsoft's download. The normal installer only needs this
-                if the runtime is missing, which on Windows 11 and any updated Windows 10 it is not.
+                — x64 with the Edge WebView2 runtime built in (~211 MB). For an air-gapped
+                machine or a network that blocks Microsoft's download.
               </li>
             </ul>
           </details>
 
-          <div class="trust" aria-label="Privacy">
-            <span>No telemetry</span>
-            <span>No account</span>
-            <span>No admin</span>
-            <span>100% local</span>
-          </div>
-
-          <!-- Version, size and released are rewritten at build time by
-               scripts/sync-release.mjs from the latest GitHub Release. The CSP
-               forbids scripts entirely, so this cannot be fetched in the
-               browser — and a hardcoded version is exactly how the README ended
-               up telling people to download 1.1.0 five versions later. -->
           <dl class="spec">
-            <div><dt>Version</dt><dd id="rel-version">1.17.0</dd></div>
-            <div><dt>Size</dt><dd id="rel-size">8.44 MB</dd></div>
-            <div><dt>Released</dt><dd id="rel-date">2026-08-10</dd></div>
+            <div><dt>Version</dt><dd>See above</dd></div>
             <div><dt>Platform</dt><dd>Windows 10 (1803+) / 11</dd></div>
             <div><dt>Architecture</dt><dd>x64, ARM64, 32-bit</dd></div>
             <div><dt>Install</dt><dd>Per-user, no admin</dd></div>
@@ -401,47 +475,79 @@
           </dl>
 
           <p class="note">
-            The installer is not code-signed yet, so your browser or SmartScreen may warn
-            <span class="mono">Windows protected your PC</span>. Select
-            <strong>More info</strong>, then <strong>Run anyway</strong>. That is a reputation
-            warning shown to all new unsigned software, not a detection of anything harmful — the
-            full source is public and you can build it yourself.
-          </p>
-
-          <p class="note">
-            Changed your mind? <strong>Settings → Restore Windows Default</strong> puts every
-            pointer back exactly as it was, and the uninstaller does it for you automatically.
-          </p>
-
-          <p class="note">
-            <strong>Uninstalling leaves nothing behind.</strong> Every pointer role is restored to
-            the exact value it had before install, and the registry entries, cursor schemes,
-            startup entry and the WebView2 cache all go with it — including the folder most apps
-            built this way forget. You are asked whether to keep your presets and custom cursors;
-            the default is to remove them. A script in the repository checks all of it, and is run
-            before every release.
-          </p>
-
-          <p class="note">
-            Verify your download against the checksums published with the release:<br />
+            Verify your download against the checksums published with the release:
             <a
               href="https://github.com/notfeylo/cursed/releases/latest/download/SHA256SUMS.txt"
               rel="noopener noreferrer"
               >SHA256SUMS.txt</a
             >
           </p>
-
-          <p class="note">
-            <a href="https://github.com/notfeylo/cursed" rel="noopener noreferrer">Source on GitHub</a> ·
-            <a href="https://github.com/notfeylo/cursed/releases" rel="noopener noreferrer">All releases</a>
-          </p>
         </div>
-      </aside>
+      </section>
     </main>
 
-    <footer>
-      <span>Cursed</span>
-      <span>&copy; 2026 All rights reserved</span>
+    <!-- ------------------------------------------------------------ FOOTER -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <span class="brand-word">CURSED</span>
+          <p>Your pointer. Possessed.</p>
+          <p class="footer-fine">
+            A Windows app that replaces every pointer role with a real cursor scheme, and
+            turns your own images into cursors.
+          </p>
+        </div>
+
+        <nav class="footer-col" aria-label="Product">
+          <h3>Product</h3>
+          <a href="#see">Screenshots</a>
+          <a href="#how">How it works</a>
+          <a href="#cursors">Cursors</a>
+          <a href="#download">Download</a>
+        </nav>
+
+        <nav class="footer-col" aria-label="Project">
+          <h3>Project</h3>
+          <a href="https://github.com/notfeylo/cursed" rel="noopener noreferrer">Source</a>
+          <a href="https://github.com/notfeylo/cursed/releases" rel="noopener noreferrer"
+            >Releases</a
+          >
+          <a href="https://github.com/notfeylo/cursed/issues" rel="noopener noreferrer"
+            >Report a bug</a
+          >
+          <a
+            href="https://github.com/notfeylo/cursed/blob/main/docs/LICENSES.md"
+            rel="noopener noreferrer"
+            >Licences</a
+          >
+        </nav>
+
+        <nav class="footer-col" aria-label="Legal">
+          <h3>Legal</h3>
+          <a
+            href="https://github.com/notfeylo/cursed/blob/main/docs/PRIVACY.md"
+            rel="noopener noreferrer"
+            >Privacy</a
+          >
+          <a
+            href="https://github.com/notfeylo/cursed/blob/main/docs/TERMS.md"
+            rel="noopener noreferrer"
+            >Terms</a
+          >
+          <a
+            href="https://github.com/notfeylo/cursed/blob/main/SECURITY.md"
+            rel="noopener noreferrer"
+            >Security</a
+          >
+        </nav>
+      </div>
+
+      <div class="footer-base">
+        <p>© 2026 feylo · MIT licensed</p>
+        <p class="footer-fine">
+          Not affiliated with Microsoft. Windows is a trademark of Microsoft Corporation.
+        </p>
+      </div>
     </footer>
   </body>
 </html>

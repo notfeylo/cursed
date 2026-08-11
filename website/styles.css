@@ -1,4 +1,7 @@
-/* Cursed — the same design tokens as the app (§10.2). */
+/* Cursed — the same design tokens as the app (§10.2).
+   No JavaScript on this site: the CSP is `script-src 'none'`, and it stays that
+   way. Everything below — the scroll reveals, the orbit, the drifting cursors,
+   the FAQ — is CSS and semantic HTML. */
 
 @font-face {
   font-family: "Chakra Petch";
@@ -46,7 +49,12 @@
   --font-mono: "JetBrains Mono", Consolas, monospace;
 
   --shell: 1120px;
-  --gutter: 32px;
+  --gutter: 28px;
+
+  /* One motion vocabulary, used by everything. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 140ms;
+  --med: 200ms;
 
   color-scheme: dark;
 }
@@ -55,9 +63,10 @@
   box-sizing: border-box;
 }
 
-html,
-body {
-  height: 100%;
+html {
+  scroll-behavior: smooth;
+  /* The header is sticky, so anchor targets must clear it. */
+  scroll-padding-top: 90px;
 }
 
 body {
@@ -65,156 +74,1090 @@ body {
   background: var(--bg);
   color: var(--text-2);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 
-  /* Desktop: the page itself never scrolls. Only About does. */
-  display: flex;
-  flex-direction: column;
+  /* The pointer, on the page about pointers. A real .png cursor with a sensible
+     hotspot, and `auto` behind it for anything that refuses it. Each section
+     below sets its own, so it changes as you scroll — which is the product
+     demonstrating itself rather than describing itself. */
+  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
+}
+
+/* ---------------------------------------------------------- background -- */
+
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   overflow: hidden;
 }
 
-/* ------------------------------------------------------- masthead -- */
+.bg-grid {
+  position: absolute;
+  inset: -20%;
+  background-image:
+    linear-gradient(rgba(46, 139, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 139, 255, 0.07) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 70%);
+  animation: grid-drift 60s linear infinite;
+}
 
-.masthead {
-  flex: 0 0 auto;
+@keyframes grid-drift {
+  to {
+    transform: translate3d(64px, 64px, 0);
+  }
+}
+
+/* Blurred colour, moving slowly. `filter: blur()` on a big element is expensive
+   to paint once and free thereafter, because only the transform animates. */
+.blob {
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  min-width: 520px;
+  min-height: 520px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  will-change: transform;
+}
+
+.blob-a {
+  top: -22vw;
+  left: -12vw;
+  background: radial-gradient(circle, rgba(46, 139, 255, 0.55), transparent 65%);
+  animation: drift-a 34s var(--ease) infinite alternate;
+}
+.blob-b {
+  top: 28vh;
+  right: -20vw;
+  background: radial-gradient(circle, rgba(92, 184, 255, 0.38), transparent 65%);
+  animation: drift-b 46s var(--ease) infinite alternate;
+}
+.blob-c {
+  bottom: -28vw;
+  left: 22vw;
+  background: radial-gradient(circle, rgba(18, 58, 114, 0.75), transparent 65%);
+  animation: drift-c 40s var(--ease) infinite alternate;
+}
+
+@keyframes drift-a {
+  to {
+    transform: translate3d(14vw, 10vh, 0) scale(1.15);
+  }
+}
+@keyframes drift-b {
+  to {
+    transform: translate3d(-12vw, 14vh, 0) scale(0.9);
+  }
+}
+@keyframes drift-c {
+  to {
+    transform: translate3d(10vw, -12vh, 0) scale(1.1);
+  }
+}
+
+.bg-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 90% at 50% 0%,
+    rgba(5, 5, 7, 0.1) 0%,
+    rgba(5, 5, 7, 0.72) 55%,
+    rgba(5, 5, 7, 0.94) 100%
+  );
+}
+
+/* -------------------------------------------------------------- header -- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 24px;
   width: 100%;
   max-width: var(--shell);
   margin: 0 auto;
-  padding: 34px var(--gutter) 26px;
+  padding: 14px var(--gutter);
+  /* Frosted, so the page moves under it rather than behind a solid bar. */
+  backdrop-filter: blur(14px) saturate(1.3);
+  background: rgba(5, 5, 7, 0.55);
+  border-bottom: 1px solid transparent;
+}
+
+/* The border only appears once the page has moved. Pure CSS, via a scroll
+   timeline — no listener, no layout reads. */
+@supports (animation-timeline: scroll()) {
+  .site-header {
+    animation: header-solid linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 120px;
+  }
+  @keyframes header-solid {
+    to {
+      background: rgba(5, 5, 7, 0.82);
+      border-bottom-color: var(--border);
+    }
+  }
+}
+
+.brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-}
-
-.mark {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
-  border: 1px solid var(--accent-dim);
-  box-shadow: 0 0 28px var(--accent-glow);
-}
-
-.wordmark-svg {
-  display: block;
-  color: var(--text, #edf1f7);
-}
-
-/* Kept reachable for screen readers and for search, since the wordmark is now
-   a path rather than the word. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  gap: 10px;
+  text-decoration: none;
   border: 0;
 }
 
-/* ----------------------------------------------------------- main -- */
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
+  border: 1px solid var(--accent-dim);
+  transition: transform var(--med) var(--ease), box-shadow var(--med) var(--ease);
+}
 
-/* `flex: 1` already claims the space left between masthead and footer. Adding
-   `height: 100%` on top resolves against the whole body instead, so the grid
-   grows taller than its slot and pushes its content down through the footer. */
+.brand:hover .brand-mark {
+  transform: translateY(-2px) rotate(-6deg);
+  box-shadow: 0 8px 24px var(--accent-glow);
+}
+
+.brand-word {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--text);
+}
+
+.site-nav {
+  display: flex;
+  gap: 22px;
+  margin-left: auto;
+}
+
+.site-nav a {
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+  border: 0;
+  position: relative;
+  padding: 4px 0;
+}
+
+/* Underline grows from the left rather than fading in. */
+.site-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--accent-hi);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--med) var(--ease);
+}
+
+.site-nav a:hover {
+  color: var(--text);
+}
+.site-nav a:hover::after {
+  transform: scaleX(1);
+}
+
+.header-cta {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-decoration: none;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--elevated);
+  transition: border-color var(--med) var(--ease), background var(--med) var(--ease),
+    transform var(--med) var(--ease);
+}
+
+.header-cta:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  transform: translateY(-1px);
+}
+
+/* ---------------------------------------------------------- reveal ------ */
+
+/* Scroll-driven reveals, with no JavaScript and no IntersectionObserver.
+   `animation-timeline: view()` ties the animation to the element's own progress
+   through the viewport, which is the thing an observer approximates.
+
+   Guarded by @supports because Safari and Firefox do not have it yet: without
+   the guard those browsers would show elements stuck at opacity 0 — content
+   hidden by a progressive enhancement is the one outcome worth engineering
+   around. Outside the guard, everything is simply visible. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 26%;
+    }
+    .delay-1 { animation-range: entry 0% cover 32%; }
+    .delay-2 { animation-range: entry 0% cover 38%; }
+    .delay-3 { animation-range: entry 0% cover 44%; }
+    .delay-4 { animation-range: entry 0% cover 50%; }
+    .delay-5 { animation-range: entry 0% cover 56%; }
+  }
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ---------------------------------------------------------------- hero -- */
+
 main {
-  flex: 1;
-  min-height: 0;
   width: 100%;
   max-width: var(--shell);
   margin: 0 auto;
   padding: 0 var(--gutter);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 48px;
-  align-items: stretch;
 }
 
-/* About — the only scrolling region. */
-.about {
-  min-width: 0;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 14px;
-  scrollbar-gutter: stable;
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 18px,
-    #000 calc(100% - 26px),
-    transparent 100%
-  );
+.hero {
+  position: relative;
+  padding: 96px 0 72px;
+  text-align: center;
+  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
 }
 
-.about-inner {
-  padding-bottom: 34px;
-}
-
-/* Download — a full-height column of its own, so the button is on screen the
-   whole time someone is reading. It scrolls internally rather than overflowing:
-   the card is taller than a short laptop viewport, and content disappearing
-   behind the footer is worse than a second scroll region. */
-.download {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.download-inner {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 22px 22px 20px;
-}
-
-/* -------------------------------------------------------- content -- */
-
-.section-label {
+.eyebrow {
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent-hi);
-  margin: 0 0 18px;
-  padding-bottom: 11px;
-  border-bottom: 1px solid var(--border);
+  margin: 0 0 22px;
 }
 
-h3 {
+.hero-title {
   font-family: var(--font-display);
+  font-size: clamp(40px, 8.5vw, 92px);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.hero-title .line {
+  display: block;
+}
+
+/* The second line carries the gradient and a slow shimmer across it. Clipping
+   to the text means the animation is a background-position change — no filter,
+   no repaint of the glyphs. */
+.hero-title em {
+  font-style: normal;
+  background: linear-gradient(
+    100deg,
+    var(--accent) 0%,
+    var(--accent-hi) 25%,
+    #ffffff 40%,
+    var(--accent-hi) 55%,
+    var(--accent) 80%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 250% 0;
+  }
+}
+
+.hero-sub {
+  max-width: 620px;
+  margin: 24px auto 0;
+  font-size: 17px;
+  color: var(--text-2);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.hero-meta {
+  margin-top: 20px;
   font-size: 12px;
+  color: var(--text-3);
+}
+
+.hero-meta .dot {
+  margin: 0 8px;
+  opacity: 0.5;
+}
+
+.hero-hint {
+  margin-top: 34px;
+  font-size: 12px;
+  color: var(--text-3);
+  animation: hint-pulse 3.5s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ------------------------------------------------------------- fliers -- */
+
+/* Six cursors drifting behind the hero, like kites on separate strings.
+   Each has its own duration and delay so they never sync into a pattern, and
+   the whole layer is behind the text and ignores the pointer. */
+.fliers {
+  position: absolute;
+  inset: -40px 0 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.flier {
+  position: absolute;
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  opacity: 0.55;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.55));
+  will-change: transform;
+}
+
+.f1 { top: 6%;  left: 4%;   animation: fly-a 19s var(--ease) infinite alternate; }
+.f2 { top: 52%; left: 9%;   animation: fly-b 23s var(--ease) infinite alternate; animation-delay: -4s; }
+.f3 { top: 14%; right: 6%;  animation: fly-c 21s var(--ease) infinite alternate; animation-delay: -8s; width: 74px; height: 74px; }
+.f4 { top: 62%; right: 10%; animation: fly-a 26s var(--ease) infinite alternate; animation-delay: -2s; }
+.f5 { top: 34%; left: 1%;   animation: fly-c 24s var(--ease) infinite alternate; animation-delay: -11s; width: 52px; height: 52px; }
+.f6 { top: 78%; right: 24%; animation: fly-b 20s var(--ease) infinite alternate; animation-delay: -6s; width: 54px; height: 54px; }
+
+@keyframes fly-a {
+  from { transform: translate3d(0, 0, 0) rotate(-8deg); }
+  to   { transform: translate3d(70px, -46px, 0) rotate(10deg); }
+}
+@keyframes fly-b {
+  from { transform: translate3d(0, 0, 0) rotate(6deg); }
+  to   { transform: translate3d(-60px, -66px, 0) rotate(-12deg); }
+}
+@keyframes fly-c {
+  from { transform: translate3d(0, 0, 0) rotate(4deg) scale(1); }
+  to   { transform: translate3d(-48px, 54px, 0) rotate(-9deg) scale(1.12); }
+}
+
+/* On scroll they also glide sideways — the "kite" the brief asked for. Layered
+   on top of the idle drift by animating the container, not the images. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .fliers {
+      animation: fliers-glide linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 100vh;
+    }
+    @keyframes fliers-glide {
+      to {
+        transform: translate3d(0, -120px, 0) rotate(-2deg);
+        opacity: 0.25;
+      }
+    }
+  }
+}
+
+/* -------------------------------------------------------------- buttons -- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 26px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform var(--fast) var(--ease), box-shadow var(--med) var(--ease),
+    background var(--med) var(--ease), border-color var(--med) var(--ease);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 26px var(--accent-glow);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hi);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 38px rgba(46, 139, 255, 0.55);
+}
+
+/* The press happens now; anything else can wait. */
+.btn:active {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+
+.btn-ghost {
+  background: transparent;
   color: var(--text);
-  margin: 32px 0 10px;
+  border-color: var(--border-strong);
 }
 
-p {
-  margin: 0 0 15px;
+.btn-ghost:hover {
+  border-color: var(--accent);
+  background: rgba(46, 139, 255, 0.08);
+  transform: translateY(-2px);
 }
 
-.lead {
+.btn-wide {
+  width: 100%;
+}
+
+.btn svg {
+  transition: transform var(--med) var(--ease);
+}
+.btn:hover svg {
+  transform: translateY(2px);
+}
+
+/* --------------------------------------------------------------- stats -- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 8px 0 40px;
+}
+
+.stat {
+  text-align: center;
+  padding: 22px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(19, 23, 34, 0.7), rgba(11, 13, 18, 0.5));
+  backdrop-filter: blur(6px);
+  transition: border-color var(--med) var(--ease), transform var(--med) var(--ease);
+}
+
+.stat:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-3px);
+}
+
+.stat b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 30px;
   color: var(--text);
-  font-size: 17px;
-  line-height: 1.6;
+  line-height: 1.1;
 }
 
-strong {
+.stat span {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------------ sections -- */
+
+.section {
+  padding: 78px 0;
+  border-top: 1px solid var(--border);
+}
+
+.section-head {
+  max-width: 660px;
+  margin: 0 0 42px;
+}
+
+.kicker {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-hi);
+  margin: 0 0 12px;
+}
+
+.section h2 {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.6vw, 40px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.section-lede {
+  margin: 16px 0 0;
+  font-size: 16px;
+  color: var(--text-2);
+}
+
+/* Each section changes the pointer. This is the product arguing for itself. */
+#see { cursor: url("shots/fly/cur-wheel.png") 4 4, auto; }
+#how { cursor: url("shots/fly/cur-elon.png") 4 4, auto; }
+#cursors { cursor: url("shots/fly/cur-f1.png") 4 4, auto; }
+#faq { cursor: url("shots/fly/cur-gun.png") 4 4, auto; }
+#download { cursor: url("shots/fly/cur-trump2.png") 4 4, auto; }
+
+/* Anything clickable keeps a pointer that says "clickable". A themed cursor is
+   a nice touch; losing the affordance for it is not. */
+a,
+summary,
+.btn {
+  cursor: pointer;
+}
+
+/* ----------------------------------------------------------- screenshots -- */
+
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  perspective: 1400px;
+}
+
+.shot {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  transform-style: preserve-3d;
+  transition: transform 320ms var(--ease), border-color var(--med) var(--ease),
+    box-shadow 320ms var(--ease);
+}
+
+/* The 3D tilt. Opposite directions per column so the pair leans apart rather
+   than in parallel, which is what makes it read as depth. */
+.shot:nth-child(odd):hover {
+  transform: rotateY(6deg) rotateX(3deg) translateY(-6px);
+  border-color: var(--border-strong);
+  box-shadow: -18px 26px 60px rgba(0, 0, 0, 0.6);
+}
+.shot:nth-child(even):hover {
+  transform: rotateY(-6deg) rotateX(3deg) translateY(-6px);
+  border-color: var(--border-strong);
+  box-shadow: 18px 26px 60px rgba(0, 0, 0, 0.6);
+}
+
+.shot a {
+  display: block;
+  border: 0;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.shot figcaption {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.shot figcaption b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+/* --------------------------------------------------------------- steps -- */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+}
+
+.step {
+  position: relative;
+  padding: 26px 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(19, 23, 34, 0.66), rgba(11, 13, 18, 0.5));
+  overflow: hidden;
+  transition: border-color var(--med) var(--ease), transform var(--med) var(--ease);
+}
+
+/* A light sweeps across the card on hover. Contained by overflow, so it never
+   affects anything outside the card. */
+.step::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(92, 184, 255, 0.09) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  transition: transform 620ms var(--ease);
+}
+
+.step:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-4px);
+}
+.step:hover::after {
+  transform: translateX(100%);
+}
+
+.step-n {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-hi);
+}
+
+.step h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 10px 0 8px;
+}
+
+.step p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* --------------------------------------------------------------- orbit -- */
+
+/* Cursors on a slowly turning ring. The ring rotates one way and each item
+   counter-rotates at the same duration, so the artwork stays upright — a
+   ferris wheel rather than a tumble dryer. */
+.orbit {
+  position: relative;
+  width: min(460px, 88vw);
+  aspect-ratio: 1;
+  margin: 0 auto 48px;
+  display: grid;
+  place-items: center;
+}
+
+.orbit-ring {
+  position: absolute;
+  inset: 0;
+  animation: spin 44s linear infinite;
+  border: 1px dashed rgba(46, 139, 255, 0.18);
+  border-radius: 50%;
+}
+
+/* Position only. The counter-rotation lives on the image inside, because an
+   animation on this element would overwrite the transform placing it on the
+   ring — every item would pile up in the middle. Two elements, one transform
+   each. */
+.orbit-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
+  display: grid;
+  place-items: center;
+}
+
+.orbit-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6));
+  animation: spin-back 44s linear infinite;
+}
+
+/* Six positions on the ring, as a rotate-then-push-out pair. */
+.o1 { transform: rotate(0deg) translate(190px); }
+.o2 { transform: rotate(60deg) translate(190px); }
+.o3 { transform: rotate(120deg) translate(190px); }
+.o4 { transform: rotate(180deg) translate(190px); }
+.o5 { transform: rotate(240deg) translate(190px); }
+.o6 { transform: rotate(300deg) translate(190px); }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes spin-back {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.orbit-core {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
+  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
+  border: 1px solid var(--accent-dim);
+  box-shadow: 0 0 44px var(--accent-glow);
+  animation: core-breathe 6s ease-in-out infinite;
+}
+
+@keyframes core-breathe {
+  50% {
+    box-shadow: 0 0 70px rgba(46, 139, 255, 0.45);
+  }
+}
+
+/* --------------------------------------------------------------- facts -- */
+
+.facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.facts li {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 22px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.facts .k {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-top: 4px;
+}
+
+.facts .v {
+  font-size: 15px;
+}
+
+/* ----------------------------------------------------------------- faq -- */
+
+.faq {
+  display: grid;
+  gap: 10px;
+}
+
+.faq details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(11, 13, 18, 0.6);
+  overflow: hidden;
+  transition: border-color var(--med) var(--ease), background var(--med) var(--ease);
+}
+
+.faq details:hover {
+  border-color: var(--border-strong);
+}
+
+.faq details[open] {
+  border-color: var(--accent-dim);
+  background: rgba(19, 23, 34, 0.7);
+}
+
+.faq summary {
+  list-style: none;
+  padding: 16px 46px 16px 18px;
+  position: relative;
+  font-size: 15px;
   color: var(--text);
   font-weight: 500;
 }
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A + that becomes a − . Two bars, one rotated. */
+.faq summary::before,
+.faq summary::after {
+  content: "";
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  width: 13px;
+  height: 1.5px;
+  background: var(--accent-hi);
+  transition: transform var(--med) var(--ease);
+}
+
+.faq summary::after {
+  transform: rotate(90deg);
+}
+
+.faq details[open] summary::after {
+  transform: rotate(0deg);
+}
+
+.faq p {
+  margin: 0;
+  padding: 0 18px 18px;
+  font-size: 15px;
+}
+
+/* ------------------------------------------------------------ download -- */
+
+.download {
+  border-top: 1px solid var(--border);
+}
+
+.download-card {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 34px 30px 30px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(19, 23, 34, 0.8), rgba(11, 13, 18, 0.7));
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.download-card h2 {
+  margin-bottom: 24px;
+}
+
+.price {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.trust span {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+
+.builds {
+  margin: 20px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: left;
+}
+
+.builds summary {
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-2);
+  padding: 6px 0;
+}
+
+.builds summary:hover {
+  color: var(--text);
+}
+
+.builds ul {
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  list-style: none;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.builds li + li {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.spec {
+  margin: 24px 0 18px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+
+.spec > div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.spec dt {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-top: 3px;
+}
+
+.spec dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: left;
+}
+
+/* -------------------------------------------------------------- footer -- */
+
+.site-footer {
+  margin-top: 60px;
+  border-top: 1px solid var(--border);
+  background: rgba(5, 5, 7, 0.6);
+  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
+}
+
+.footer-inner {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 32px;
+  width: 100%;
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 48px var(--gutter) 34px;
+}
+
+.footer-brand p {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.footer-fine {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.footer-col h3 {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+.footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-col a {
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+  border: 0;
+  width: fit-content;
+  transition: color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+
+.footer-col a:hover {
+  color: var(--accent-hi);
+  transform: translateX(3px);
+}
+
+.footer-base {
+  border-top: 1px solid var(--border);
+  padding: 18px var(--gutter);
+  max-width: var(--shell);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.footer-base p {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- misc -- */
 
 a {
   color: var(--accent-hi);
@@ -226,434 +1169,97 @@ a:hover {
   border-bottom-color: var(--accent-hi);
 }
 
+strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
 .mono {
   font-family: var(--font-mono);
-  font-size: 0.88em;
+  font-size: 0.9em;
   color: var(--text);
 }
 
-/* Screenshots.
-   Two per row on desktop, one on a narrow screen. The images are portrait —
-   the app window is 420px wide — so a wide row would leave them tiny. */
-.shots {
-  margin: 26px 0 30px;
+/* Visible focus, everywhere. Keyboard users get the same affordances. */
+:focus-visible {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
-.shots-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+/* Scrollbar. A default Windows scrollbar in a dark page is a cheapness tell. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
-.shot {
-  display: block;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--surface);
-  text-decoration: none;
-  /* The link carries an underline from the global `a` rule; these are pictures. */
-  border-bottom: 1px solid var(--border);
-  transition:
-    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
-
-.shot:hover {
-  transform: translateY(-3px);
-  border-color: var(--border-strong);
-  border-bottom-color: var(--border-strong);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-}
-
-.shot img {
-  display: block;
-  width: 100%;
-  /* The intrinsic width/height attributes reserve the box before the file
-     arrives, so nothing below jumps as the images load. */
-  height: auto;
-}
-
-.shot figcaption {
-  padding: 9px 12px 11px;
-  border-top: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-@media (max-width: 900px) {
-  .shots-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shot,
-  .shot:hover {
-    transform: none;
-    transition: none;
-  }
-}
-
-.facts {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--border);
-}
-
-.facts li {
-  display: grid;
-  grid-template-columns: 108px 1fr;
-  gap: 20px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.facts .k {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  padding-top: 3px;
-}
-
-/* ------------------------------------------------------- download -- */
-
-.download-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  height: 50px;
-  border: none;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  box-shadow: 0 0 26px var(--accent-glow);
-  transition:
-    background 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.download-btn:hover {
-  background: var(--accent-hi);
-  border-bottom-color: transparent;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 36px rgba(46, 139, 255, 0.55);
-}
-
-.download-btn:active {
-  transform: scale(0.985);
-}
-
-.download-btn svg {
-  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.download-btn:hover svg {
-  transform: translateY(2px);
-}
-
-.trust {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 14px;
-}
-.trust span {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 4px 10px;
-}
-
-.price {
-  margin: 12px 0 0;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-/* The alternate builds. Closed by default and quiet when open: someone who
-   needs the ARM64 or the offline installer is already looking for it, and
-   everyone else is better served by one obvious button than four competing
-   ones. */
-.builds {
-  margin: 14px 0 0;
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-.builds summary {
-  cursor: pointer;
-  text-align: center;
-  color: var(--text-2);
-  padding: 4px 0;
-  border-radius: 6px;
-}
-
-.builds summary:hover {
-  color: var(--text-1);
-}
-
-.builds ul {
-  margin: 10px 0 0;
-  padding: 12px 14px;
-  list-style: none;
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  line-height: 1.55;
-}
-
-.builds li + li {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.spec {
-  margin: 20px 0 18px;
-  border-top: 1px solid var(--border);
-}
-
-.spec > div {
-  display: grid;
-  /* Wide enough for ARCHITECTURE, the longest label, to stay on one line. */
-  grid-template-columns: 92px 1fr;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.spec dt {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  padding-top: 2px;
-}
-
-.spec dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-  word-break: break-word;
-}
-
-.note {
-  font-size: 12.5px;
-  color: var(--text-3);
-  line-height: 1.55;
-  margin-bottom: 12px;
-}
-
-.note strong {
-  color: var(--text-2);
-}
-
-.note:last-child {
-  margin-bottom: 0;
-}
-
-.checksum {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--text-2);
-  word-break: break-all;
-  user-select: all;
-}
-
-/* --------------------------------------------------------- footer -- */
-
-footer {
-  flex: 0 0 auto;
-  width: 100%;
-  max-width: var(--shell);
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 20px var(--gutter) 26px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-footer span:first-child {
-  font-family: var(--font-display);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-/* ------------------------------------------------------ scrollbar -- */
-
-.about::-webkit-scrollbar,
-.download::-webkit-scrollbar {
-  width: 8px;
-}
-.about::-webkit-scrollbar-track,
-.download::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
-.about::-webkit-scrollbar-thumb,
-.download::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 999px;
+  border: 3px solid var(--bg);
 }
-.about::-webkit-scrollbar-thumb:hover,
-.download::-webkit-scrollbar-thumb:hover {
-  background: #3a4560;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-dim);
 }
 
-/* ----------------------------------------------------- responsive -- */
+/* ---------------------------------------------------------- responsive -- */
 
 @media (max-width: 900px) {
-  body {
-    overflow: auto;
-    display: block;
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  main {
-    display: block;
-    height: auto;
-    padding-bottom: 8px;
+  .shots-grid,
+  .steps,
+  .footer-inner {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .about {
-    height: auto;
-    overflow: visible;
-    padding-right: 0;
-    mask-image: none;
-  }
-  .download {
-    overflow: visible;
-    margin-top: 34px;
-  }
-  .masthead {
-    padding-top: 26px;
-    padding-bottom: 20px;
-  }
-  .wordmark-svg {
-    height: 20px;
-  }
-  .mark {
-    width: 46px;
-    height: 46px;
-  }
-}
-
-@media (max-width: 560px) {
-  :root {
-    --gutter: 20px;
+  .site-nav {
+    display: none;
   }
   .facts li {
-    grid-template-columns: 1fr;
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
-  .lead {
-    font-size: 16px;
+  .orbit {
+    width: min(340px, 84vw);
   }
-}
-
-/* ---------------------------------------------------------- motion -- */
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
+  .o1, .o2, .o3, .o4, .o5, .o6 {
+    /* The ring shrinks with the container, so the push-out distance must too. */
+    --r: 140px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes drop {
-  from {
-    opacity: 0;
-    transform: translateY(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  .o1 { transform: rotate(0deg) translate(var(--r)); }
+  .o2 { transform: rotate(60deg) translate(var(--r)); }
+  .o3 { transform: rotate(120deg) translate(var(--r)); }
+  .o4 { transform: rotate(180deg) translate(var(--r)); }
+  .o5 { transform: rotate(240deg) translate(var(--r)); }
+  .o6 { transform: rotate(300deg) translate(var(--r)); }
+  .flier {
+    opacity: 0.32;
   }
 }
 
-.masthead {
-  animation: drop 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.about-inner {
-  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 120ms;
-}
-.download-inner {
-  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 220ms;
-}
-footer {
-  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 300ms;
-}
-
-/* The mark breathes, mirroring the app's HOME logo exactly: the chamber pulses,
-   the seam glows as if something inside it is hot, and the spark flares. Slow
-   enough to be atmosphere rather than a distraction. */
-/* No glow. Depth on the mark comes from its own fold and cast shadow, the
-   same way it does in the app — a halo behind it would light the shape from
-   the wrong side and flatten both. */
-.mark svg .logo-blade {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-.mark svg .logo-blade {
-  animation: logo-breathe 5s ease-in-out infinite;
-}
-/* The two short arcs pulse, so the ring reads as holding something rather
-   than as a static outline. */
-
-@keyframes logo-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.045);
-    opacity: 1;
-  }
-}
-}
-
+/* Someone who asked for less motion has asked for exactly that. Everything
+   decorative stops; nothing that carries meaning disappears with it. */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .fliers,
+  .orbit-ring {
+    display: none;
   }
 }
