@@ -1,7 +1,8 @@
 # What lives where
 
 One screen, for someone opening this repository cold. `ARCHITECTURE.md` explains
-*how* the app works; this explains where to find it.
+*how* the app works; this explains where to find it. Every directory below also
+carries its own README with the detail.
 
 ## The shape of it
 
@@ -11,36 +12,58 @@ front end that never does. The front end names no file path and no registry key
 the reason a UI change can never write to the wrong place.
 
 ```
-src-tauri/          The Rust core. Everything that touches Windows.
 src/                The React front end. Everything the user looks at.
-assets/             Generated cursor packs + the bundled third-party archives.
+src-tauri/          The Rust core. Everything that touches Windows.
+assets/             The 36 bundled packs, and the generated artwork kept for review.
 website/            cursorforge.vercel.app. Static, no build step, no scripts.
 scripts/            Build, release and verification tooling.
 docs/               This, and everything else worth writing down.
+.github/            CI and the issue/PR templates.
+dev-fonts/          Fonts for the dev-only specimen screen. Cannot ship.
 ```
 
-## `src-tauri/src` — the core
+## `src/` — the front end · [README](../src/README.md)
+
+`screens/` one per view · `components/` shared UI · `lib/` typed IPC and shared
+shapes · `store.ts` state · `styles.css` every design token.
 
 | Path | What it is for |
 | --- | --- |
-| `commands.rs` | **The only `#[tauri::command]` surface.** Every call the UI can make is here, and nowhere else. |
-| `cursor/` | The three layers: `engine` (live `SetSystemCursor`), `scheme` (the registry), `watchdog` (puts it back when Windows changes it), `restore` (undo, used by Settings *and* the uninstaller). |
-| `build/` | Turning artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`. Pure and unit-tested — no registry, no Win32. |
-| `packs/` | `styles.rs` defines the single built-in blend base that fills roles an imported pack leaves unmapped, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it. The catalog itself is `bundled.rs`. |
-| `custom.rs` | Cursors built from the user's own images, including their optional hover artwork. |
-| `import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
-| `bundled.rs` | **The catalog.** 36 packs embedded in the binary and installed on first run. Two are licensed for redistribution and thirty-four state no licence — `LICENSES.md` says exactly which and why they ship anyway. |
-| `updates.rs` | The one network request the app makes. Architecture-aware asset matching, checksum verification. |
-| `paths.rs` | Every path the app writes. Nothing else builds one. |
-| `session.rs`, `state/` | What is applied now, and the settings behind it. |
+| `App.tsx` | The shell: current view, title bar, backdrop, banner. |
+| `store.ts` | The whole app state, in one zustand store. `DEFAULT_SETTINGS` is what a fresh install looks like. |
+| `lib/ipc.ts` | **The only place that calls `invoke`.** Every core command, typed. |
+| `lib/types.ts` | Shapes mirrored 1:1 from Rust, including the canonical order of the seventeen roles. |
+| `lib/useGlideScroll.ts` | Eased wheel scrolling. Windows delivers a notch as one ~100px jump and `scroll-behavior` does not apply to the wheel. |
+| `screens/Specimen.tsx` | Dev-only reference sheet at `?specimen`. Dropped from production builds, and `check:bundle` fails if it ever is not. |
 
-## `src` — the front end
+## `src-tauri/` — the core · [README](../src-tauri/README.md)
 
-`screens/` one per view · `components/` shared UI · `lib/` data shaping and the
-typed IPC client · `store.ts` state. One component per file, named for the file.
-Business logic belongs in `lib/`, not in a component.
+| Path | What it is for |
+| --- | --- |
+| `src/lib.rs` | Setup, in the order things actually happen. Start here. |
+| `src/commands.rs` | **The only `#[tauri::command]` surface.** Every call the UI can make. |
+| `src/cursor/` | The three layers: `engine` (live `SetSystemCursor`), `scheme` (the registry), `watchdog` (puts it back when Windows changes it), `restore` (undo, used by Settings *and* the uninstaller). |
+| `src/build/` | Artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`, `cur_reader`. Pure and unit-tested — no registry, no Win32. |
+| `src/packs/` | `styles.rs` defines the one generated blend base, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it, `cfpack.rs` is the pack format. |
+| `src/bundled.rs` | **The catalog.** The 36 packs embedded in the binary and installed on first run. |
+| `src/custom.rs` | Cursors built from the user's own images, including optional hover artwork. |
+| `src/import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
+| `src/updates.rs` | The one network request the app makes, on WinHTTP. Architecture-aware asset matching, checksum verified before anything is executed. |
+| `src/paths.rs` | Every path the app writes. Nothing else builds one. |
+| `src/session.rs`, `src/state/` | What is applied now, and the settings behind it. |
+| `src/bin/genpacks.rs` | The offline tool: exports the catalog, draws the icon, renders the review sheets. |
+| `tauri.conf.json`, `capabilities/` | Window and bundle config, and exactly which plugin commands the webview may call. |
+| `installer-hooks.nsh` | NSIS install/uninstall hooks. Both uninstall hooks return immediately in update mode. |
+| `rust-toolchain.toml`, `deny.toml` | The pinned compiler with every shipped target, and the licence/ban policy scoped to those same targets. |
+| `icons/` | The app icon set, all derived from `source.png`. |
 
-## `scripts/`
+## `assets/` · [README](../assets/README.md)
+
+`bundled/` is thirty-six `.zip` packs embedded by `include_bytes!` — this is what
+ships. `packs/` is generated SVG artwork, committed only so a change to the
+drawing code shows up as a change to a picture; nothing reads it at runtime.
+
+## `scripts/` · [README](../scripts/README.md)
 
 | Script | Run it when |
 | --- | --- |
@@ -48,7 +71,16 @@ Business logic belongs in `lib/`, not in a component.
 | `verify-uninstall.ps1` | Before a release. `-Snapshot` before installing, no arguments after uninstalling. **Release gate.** |
 | `check-bundle.mjs` (`npm run check:bundle`) | Run by CI. Catches fonts with no Latin glyphs and the dev-only specimen route reaching production. |
 | `set-version.mjs` (`npm run version:set`) | Bumping the version in all three files that carry one. |
-| `make-icon.mjs` | Regenerating the icon set from the mark. |
+| `make-icon.mjs` | Regenerating the icon master from the mark. |
+
+## `.github/`
+
+`workflows/build.yml` runs on every push: the frontend build, `check:bundle`,
+clippy, tests, the catalog check, an installer build with a size budget, plus a
+cross-architecture clippy matrix and a `npm audit` / `cargo audit` /
+`cargo deny` job. `workflows/release.yml` fires on a `v*` tag and produces a
+**draft** release with every installer attached — publish it by hand, or publish
+first and the workflow has nothing to add.
 
 ## Things that look odd and are deliberate
 
@@ -56,6 +88,10 @@ Business logic belongs in `lib/`, not in a component.
   renamed; the checkout was not. The name `cursorforge` is **permanently
   burned** — see `CONTRIBUTING.md`. Creating anything under it kills updates for
   every 1.6.x/1.7.0 install still relying on GitHub's rename redirect.
+- **Cargo is run from `src-tauri/`, never from the root with `--manifest-path`.**
+  Rustup resolves a toolchain from the current directory, so from the root the
+  pinned compiler and its target list are never seen. This cost four consecutive
+  red CI runs before 1.18.0.
 - **`dev-fonts/`** feeds the dev-only specimen route at `?specimen` and is
   referenced only as a runtime URL. Vite copies `public/` into a build and
   nothing else, so it cannot ship; `check:bundle` asserts the specimen module is
@@ -63,9 +99,15 @@ Business logic belongs in `lib/`, not in a component.
 - **`logo-sheets/`** is git-ignored. The brand and matte tooling writes contact
   sheets there on demand. Committed renders went stale the moment the mark
   changed, which is worse than no renders.
-- **`assets/packs/` is generated and committed.** CI regenerates it and fails if
-  the result differs, so the catalog in the repo is always the catalog the code
-  produces.
+- **`assets/packs/` is generated and committed**, and CI regenerates it and fails
+  if the result differs. It held 216 packs until 1.18.0 and holds one now: the
+  other 215 were the generated catalog, replaced by the hand-made packs.
+- **`docs/PRD.md` is the brief the product was built to, not a description of
+  it.** It is kept because code and CI cite its section numbers; where it and the
+  rest of `docs/` disagree, the rest of `docs/` is what shipped.
+- **`src-tauri/gen/` is not committed.** `tauri-build` regenerates it from
+  `capabilities/` on every build, and committing it lands every capability
+  change twice in the diff.
 - **`LEGACY_APP_DIR` and `LEGACY_SCHEME_PREFIX`** still name CursorForge. They
   exist to clean up after installs that predate the rename, and deleting them
   would strand those users.

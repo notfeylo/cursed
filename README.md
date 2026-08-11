@@ -98,7 +98,7 @@ That link is x64, which is what almost every Windows PC is. The rest:
 | [x64, offline](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe) | An air-gapped machine, or a network that blocks Microsoft's download |
 
 The offline installer embeds the Edge WebView2 runtime, so it needs no network —
-211 MB against the normal 8.5 MB. Take it only if you need it: WebView2 is
+214 MB against the normal 11 MB. Take it only if you need it: WebView2 is
 already on every Windows 11 and on any updated Windows 10, and the ordinary
 installer simply uses what is there.
 
@@ -128,10 +128,37 @@ npm run tauri build    # produces the NSIS .exe and .msi
 Useful extras:
 
 ```bash
-npm run generate:packs                  # export catalog SVG masters to assets/packs
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+npm run generate:packs        # export the catalog's SVG masters to assets/packs
+npm run check:bundle          # fonts, and no dev-only screen in a production build
+npm run release               # every installer a release ships, into dist-release/
+
+cd src-tauri                  # run cargo from here, not the root — see below
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
+
+Cargo wants to be run from `src-tauri/`. Rustup picks a toolchain from the
+*current directory*, and the pinned toolchain and its target list live in
+`src-tauri/rust-toolchain.toml` — called from the repo root with
+`--manifest-path` you silently get whatever `stable` is installed, and for a
+cross-compile, one with no `std` for the target.
+
+## Where the code lives
+
+Each directory has a README explaining what is in it and where to start.
+
+| | |
+| --- | --- |
+| [`src/`](src/) | **The front end.** React + TypeScript: screens, shared components, the typed IPC client, the store, and every design token in one stylesheet. |
+| [`src-tauri/`](src-tauri/) | **The core.** Rust, and everything that touches Windows: the three cursor layers, the file writers, the catalog, updates, the tray, and the installer hooks. |
+| [`assets/`](assets/) | The 36 bundled packs that ship inside the installer, and the generated artwork kept in-repo so a drawing change shows up as a picture in the diff. |
+| [`website/`](website/) | cursorforge.vercel.app. Static HTML and CSS, no build step, and `script-src 'none'`. |
+| [`scripts/`](scripts/) | Build, release and verification tooling. |
+| [`docs/`](docs/) | Architecture, the cursor byte formats, licensing, and one verification record per release. |
+| [`.github/`](.github/) | CI: the build, cross-architecture and audit jobs, and the tag-triggered release workflow. |
+
+[docs/REPO_MAP.md](docs/REPO_MAP.md) is the same thing at file granularity, on
+one screen.
 
 ## What it touches
 
@@ -162,8 +189,13 @@ no `SetWindowsHookEx`. See [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
+- [REPO_MAP.md](docs/REPO_MAP.md) — where everything lives, one screen
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the three layers fit together
 - [CURSOR_FORMAT.md](docs/CURSOR_FORMAT.md) — the `.cur` / `.ani` byte layouts
+- [LICENSES.md](docs/LICENSES.md) — every bundled pack and font, and its licence
+- [verification/](docs/verification/) — per release: what was checked, what was
+  not, and what could not be
+- [CONTRIBUTING.md](CONTRIBUTING.md) — the gate a change has to pass
 - [TERMS.md](docs/TERMS.md) · [PRIVACY.md](docs/PRIVACY.md) — also rendered
   in-app, offline
 
@@ -175,7 +207,13 @@ can be turned off. See [PRIVACY.md](docs/PRIVACY.md).
 
 ## Licence
 
-MIT — © 2026 feylo. All bundled cursor artwork is original work, licensed
-alongside the source.
+MIT — © 2026 feylo, for the application and for its own artwork: the mark, the
+pointer, the link hand, the text I-beam and the `GAP-CROSS` blend base.
+
+**The 36 bundled cursor packs are not covered by that.** Two are GPL-3.0 and
+carry their own licence files; thirty-four state no licence at all, and several
+depict characters owned by other people.
+[docs/LICENSES.md](docs/LICENSES.md) names every one of them and explains the
+position rather than leaving it to be discovered.
 
 Cursed is not affiliated with, endorsed by, or sponsored by Microsoft.
