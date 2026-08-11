@@ -126,15 +126,16 @@ anything.
 
 ## Rendering
 
-`packs/art.rs` describes all 17 role glyphs as parametric SVG; `packs/styles.rs`
-holds the 205 packs as parameter sets. Nothing is a shipped bitmap.
+`packs/art.rs` describes all 17 role glyphs as parametric SVG and
+`packs/styles.rs` holds the blend base that fills roles an imported pack leaves
+unmapped. Nothing there is a shipped bitmap.
 
 At apply time each role is rendered from the vector **at every target size** —
-32, 48, 64, 96, 128, 160, 192, 256 — tinted, optionally outlined, and packed
+10, 16, 24, 32, 48, 64, 96 and 128 — tinted, optionally outlined, and packed
 into one multi-resolution `.cur`. Rendering per size rather than resampling one
-master is what keeps 256 px genuinely sharp.
+master is what keeps 128 px genuinely sharp.
 
-Two details that decide whether a cursor looks right:
+Three details that decide whether a cursor looks right:
 
 - **Hotspots are normalised (0.0–1.0)** and multiplied by the target size. An
   absolute pixel hotspot is correct at exactly one size and wrong at the other
@@ -143,8 +144,50 @@ Two details that decide whether a cursor looks right:
   against transparent black, which is where the dark halo on glowing artwork
   comes from.
 - **The contrast outline is drawn per size**, after resampling, so it is always
-  exactly one device pixel. Drawn before, it would vanish at 32 px and go chunky
-  at 256 px.
+  exactly one device pixel. Drawn before, it would vanish at 10 px and go chunky
+  at 128 px.
+
+## Imported images
+
+A dropped photograph takes a different route from vector artwork, and every step
+of it exists because of a specific way the naive version looks wrong.
+
+**Orientation first.** A phone stores its sensor's pixels in the sensor's order
+and records the rotation as EXIF. Every viewer applies it, so the picture *is*
+upright everywhere the user has seen it; a decoder that ignores the tag produces
+a cursor lying on its side. `pipeline::decode` reads the tag and applies it
+before anything else looks at the pixels.
+
+**One working resolution.** A twelve-megapixel import becomes a 128 px cursor, so
+everything between the two is capped at 1024 px on the longest edge
+(`pipeline::WORKING_CAP`). This is a pure cost saving: the cap is chosen so the
+sharpening curve is already saturated at every target size, and the output is
+unchanged. A 19 MP photograph went from 18 seconds to 3.
+
+**Resampling happens in linear light.** An sRGB byte is not a quantity of light —
+it is light raised to about 1/2.2, so that eight bits cover a useful range. Mean
+values in that encoding are meaningless: half the light of white is 188, not 128.
+Averaging the stored bytes darkens every boundary between light and dark, which
+is what made photographs look muddy and dim on the way down to 32 px.
+`Bitmap::resized` decodes to linear, resamples with Lanczos3 through a 16-bit
+intermediate, and encodes back. The 16 bits are not vanity: 8-bit linear has
+visible steps in the darks, which is the reason sRGB is curved in the first
+place.
+
+**Enlargement is ours, not the shell's.** A small import used to stop one rung
+above its own resolution, leaving Windows to stretch it for anyone running a
+large pointer — with a bilinear filter, no premultiplication and no gamma
+correction. The ladder now covers up to 4× the source so that enlargement is done
+here instead, and stops there because past 4× the only thing another entry adds
+is eighty kilobytes.
+
+**The cut is finished, not just made.** `build/matte.rs` floods from the border,
+follows gradients through smooth neighbourhoods, clears background the flood
+could not reach, and then sweeps up what is left: islands too small and too close
+to the background's colour to be anything else, and single faint pixels with
+nothing around them. That last pass is the difference between a cut that is
+correct and one that looks clean — one grey fleck on a transparent background is
+the first thing the eye finds.
 
 Results are cached under `cache/<pack>/<tint>-<size>-<outline>/`. The first
 apply of a combination does real work across a thread per core; every later one

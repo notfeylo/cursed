@@ -52,15 +52,24 @@ here; it is a property of the design.
   with a custom pointer and a stock Windows hourglass the moment your PC copies
   a file.
 - **Every size, sharp.** Vector artwork is rendered at 10, 16, 24, 32, 48, 64,
-  96 and 128 px into one multi-resolution `.cur`, and photographs are sharpened
-  in proportion to how far they were shrunk.
+  96 and 128 px into one multi-resolution `.cur`. Photographs are resampled in
+  linear light — averaging sRGB bytes darkens every edge, which is most of why a
+  shrunk photo looks muddy — then sharpened in proportion to how far they were
+  shrunk. Small imports are enlarged here rather than stretched by Windows.
 - **Any colour**, for the artwork that is ours — the base pack, the link hand
   and the text I-beam ship as greyscale masters and are tinted at apply time.
   Imported packs keep their own colours, because tinting somebody's finished
   artwork only breaks it.
 - **Drop a PNG.** Hotspot picker with alpha-centroid and tip-detect, a 1:1
-  preview of all eight sizes, and a real cursor in under three seconds. GIF and
-  APNG become real animated `.ani` files.
+  preview of all eight sizes, and a real cursor in under three seconds — a
+  nineteen-megapixel photograph included. GIF and APNG become real animated
+  `.ani` files, and a photo shot on a phone arrives the way up it was taken.
+- **The background comes off cleanly.** A flat card, a studio sweep or a soft
+  gradient is keyed at a tolerance chosen from that image, gradients are followed
+  only through smooth areas so a textured subject is never walked into, and the
+  leftovers — flecks of compression debris, faint stranded pixels — are swept up
+  afterwards. It will not cut a subject out of a busy photograph, and it says so
+  rather than pretending.
 - **Blend.** Your own arrow over a catalog pack for the other sixteen roles —
   the mode that makes one image into a coherent pointer set.
 - **It stays.** A watchdog notices theme changes, personalisation resets and
