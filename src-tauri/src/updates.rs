@@ -21,9 +21,9 @@ use windows::core::PCWSTR;
 use windows::Win32::Networking::WinHttp::{
     WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryDataAvailable,
     WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
-    WinHttpSetOption, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE,
+    WinHttpSetOption, WinHttpSetTimeouts, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE,
     WINHTTP_OPTION_REDIRECT_POLICY, WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS,
-    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
+    WINHTTP_QUERY_CONTENT_LENGTH, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
 };
 
 const API_HOST: &str = "api.github.com";
@@ -35,9 +35,31 @@ pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursed/releases";
 const AGENT: &str = "Cursed-UpdateCheck";
 /// A release payload is a few kilobytes; anything far larger is not our JSON.
 const MAX_JSON: usize = 256 * 1024;
-/// The installer is ~2 MB. 64 MB is generous headroom and still a hard ceiling.
+/// The installer is ~11 MB. 64 MB is generous headroom and still a hard ceiling.
 const MAX_DOWNLOAD: usize = 64 * 1024 * 1024;
 const MAX_SUMS: usize = 64 * 1024;
+
+/// How long WinHTTP may spend on each phase before giving up, in milliseconds.
+///
+/// Set explicitly rather than left at the defaults, because the failure the
+/// defaults produce is the worst kind: a request that never returns leaves
+/// `downloading` true in the shared state forever, and the panel then shows a
+/// disabled button reading DOWNLOADING that no amount of clicking will move.
+/// A timeout is an error, and an error is something the UI can recover from.
+const RESOLVE_TIMEOUT_MS: i32 = 15_000;
+const CONNECT_TIMEOUT_MS: i32 = 20_000;
+const SEND_TIMEOUT_MS: i32 = 30_000;
+/// Per read, not for the whole download: a slow line is allowed to take as long
+/// as it needs, provided it keeps delivering something.
+const RECEIVE_TIMEOUT_MS: i32 = 60_000;
+
+/// How many times a network step is attempted before it is called a failure.
+///
+/// One transient error used to end the update for the whole session — the
+/// background pass runs once at startup and nothing retried it — so a dropped
+/// connection at the wrong moment meant "updates are broken" until the user
+/// happened to restart the app.
+const ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,6 +141,31 @@ fn wide_unterminated(text: &str) -> Vec<u16> {
 /// the API does not need to. Redirects stay within HTTPS — WinHTTP will not
 /// downgrade to plaintext under `WINHTTP_FLAG_SECURE`.
 fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<Vec<u8>> {
+    get_with_progress(host, path, cap, follow_redirects, &mut |_, _| {})
+}
+
+/// The same GET, reporting `(received, total)` as the body arrives.
+///
+/// **A short read is an error here, not a result.** The loop this replaced
+/// treated a mid-stream failure as the end of the response: it broke out and
+/// returned `Ok` with whatever had arrived. Every caller then did something
+/// confidently wrong with a partial file. An installer cut off at 90% still
+/// begins with `MZ` and is comfortably over the truncation floor, so it passed
+/// both sanity checks and failed only at the checksum — which told the user
+/// their download "did not match its published checksum", the wording reserved
+/// for a tampered file, and deleted it. On a connection that drops
+/// occasionally, that is an update which can never succeed and accuses the
+/// project of shipping a bad binary while failing.
+///
+/// So: read errors propagate, and the body is checked against `Content-Length`
+/// before it is returned.
+fn get_with_progress(
+    host: &str,
+    path: &str,
+    cap: usize,
+    follow_redirects: bool,
+    progress: &mut dyn FnMut(u64, u64),
+) -> AppResult<Vec<u8>> {
     let agent = wide(AGENT);
     let host_w = wide(host);
     let path_w = wide(path);
@@ -140,6 +187,15 @@ fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<
             ),
             "session",
         )?;
+
+        // Applies to every handle made from this session.
+        let _ = WinHttpSetTimeouts(
+            session.0,
+            RESOLVE_TIMEOUT_MS,
+            CONNECT_TIMEOUT_MS,
+            SEND_TIMEOUT_MS,
+            RECEIVE_TIMEOUT_MS,
+        );
 
         if follow_redirects {
             let policy: u32 = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
@@ -192,10 +248,36 @@ fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<
             return Err(AppError::msg(format!("GitHub replied with status {status}")));
         }
 
+        // How many bytes the server says it is sending. Absent on a chunked
+        // response, in which case there is nothing to check the total against
+        // and the checksum remains the only guard.
+        let mut declared: u32 = 0;
+        let mut len = std::mem::size_of::<u32>() as u32;
+        let expected = WinHttpQueryHeaders(
+            request.0,
+            WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+            PCWSTR::null(),
+            Some((&mut declared as *mut u32).cast()),
+            &mut len,
+            std::ptr::null_mut(),
+        )
+        .is_ok()
+        .then_some(u64::from(declared))
+        .filter(|n| *n > 0);
+
+        if let Some(total) = expected {
+            if total as usize > cap {
+                return Err(AppError::msg("the download was larger than expected"));
+            }
+        }
+        progress(0, expected.unwrap_or(0));
+
         let mut body = Vec::new();
         loop {
             let mut available: u32 = 0;
-            if WinHttpQueryDataAvailable(request.0, &mut available).is_err() || available == 0 {
+            WinHttpQueryDataAvailable(request.0, &mut available)
+                .map_err(|_| AppError::msg("the connection dropped part-way through"))?;
+            if available == 0 {
                 break;
             }
             let take = (available as usize).min(cap.saturating_sub(body.len()));
@@ -204,16 +286,81 @@ fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<
             }
             let mut chunk = vec![0u8; take];
             let mut read: u32 = 0;
-            if WinHttpReadData(request.0, chunk.as_mut_ptr().cast(), take as u32, &mut read).is_err()
-                || read == 0
-            {
+            WinHttpReadData(request.0, chunk.as_mut_ptr().cast(), take as u32, &mut read)
+                .map_err(|_| AppError::msg("the connection dropped part-way through"))?;
+            if read == 0 {
                 break;
             }
             chunk.truncate(read as usize);
             body.extend_from_slice(&chunk);
+            progress(body.len() as u64, expected.unwrap_or(0));
         }
+
+        // The check the old loop could not make, because it could not tell the
+        // end of a response from the end of a connection.
+        check_complete(body.len(), expected)?;
         Ok(body)
     }
+}
+
+/// Whether everything the server said it would send actually arrived.
+///
+/// Split out so the rule can be tested without a network. A chunked response
+/// declares no length, and then there is nothing to compare — the checksum is
+/// the only remaining guard, which is why it is not optional anywhere.
+fn check_complete(received: usize, expected: Option<u64>) -> AppResult<()> {
+    match expected {
+        Some(total) if received as u64 != total => Err(AppError::msg(format!(
+            "the download stopped early — {received} of {total} bytes arrived"
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// Runs a network step again if it failed in a way that might not fail twice.
+///
+/// A refusal is not retried: a 404, a name that is not our installer, a body
+/// that is not the JSON we expect — none of those improve on a second attempt,
+/// and retrying them just makes the eventual error take three times as long.
+fn with_retry<T>(what: &str, mut attempt: impl FnMut() -> AppResult<T>) -> AppResult<T> {
+    let mut last = None;
+    for tries in 1..=ATTEMPTS {
+        match attempt() {
+            Ok(value) => {
+                if tries > 1 {
+                    log::info!("update: {what} succeeded on attempt {tries}");
+                }
+                return Ok(value);
+            }
+            Err(e) => {
+                let transient = matches!(&e, AppError::Message(m) if is_transient(m));
+                log::warn!("update: {what} failed on attempt {tries}: {e}");
+                if !transient || tries == ATTEMPTS {
+                    return Err(e);
+                }
+                last = Some(e);
+                // 1s, then 3s. Long enough for a flapping link to settle,
+                // short enough that nobody watching the panel gives up first.
+                std::thread::sleep(std::time::Duration::from_millis(
+                    1_000 * u64::from(tries) * 2 - 1_000,
+                ));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| AppError::msg(format!("{what} failed"))))
+}
+
+/// Whether an error describes a network that misbehaved rather than a server
+/// that answered.
+fn is_transient(message: &str) -> bool {
+    const SIGNS: [&str; 5] = [
+        "could not reach GitHub",
+        "the request could not be sent",
+        "GitHub did not respond",
+        "the connection dropped part-way through",
+        "the download stopped early",
+    ];
+    SIGNS.iter().any(|sign| message.contains(sign))
 }
 
 /// Compares dotted numeric versions. Anything unparseable sorts as "not newer",
@@ -343,10 +490,12 @@ pub fn download_and_verify(version: &str, installer: &str) -> AppResult<()> {
         s.downloading = true;
         s.ready = false;
         s.error = None;
+        s.downloaded = 0;
+        s.total = 0;
     });
 
     let outcome = download(version, installer).and_then(|_| {
-        let expected = published_hash(version, installer)?;
+        let expected = with_retry("checksum fetch", || published_hash(version, installer))?;
         let file = download_dir()?.join(installer);
         let actual = sha256_file(&file)?;
         if crate::hash::hex_eq(&actual, &expected) {
@@ -362,10 +511,20 @@ pub fn download_and_verify(version: &str, installer: &str) -> AppResult<()> {
     update_state(|s| {
         s.downloading = false;
         match &outcome {
-            Ok(()) => s.ready = true,
-            Err(e) => s.error = Some(e.to_string()),
+            Ok(()) => {
+                s.ready = true;
+                s.error = None;
+            }
+            Err(e) => {
+                s.ready = false;
+                s.error = Some(e.to_string());
+            }
         }
     });
+    match &outcome {
+        Ok(()) => log::info!("update: {installer} downloaded and verified, ready to install"),
+        Err(e) => log::warn!("update: {installer} could not be prepared: {e}"),
+    }
     outcome
 }
 
@@ -377,7 +536,28 @@ pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
     let tag = sanitise_tag(tag)?;
 
     let path = format!("/notfeylo/cursed/releases/download/v{tag}/{asset}");
-    let bytes = get(DOWNLOAD_HOST, &path, MAX_DOWNLOAD, true)?;
+    log::info!("update: downloading {asset} from v{tag}");
+
+    // Kept so the log can say whether the server declared a length at all. A
+    // zero here means the response was chunked and the size check below could
+    // not run, which is worth being able to see from a user's log rather than
+    // inferring from a download that failed its checksum.
+    let declared = std::sync::atomic::AtomicU64::new(0);
+    let bytes = with_retry("download", || {
+        get_with_progress(DOWNLOAD_HOST, &path, MAX_DOWNLOAD, true, &mut |got, total| {
+            declared.store(total, std::sync::atomic::Ordering::Relaxed);
+            update_state(|s| {
+                s.downloaded = got;
+                s.total = total;
+            });
+        })
+    })?;
+    log::info!(
+        "update: server declared {} bytes, received {}",
+        declared.load(std::sync::atomic::Ordering::Relaxed),
+        bytes.len()
+    );
+
     if bytes.len() < 512 * 1024 {
         return Err(AppError::msg("the download looks truncated"));
     }
@@ -387,8 +567,17 @@ pub fn download(tag: &str, asset: &str) -> AppResult<PathBuf> {
         return Err(AppError::msg("the download is not a Windows installer"));
     }
 
-    let file = download_dir()?.join(asset);
-    std::fs::write(&file, &bytes)?;
+    // Written beside the target and renamed into place, so an interrupted write
+    // cannot leave a half-file sitting where the installer is expected to be —
+    // which would then be found by `file.exists()`, fail its checksum, and be
+    // reported as a corrupted download rather than an unfinished one.
+    let dir = download_dir()?;
+    let file = dir.join(asset);
+    let staging = dir.join(format!("{asset}.part"));
+    std::fs::write(&staging, &bytes)?;
+    let _ = std::fs::remove_file(&file);
+    std::fs::rename(&staging, &file)?;
+    log::info!("update: downloaded {} bytes to {}", bytes.len(), file.display());
     Ok(file)
 }
 
@@ -469,7 +658,7 @@ pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
         return Err(AppError::invalid("there is no downloaded installer to run"));
     }
 
-    let expected = published_hash(tag, asset)?;
+    let expected = with_retry("checksum fetch", || published_hash(tag, asset))?;
     let actual = sha256_file(&file)?;
     if !crate::hash::hex_eq(&actual, &expected) {
         let _ = std::fs::remove_file(&file);
@@ -478,7 +667,22 @@ pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
         ));
     }
 
-    crate::shell::open_path(&file)?;
+    // `CreateProcess`, not `ShellExecuteW`.
+    //
+    // The shell path returns as soon as it has *begun* the operation and tells
+    // us nothing about whether a process now exists — and the caller closes the
+    // app in the next statement. Microsoft's own guidance is that a process
+    // terminating right after `ShellExecute` must go through `ShellExecuteEx`
+    // with `SEE_MASK_NOASYNC`, because otherwise the pending operation can be
+    // dropped with the process that asked for it. Spawning directly sidesteps
+    // the question: the child exists before this returns, or we get an error to
+    // show instead of quietly exiting with nothing installed.
+    let child = std::process::Command::new(&file)
+        .current_dir(file.parent().unwrap_or(&file))
+        .spawn()
+        .map_err(|e| AppError::msg(format!("the installer would not start: {e}")))?;
+
+    log::info!("update: installer {} started as pid {}", file.display(), child.id());
     Ok(())
 }
 
@@ -496,10 +700,38 @@ pub fn clear_downloads() -> AppResult<()> {
     Ok(())
 }
 
-/// Runs a check in the background at startup, if the user left it enabled.
+/// How long the background pass waits before looking again.
+///
+/// The check used to happen once, at startup, and never again. An app that
+/// lives in the tray for a fortnight therefore never saw a release published
+/// the day after it launched, and — worse — a single failed attempt at startup,
+/// on a laptop opened before its Wi-Fi had associated, meant no update for the
+/// whole session. Both are the same bug: nothing ever tried a second time.
+const RECHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+/// The first retry comes quickly, because the usual reason a startup check
+/// fails is that the network was not up yet.
+const RETRY_AFTER_FAILURE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// Runs a check in the background at startup, if the user left it enabled, and
+/// keeps looking for as long as the app is running.
 /// Failure is silent: a missing network is not an error worth a banner.
 pub fn check_in_background() {
-    auto_update_in_background();
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+
+    std::thread::Builder::new()
+        .name("cursed-update-poll".into())
+        .spawn(|| loop {
+            let succeeded = run_update_pass();
+            std::thread::sleep(if succeeded {
+                RECHECK_INTERVAL
+            } else {
+                RETRY_AFTER_FAILURE
+            });
+        })
+        .ok();
 }
 
 /// What the background updater has found so far, for the UI to read.
@@ -513,6 +745,15 @@ pub struct UpdateState {
     pub downloading: bool,
     /// Downloaded and verified against the release checksum — ready to run.
     pub ready: bool,
+    /// Bytes received so far, and how many are expected. Both zero when there
+    /// is nothing in flight.
+    ///
+    /// An eleven-megabyte download used to report nothing but `downloading:
+    /// true`, so a slow connection showed a one-pixel shimmer and no other sign
+    /// of life for minutes. There is no way to tell that from a hang, and
+    /// people reasonably concluded the button had not worked.
+    pub downloaded: u64,
+    pub total: u64,
     pub status: Option<UpdateStatus>,
     pub error: Option<String>,
 }
@@ -522,8 +763,30 @@ fn state_slot() -> &'static std::sync::Mutex<UpdateState> {
     STATE.get_or_init(|| std::sync::Mutex::new(UpdateState::default()))
 }
 
+/// The state the UI reads, with `ready` checked against the disk rather than
+/// trusted.
+///
+/// `ready` means "there is a verified installer waiting". It was set once and
+/// never revisited, so anything that removed the staged file — Disk Cleanup, an
+/// antivirus quarantine, the user emptying the folder — left the panel offering
+/// INSTALL & RESTART for a file that was gone. Pressing it produced "there is
+/// no downloaded installer to run" and no way forward. Now a missing file puts
+/// the panel back to offering the download.
 pub fn state() -> UpdateState {
-    state_slot().lock().map(|s| s.clone()).unwrap_or_default()
+    let mut current = state_slot().lock().map(|s| s.clone()).unwrap_or_default();
+    if current.ready {
+        let staged = current
+            .status
+            .as_ref()
+            .and_then(|s| s.installer.as_ref())
+            .and_then(|name| downloaded_path(name).ok());
+        if !staged.is_some_and(|path| path.exists()) {
+            log::warn!("update: the staged installer is gone; offering the download again");
+            current.ready = false;
+            update_state(|s| s.ready = false);
+        }
+    }
+    current
 }
 
 fn update_state(f: impl FnOnce(&mut UpdateState)) {
@@ -542,44 +805,73 @@ pub fn auto_update_in_background() {
     std::thread::Builder::new()
         .name("cursed-auto-update".into())
         .spawn(|| {
-            update_state(|s| {
-                s.checking = true;
-                s.error = None;
-            });
-
-            let found = check();
-            update_state(|s| s.checking = false);
-
-            let status = match found {
-                Ok(status) => status,
-                Err(e) => {
-                    // A missing network is not worth shouting about, but it is
-                    // recorded so Settings can say something honest.
-                    update_state(|s| s.error = Some(e.to_string()));
-                    return;
-                }
-            };
-            update_state(|s| s.status = Some(status.clone()));
-
-            let (Some(version), Some(installer)) = (status.latest.clone(), status.installer.clone())
-            else {
-                return;
-            };
-            if !status.newer_available {
-                return;
-            }
-
-            let outcome = download_and_verify(&version, &installer);
-
-            update_state(|s| {
-                s.downloading = false;
-                match &outcome {
-                    Ok(()) => s.ready = true,
-                    Err(e) => s.error = Some(e.to_string()),
-                }
-            });
+            run_update_pass();
         })
         .ok();
+}
+
+/// One check, and the download that follows if there is something to fetch.
+///
+/// Returns whether the pass got as far as it needed to, so the caller can
+/// decide how soon to try again. "Up to date" counts as success; a network that
+/// would not answer does not.
+fn run_update_pass() -> bool {
+    // The timer thread and the Check-now button both land here, and two passes
+    // downloading the same installer at once is a waste at best.
+    static IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if IN_FLIGHT.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return true;
+    }
+    struct Done;
+    impl Drop for Done {
+        fn drop(&mut self) {
+            IN_FLIGHT.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let _done = Done;
+
+    update_state(|s| {
+        s.checking = true;
+        s.error = None;
+    });
+
+    let found = with_retry("check", check);
+    update_state(|s| s.checking = false);
+
+    let status = match found {
+        Ok(status) => status,
+        Err(e) => {
+            // A missing network is not worth shouting about, but it is
+            // recorded so Settings can say something honest — and logged, so
+            // that "updates don't work" is answerable from a log file instead
+            // of guessed at. The updater used to write nothing at all.
+            log::warn!("update: check failed: {e}");
+            update_state(|s| s.error = Some(e.to_string()));
+            return false;
+        }
+    };
+    log::info!(
+        "update: running {}, latest {}, newer={}",
+        status.current,
+        status.latest.as_deref().unwrap_or("(none)"),
+        status.newer_available
+    );
+    update_state(|s| s.status = Some(status.clone()));
+
+    if !status.newer_available {
+        return true;
+    }
+    let (Some(version), Some(installer)) = (status.latest.clone(), status.installer.clone()) else {
+        return true;
+    };
+
+    // Already fetched and verified on an earlier pass — do not spend the
+    // bandwidth again just because six hours went by.
+    if state().ready {
+        return true;
+    }
+
+    download_and_verify(&version, &installer).is_ok()
 }
 
 #[cfg(test)]
@@ -715,6 +1007,88 @@ mod tests {
         let pre: Release =
             serde_json::from_str(r#"{"tag_name":"v9.9.9","prerelease":true}"#).unwrap();
         assert!(pre.prerelease);
+    }
+
+    /// The bug this release is mostly about: a body that stops short is a
+    /// failure, and the message says so in bytes rather than accusing the file
+    /// of failing its checksum.
+    #[test]
+    fn a_body_that_stops_short_of_its_declared_length_is_a_failure() {
+        assert!(check_complete(11_586_368, Some(11_586_368)).is_ok());
+
+        let cut = check_complete(4_194_304, Some(11_586_368)).unwrap_err().to_string();
+        assert!(cut.contains("stopped early"), "{cut}");
+        assert!(cut.contains("4194304"), "says how much arrived: {cut}");
+        assert!(cut.contains("11586368"), "says how much was expected: {cut}");
+        // It must read as transient, or it will not be retried and the fix is
+        // only half of one.
+        assert!(is_transient(&cut));
+
+        // More than declared is equally wrong.
+        assert!(check_complete(11_586_369, Some(11_586_368)).is_err());
+
+        // Chunked: no declared length, nothing to compare, checksum decides.
+        assert!(check_complete(4_194_304, None).is_ok());
+    }
+
+    /// A network that wobbled is worth another go; a server that answered is
+    /// not. Getting this backwards is expensive in both directions — retrying a
+    /// 404 triples the time before the user is told, and *not* retrying a
+    /// dropped connection is the bug this whole path was rewritten for.
+    #[test]
+    fn only_a_misbehaving_network_is_worth_retrying() {
+        for transient in [
+            "could not reach GitHub (session)",
+            "the request could not be sent",
+            "GitHub did not respond",
+            "the connection dropped part-way through",
+            "the download stopped early — 4194304 of 11586368 bytes arrived",
+        ] {
+            assert!(is_transient(transient), "should retry {transient:?}");
+        }
+
+        for final_ in [
+            "GitHub replied with status 404",
+            "the download is not a Windows installer",
+            "the downloaded update did not match its published checksum",
+            "the download was larger than expected",
+            "GitHub returned an unexpected answer",
+        ] {
+            assert!(!is_transient(final_), "should not retry {final_:?}");
+        }
+    }
+
+    #[test]
+    fn a_transient_failure_is_retried_and_a_refusal_is_not() {
+        let tries = std::cell::Cell::new(0);
+        let recovered = with_retry("test", || {
+            tries.set(tries.get() + 1);
+            if tries.get() < 3 {
+                Err(AppError::msg("the connection dropped part-way through"))
+            } else {
+                Ok(7)
+            }
+        });
+        assert_eq!(recovered.unwrap(), 7);
+        assert_eq!(tries.get(), 3, "gave up too early");
+
+        // Never more than ATTEMPTS, however transient the failure looks.
+        let forever = std::cell::Cell::new(0);
+        let gave_up = with_retry("test", || {
+            forever.set(forever.get() + 1);
+            Err::<(), _>(AppError::msg("GitHub did not respond"))
+        });
+        assert!(gave_up.is_err());
+        assert_eq!(forever.get(), ATTEMPTS);
+
+        // A refusal costs exactly one attempt.
+        let once = std::cell::Cell::new(0);
+        let refused = with_retry("test", || {
+            once.set(once.get() + 1);
+            Err::<(), _>(AppError::msg("GitHub replied with status 404"))
+        });
+        assert!(refused.is_err());
+        assert_eq!(once.get(), 1, "a 404 does not improve on a second attempt");
     }
 
     #[test]

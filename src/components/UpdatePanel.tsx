@@ -16,6 +16,8 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
   const [status, setStatus] = useState<ipc.UpdateStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [progress, setProgress] = useState<{ got: number; total: number } | null>(null);
+
   const check = async () => {
     setPhase("checking");
     setMessage(null);
@@ -48,7 +50,14 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
         if (cancelled) return;
 
         if (bg.status) setStatus(bg.status);
-        setMessage(bg.error ?? null);
+        setProgress(bg.downloading ? { got: bg.downloaded, total: bg.total } : null);
+
+        // Only ever *adds* an error. This used to assign `bg.error ?? null`,
+        // which cleared whatever the buttons had just put there: a failed
+        // manual check wrote its reason, and the poll wiped it within a second
+        // and a half, leaving a button that visibly did nothing and said
+        // nothing about why.
+        if (bg.error) setMessage(bg.error);
 
         if (bg.ready) setPhase("ready");
         else if (bg.downloading) setPhase("downloading");
@@ -108,6 +117,12 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
 
   const offering = phase === "available" || phase === "downloading" || phase === "ready";
 
+  const mb = (bytes: number) => (bytes / 1_048_576).toFixed(1);
+  const downloadingLabel =
+    progress && progress.total > 0
+      ? `DOWNLOADING ${mb(progress.got)} / ${mb(progress.total)} MB`
+      : "DOWNLOADING";
+
   return (
     <Card>
       {offering ? (
@@ -142,9 +157,23 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
           ) : (
             <>
               <Button full onClick={() => void download()} disabled={phase === "downloading"}>
-                {phase === "downloading" ? "DOWNLOADING" : "DOWNLOAD UPDATE"}
+                {phase === "downloading" ? downloadingLabel : "DOWNLOAD UPDATE"}
               </Button>
-              {phase === "downloading" && <div className="h-px w-full shimmer" />}
+              {/* A real bar, not a shimmer. Eleven megabytes on a slow line
+                  spent minutes showing one animated pixel, which is
+                  indistinguishable from a frozen app — and being unable to tell
+                  those apart is most of what "nothing happens" means. */}
+              {phase === "downloading" &&
+                (progress && progress.total > 0 ? (
+                  <div className="h-px w-full bg-border">
+                    <div
+                      className="h-px bg-accent transition-[width] duration-200 ease-out"
+                      style={{ width: `${Math.min(100, (progress.got / progress.total) * 100)}%` }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-px w-full shimmer" />
+                ))}
             </>
           )}
         </div>
@@ -178,6 +207,23 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
       {message && (
         <div className="mt-2 space-y-1.5">
           <p className="text-center text-[11px] break-words text-danger">{message}</p>
+          {/* Trying again is the right answer more often than not — most of
+              what reaches this line is a network that misbehaved — and it must
+              be offered in the app, because telling somebody their update
+              failed and handing them only a browser link is how an updater
+              stops being one. */}
+          <Button
+            full
+            variant="ghost"
+            onClick={() => {
+              setMessage(null);
+              if (status?.latest && status.installer && phase !== "ready") void download();
+              else void check();
+            }}
+            disabled={phase === "downloading" || phase === "checking"}
+          >
+            TRY AGAIN
+          </Button>
           {/* Never a dead end. Whatever went wrong — no network, a proxy, an
               antivirus holding the installer — the releases page still works in
               a browser, so the user is one click from the same file. */}

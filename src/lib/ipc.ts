@@ -194,6 +194,9 @@ export interface UpdateState {
   downloading: boolean;
   /** Downloaded and verified against the release checksum — ready to run. */
   ready: boolean;
+  /** Bytes received and expected. Both zero when nothing is in flight. */
+  downloaded: number;
+  total: number;
   status: UpdateStatus | null;
   error: string | null;
 }

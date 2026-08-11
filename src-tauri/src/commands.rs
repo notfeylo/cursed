@@ -793,9 +793,18 @@ pub fn download_update(version: String, installer: String) -> AppResult<u64> {
 #[tauri::command]
 pub fn install_update(app: AppHandle, version: String, installer: String) -> AppResult<()> {
     updates::verify_and_launch(&version, &installer)?;
+
     // The installer needs our files unlocked, and leaving a stale copy running
     // behind a fresh install is how you get two tray icons.
-    app.exit(0);
+    //
+    // Exiting on a short delay rather than in the same breath. NSIS looks for a
+    // running copy within moments of starting, and quitting *while* it looks is
+    // the race that ends in a prompt about a locked file. A second is invisible
+    // to the user and puts the two events in a defined order.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1_000));
+        app.exit(0);
+    });
     Ok(())
 }
 
