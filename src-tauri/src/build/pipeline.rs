@@ -653,6 +653,84 @@ mod tests {
         assert_eq!((bitmap.width, bitmap.height), (16, 24));
     }
 
+    /// A JPEG carrying an EXIF orientation tag, assembled by splicing an APP1
+    /// segment in behind the SOI. Nothing in `image` writes EXIF, so the only
+    /// way to have a tagged file to decode is to build one.
+    fn jpeg_with_orientation(width: u32, height: u32, orientation: Option<u16>) -> Vec<u8> {
+        // Dark top half, pale bottom half: a mark that survives JPEG and says
+        // without ambiguity which way up the result came out.
+        let mut buffer = image::RgbaImage::new(width, height);
+        for (_, y, pixel) in buffer.enumerate_pixels_mut() {
+            let value = if y < height / 2 { 0 } else { 255 };
+            *pixel = image::Rgba([value, value, value, 255]);
+        }
+        let mut jpeg = Vec::new();
+        image::DynamicImage::ImageRgb8(image::DynamicImage::ImageRgba8(buffer).to_rgb8())
+            .write_to(&mut Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+
+        let Some(orientation) = orientation else {
+            return jpeg;
+        };
+
+        // TIFF header, little-endian, holding one IFD entry: tag 0x0112, type 3
+        // (SHORT), count 1, the value small enough to sit in the entry itself.
+        let mut tiff = Vec::new();
+        tiff.extend_from_slice(b"II");
+        tiff.extend_from_slice(&42u16.to_le_bytes());
+        tiff.extend_from_slice(&8u32.to_le_bytes());
+        tiff.extend_from_slice(&1u16.to_le_bytes());
+        tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+        tiff.extend_from_slice(&3u16.to_le_bytes());
+        tiff.extend_from_slice(&1u32.to_le_bytes());
+        tiff.extend_from_slice(&orientation.to_le_bytes());
+        tiff.extend_from_slice(&[0, 0]);
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+
+        let mut out = jpeg[..2].to_vec();
+        out.extend_from_slice(&[0xFF, 0xE1]);
+        // The length covers itself, the "Exif\0\0" marker and the TIFF block.
+        out.extend_from_slice(&((tiff.len() + 8) as u16).to_be_bytes());
+        out.extend_from_slice(b"Exif\0\0");
+        out.extend_from_slice(&tiff);
+        out.extend_from_slice(&jpeg[2..]);
+        out
+    }
+
+    #[test]
+    fn a_photograph_is_stood_upright_from_its_exif_tag() {
+        // Orientation 6 is "turn a quarter clockwise to view", which is what a
+        // phone held upright records. Ignoring it is what arrived as a cursor
+        // lying on its side.
+        let source = decode(jpeg_with_orientation(16, 32, Some(6))).unwrap();
+        let bitmap = source.first().unwrap();
+        assert_eq!(
+            (bitmap.width, bitmap.height),
+            (32, 16),
+            "the axes swap once the tag is applied"
+        );
+
+        let mean = |from: u32, to: u32| {
+            let mut total = 0u32;
+            for y in 0..bitmap.height {
+                for x in from..to {
+                    total += u32::from(bitmap.pixel(x, y)[0]);
+                }
+            }
+            total / ((to - from) * bitmap.height)
+        };
+        // The dark half was the top, and a quarter turn clockwise puts it right.
+        assert!(mean(0, 16) > 200, "the pale half is on the left");
+        assert!(mean(16, 32) < 55, "the dark half is on the right");
+    }
+
+    #[test]
+    fn a_photograph_with_no_orientation_tag_is_left_as_it_was_stored() {
+        let source = decode(jpeg_with_orientation(16, 32, None)).unwrap();
+        let bitmap = source.first().unwrap();
+        assert_eq!((bitmap.width, bitmap.height), (16, 32));
+    }
+
     #[test]
     fn preparing_a_master_squares_and_pads_it() {
         let mut wide = Bitmap::new(20, 10);
