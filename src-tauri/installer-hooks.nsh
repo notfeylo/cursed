@@ -46,6 +46,22 @@
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; An update is not an uninstall, and this hook runs during both.
+  ;
+  ; Tauri's installer upgrades by running the *previous* version's uninstaller
+  ; with `/UPDATE` before laying down the new files. Its own app-data deletion is
+  ; guarded by `$UpdateMode <> 1`; these hooks are inserted unguarded, so
+  ; everything below would otherwise run on every single update.
+  ;
+  ; That is two disasters rather than one. Restoring the Windows scheme would put
+  ; the user's pointer back to the stock arrow every time they updated, and the
+  ; prompt below would offer to delete their presets and custom cursors with
+  ; "remove" as the default answer. An update must not touch either.
+  ${If} $UpdateMode = 1
+    DetailPrint "Updating, so the cursor scheme and your data are left alone."
+    Goto cursed_preuninstall_done
+  ${EndIf}
+
   ; Asked here, before anything is removed, and acted on in POSTUNINSTALL once
   ; the files are gone. `Var /GLOBAL` is how a variable gets declared from inside
   ; a section, which is where these macros are expanded.
@@ -81,9 +97,19 @@
   IfFileExists "$INSTDIR\cursorforge.exe" 0 +3
     nsExec::ExecToLog '"$INSTDIR\cursorforge.exe" --restore-defaults'
     Pop $0
+
+  cursed_preuninstall_done:
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  ; Same reason as PREUNINSTALL: an upgrade runs the old uninstaller first, and
+  ; this hook is inserted without the `$UpdateMode` guard Tauri puts on its own
+  ; removal. Every line below would run on every update, and the last of them
+  ; deletes the user's presets and custom cursors.
+  ${If} $UpdateMode = 1
+    Goto cursed_postuninstall_done
+  ${EndIf}
+
   ; Uninstalling should return the machine to its pre-install state. Everything
   ; below is something the stock per-user Tauri uninstaller does not remove.
 
@@ -116,4 +142,6 @@
   ; Removes the parent only when it is already empty, so a sibling app's data is
   ; never touched.
   RMDir "$APPDATA\Cursed"
+
+  cursed_postuninstall_done:
 !macroend
