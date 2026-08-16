@@ -6,11 +6,13 @@ Everything worth writing down that is not code.
 | --- | --- |
 | [`REPO_MAP.md`](REPO_MAP.md) | **Start here.** Where everything lives, one screen, for someone opening the repository cold. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | *How* the app works: the three cursor layers, the watchdog, and the Win32 behaviour that cost real debugging time. |
+| [`UPDATE_PATH_DIAGNOSIS.md`](UPDATE_PATH_DIAGNOSIS.md) | Why updating uninstalls, prompts and loses data: the `$UpdateMode` chain traced from `verify_and_launch` to `RMDir /r "$APPDATA\Cursed"`. Diagnosis only — no fix. |
+| [`CHANNELS.md`](CHANNELS.md) | Why the app is developed as two installs side by side, what is named per channel, and how they share the one thing that cannot be: the Windows pointer scheme. |
 | [`CURSOR_FORMAT.md`](CURSOR_FORMAT.md) | The `.cur` and `.ani` byte layouts, including the fields Windows reuses for something other than their names — the hotspot lives in `wPlanes`/`wBitCount`, and `biHeight` is doubled. |
 | [`LICENSES.md`](LICENSES.md) | What every bundled pack and font is licensed under, including the thirty-four packs that state no licence and ship anyway, and why. |
 | [`PRIVACY.md`](PRIVACY.md) | What leaves the machine. One request, to GitHub, when checking for an update. |
 | [`TERMS.md`](TERMS.md) | The terms shown in the app. |
-| [`verification/`](verification/) | One record per release: what was checked, what was not, and what could not be. |
+| [`verification/`](verification/) | One record per release: what was checked, what was not, and what could not be. Plus two records that track a mechanism rather than a release — [`update-path.md`](verification/update-path.md) and [`resources.md`](verification/resources.md). |
 | [`PRD.md`](PRD.md) | The original brief, as written before the first commit. History, not instruction — it is here because the code cites its section numbers, and several of its decisions were deliberately overruled. |
 
 ## On the verification records

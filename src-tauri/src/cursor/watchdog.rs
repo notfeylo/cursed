@@ -30,6 +30,17 @@ static ON_RESUME: AtomicBool = AtomicBool::new(true);
 /// must stay trivial — anything slow there stalls a system-wide broadcast.
 static NUDGED: AtomicBool = AtomicBool::new(false);
 
+/// Stops the watchdog defending the scheme, without touching the user's setting.
+///
+/// Used on the way out of an update. The watchdog re-applies a scheme by writing
+/// registry values that name files inside the install directory and the cache —
+/// which is precisely what an installer is in the middle of replacing. A revert
+/// landing in that window points Windows at files that are being deleted and
+/// rewritten underneath it.
+pub fn disable() {
+    ENABLED.store(false, Ordering::Relaxed);
+}
+
 pub fn configure(enabled: bool, interval_secs: u64, on_theme_change: bool, on_resume: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
     INTERVAL_SECS.store(interval_secs.clamp(1, 300), Ordering::Relaxed);
@@ -131,8 +142,27 @@ fn run() {
         // so the nudge only decides *when* we ask, never *what* we ask.
         NUDGED.store(false, Ordering::Relaxed);
 
-        if ENABLED.load(Ordering::Relaxed) && crate::cursor::drifted() {
+        // Asked every tick rather than once at startup, because that is what
+        // makes handover work: quit whichever channel holds the pointer and this
+        // one picks it up on its next pass, with neither being restarted. A
+        // process that already owns the lock answers from memory.
+        //
+        // The dev channel does not ask at all. The lock is first-come-first-
+        // served, so asking would hand the pointer to whichever channel happened
+        // to launch first — usually the build being iterated on, which is the
+        // one whose behaviour is least worth trusting. The copy that ships is
+        // the one simulating a real install, so it is the one that defends.
+        let ours = crate::channel::guards_pointer_by_default()
+            && crate::cursor::crosschannel::try_claim();
+
+        if ours && ENABLED.load(Ordering::Relaxed) && crate::cursor::drifted() {
             // Something reset the scheme. Put it back, quietly.
+            //
+            // `ours` is what keeps two installed channels from reverting each
+            // other every few seconds: each would otherwise read the other's
+            // write as drift and undo it, indefinitely, with the pointer
+            // flickering between two cursors and nothing in either log naming a
+            // cause.
             let _ = crate::cursor::reapply();
         }
     }

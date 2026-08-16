@@ -109,6 +109,8 @@ export interface Settings {
 
   debugLogging: boolean;
   firstRunDone: boolean;
+  /** Set once the user dismisses the lost-original-scheme notice. */
+  schemeLossAcknowledged: boolean;
 }
 
 export interface ActiveState {

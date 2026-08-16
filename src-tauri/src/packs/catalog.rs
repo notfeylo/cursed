@@ -83,11 +83,32 @@ impl RenderSpec {
 
     /// Cache directory name. Every input that changes a pixel is in the key, so
     /// a stale cache entry cannot be served for a different choice.
-    fn key(&self) -> String {
+    ///
+    /// **The size is only part of it for an `.ani`.** A static cursor's ladder is
+    /// rendered over `TARGET_SIZES` and every rung's glyph is derived from the
+    /// rung, never from `spec.size` — so the file produced at 32 px and the file
+    /// produced at 33 px are byte for byte the same. Keying them apart anyway
+    /// meant dragging the size slider from one end to the other wrote a fresh,
+    /// identical copy of all seventeen roles at every pixel it passed through:
+    /// one pack on this developer's machine had 150 such directories and the
+    /// cache had reached 395 MB. An `.ani` genuinely is built at one size, so
+    /// that one keeps it.
+    fn key(&self, animated: bool) -> String {
+        let size = if animated {
+            format!(
+                "-{}",
+                self.size.clamp(
+                    crate::state::settings::MIN_CURSOR_PX,
+                    crate::state::settings::MAX_CURSOR_PX
+                )
+            )
+        } else {
+            String::new()
+        };
         format!(
-            "v{RENDER_VERSION}-{}-{}-{}{}",
+            "v{RENDER_VERSION}-{}{}-{}{}",
             self.tint.trim_start_matches('#').to_ascii_lowercase(),
-            self.size.clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX),
+            size,
             if self.outline { "o" } else { "n" },
             // Whether the hand and I-beam scale changes their pixels, so it has
             // to change their cache entry. Read here rather than carried through
@@ -193,7 +214,7 @@ fn role_bitmap(pack: &PackDef, role: Role, size: u32, phase: f32) -> AppResult<B
 fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBuf> {
     let animated = pack.animated && role.is_animatable();
     let extension = if animated { "ani" } else { "cur" };
-    let dir = paths::cache_dir()?.join(pack.id).join(spec.key());
+    let dir = paths::cache_dir()?.join(pack.id).join(spec.key(animated));
     let file = dir.join(format!("{}.{extension}", role.file_stem()));
     if file.exists() {
         return Ok(file);
@@ -206,7 +227,15 @@ fn build_role(pack: &PackDef, role: Role, spec: &RenderSpec) -> AppResult<PathBu
         // `.ani` has no directory of resolutions, so it is built at the one size
         // Windows is currently drawing (PRD §5.4) — which for the hand and the
         // I-beam is capped, since those do not scale with the pointer.
-        let size = pipeline::nearest_size(glyph_size(role, spec.size));
+        //
+        // At *exactly* that size, not snapped to a ladder rung. The rungs exist
+        // so that one `.cur` can carry eight resolutions; an `.ani` carries one
+        // and is drawn at whatever `CursorBaseSize` says. Snapping meant the
+        // slider at 78 px built a 64 px animation and left the shell to stretch
+        // it by a fifth — bilinear, unpremultiplied, no gamma correction — while
+        // the static cursor beside it stayed sharp. This artwork is vector, so
+        // the exact size costs nothing to render and reaches the screen 1:1.
+        let size = glyph_size(role, spec.size);
         let frames: AppResult<Vec<(Bitmap, u32)>> = (0..ANIMATION_FRAMES)
             .map(|i| {
                 let phase = i as f32 / ANIMATION_FRAMES as f32;
@@ -350,6 +379,39 @@ pub fn build_roles(pack_id: &str, roles: &[Role], spec: &RenderSpec) -> AppResul
     Ok(set)
 }
 
+/// The generated pack every stale id falls back to.
+///
+/// Deliberately the same id `Settings::sanitised` uses for a stale `blend_pack`.
+/// One substitute, decided in one place.
+pub const BLEND_BASE: &str = "precision-gap-cross";
+
+/// The pack to fill the roles somebody else's artwork does not define.
+///
+/// Applies **only** to the backing pack, never to a pack the user actually
+/// picked: asking for a cursor that does not exist is an error worth reporting,
+/// and `build_roles` still reports it. A backing pack is different. It is not a
+/// choice so much as a floor, and the right answer when the floor is missing is
+/// to put a floor back.
+///
+/// This matters because the generated catalog was 291 packs and is now one.
+/// Every descriptor, preset and `.cfpack` written before that names one of the
+/// 290, and a stale id here made `custom::build_set` fail — which the user
+/// experiences as the size, colour and outline controls doing nothing at all.
+/// The setting saves, the redraw fails, and the only trace is one `warn` line in
+/// a log nobody reads. It happened seven times on this machine before anyone
+/// noticed, because there is nothing on screen to notice.
+///
+/// `Settings::sanitised` performs exactly this repair for `settings.blend_pack`.
+/// This is the same repair for the copies that live outside settings — in the
+/// applied descriptor and in every saved preset.
+pub fn resolve_blend_base(pack_id: &str) -> String {
+    if styles::find(pack_id).is_some() {
+        return pack_id.to_owned();
+    }
+    log::warn!("the blend base {pack_id} is no longer in the catalog; using {BLEND_BASE}");
+    BLEND_BASE.to_owned()
+}
+
 /// True for a pack the user imported rather than one we ship.
 pub fn is_imported(pack_id: &str) -> bool {
     pack_id.starts_with("user:")
@@ -365,7 +427,9 @@ pub fn build_imported(pack_id: &str, base: &str, spec: &RenderSpec) -> AppResult
     let pack = crate::import::get(pack_id)?;
     let files = crate::import::role_files(&pack)?;
 
-    let mut set = build_roles(base, &ALL_ROLES, spec)?;
+    // The base is a floor under somebody else's artwork, not a choice the user
+    // made here, so a stale id is repaired rather than reported.
+    let mut set = build_roles(&resolve_blend_base(base), &ALL_ROLES, spec)?;
 
     // Roles the import does not define, but which are still *the pointer*, take
     // the import's own arrow rather than the generated base pack's artwork.
@@ -637,10 +701,11 @@ mod tests {
         let plain = RenderSpec { outline: false, ..base.clone() };
         let red = RenderSpec { tint: "#FF0000".into(), ..base.clone() };
 
-        assert_ne!(base.key(), bigger.key());
-        assert_ne!(base.key(), plain.key());
-        assert_ne!(base.key(), red.key());
-        assert_eq!(base.key(), format!("v{RENDER_VERSION}-2e8bff-32-o"));
+        assert_ne!(base.key(true), bigger.key(true));
+        assert_ne!(base.key(false), plain.key(false));
+        assert_ne!(base.key(false), red.key(false));
+        assert_eq!(base.key(true), format!("v{RENDER_VERSION}-2e8bff-32-o"));
+        assert_eq!(base.key(false), format!("v{RENDER_VERSION}-2e8bff-o"));
 
         // The renderer's version is in the key, not only the user's choices. A
         // change to how a pixel is produced leaves every existing entry stale
@@ -648,9 +713,50 @@ mod tests {
         // applied that cursor — invisible on a developer's empty cache and
         // permanent on a user's full one.
         assert!(
-            base.key().starts_with(&format!("v{RENDER_VERSION}-")),
+            base.key(false).starts_with(&format!("v{RENDER_VERSION}-")),
             "the render version has to be part of the cache key"
         );
+    }
+
+    /// A backing pack that no longer exists must be replaced, not reported.
+    ///
+    /// This is the difference between the size and colour controls working and
+    /// them silently doing nothing for anyone whose cursor was applied while the
+    /// catalog still had 291 packs in it.
+    #[test]
+    fn a_blend_base_that_no_longer_exists_is_replaced() {
+        assert_eq!(resolve_blend_base("removed-in-an-older-build"), BLEND_BASE);
+        // One that does exist is left exactly alone.
+        assert_eq!(resolve_blend_base(BLEND_BASE), BLEND_BASE);
+        assert!(styles::find(&resolve_blend_base("gone")).is_some());
+    }
+
+    /// The substitute has to be the same one settings uses, or a cursor repairs
+    /// itself onto a different pack depending on which code path got there.
+    #[test]
+    fn the_blend_base_matches_the_one_settings_falls_back_to() {
+        let stale = crate::state::settings::Settings {
+            blend_pack: "removed-in-an-older-build".into(),
+            ..Default::default()
+        }
+        .sanitised();
+        assert_eq!(stale.blend_pack, BLEND_BASE);
+    }
+
+    /// A static ladder is identical at every size, so it must not be stored
+    /// once per size. This is what turned a cache into 395 MB of duplicates:
+    /// one pack alone had 150 directories holding the same seventeen files.
+    #[test]
+    fn a_static_ladder_is_cached_once_for_every_size() {
+        let small = RenderSpec { size: 10, ..spec() };
+        let large = RenderSpec { size: 128, ..spec() };
+        assert_eq!(
+            small.key(false),
+            large.key(false),
+            "the static ladder does not depend on the size, so its key must not either"
+        );
+        // An `.ani` really is built at one size, so it keeps the distinction.
+        assert_ne!(small.key(true), large.key(true));
     }
 
     #[test]

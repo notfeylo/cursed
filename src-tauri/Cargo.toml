@@ -22,6 +22,15 @@ path = "src/main.rs"
 name = "genpacks"
 path = "src/bin/genpacks.rs"
 
+# The dev channel: a second install that sits beside the shipped one without
+# either corrupting the other's state. Off by default, because the default is
+# what ships — a release is built by adding nothing, not by remembering to leave
+# something out. See `src/channel.rs`, and the guard in `scripts/check-bundle.mjs`
+# that fails any release artifact carrying the dev marker.
+[features]
+default = []
+dev-channel = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

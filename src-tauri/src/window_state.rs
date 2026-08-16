@@ -37,16 +37,21 @@ pub fn save(window: &WebviewWindow) {
         width: size.width,
         height: size.height,
     };
+    // Through the shared store like every other state file. This one wrote
+    // straight over the top, so a crash while saving the window position left a
+    // truncated file — and the next launch opened at whatever the defaults are
+    // rather than where the user put the window.
     if let Ok(path) = file() {
         if let Ok(text) = serde_json::to_string(&state) {
-            let _ = std::fs::write(path, text);
+            let _ = crate::state::store::write(&path, &text);
         }
     }
 }
 
 fn load() -> Option<WindowState> {
-    let text = std::fs::read_to_string(file().ok()?).ok()?;
-    serde_json::from_str(&text).ok()
+    let path = file().ok()?;
+    let (state, _) = crate::state::store::read::<Option<WindowState>>(&path);
+    state
 }
 
 pub fn restore(window: &WebviewWindow) {

@@ -342,13 +342,27 @@ mod tests {
     }
 
     /// Same trap as the data folder: if the legacy prefix equals the current
-    /// one, an uninstall cleans up nothing from older versions.
+    /// one, an uninstall cleans up nothing from older versions. The dev channel
+    /// inherits no prefix at all, and so has nothing to compare.
     #[test]
     fn the_legacy_scheme_prefix_is_not_the_current_one() {
-        assert_ne!(
-            crate::cursor::SCHEME_PREFIX,
-            crate::cursor::LEGACY_SCHEME_PREFIX,
-            "old schemes would never be cleaned up"
+        if let Some(legacy) = crate::cursor::legacy_scheme_prefix() {
+            assert_ne!(
+                crate::cursor::SCHEME_PREFIX,
+                legacy,
+                "old schemes would never be cleaned up"
+            );
+        }
+    }
+
+    /// The two channels must not register schemes under one prefix. Cleanup
+    /// matches by prefix, so a shared one means uninstalling either channel
+    /// strips the other's saved schemes out of the Windows Pointers dropdown.
+    #[test]
+    fn each_channel_has_its_own_scheme_prefix() {
+        assert_eq!(
+            crate::cursor::SCHEME_PREFIX == "Cursed — ",
+            !crate::channel::IS_DEV
         );
     }
 

@@ -297,6 +297,24 @@ pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
         );
     }
 
+    // Everything above ran on an image capped at `WORKING_CAP`, and that cap was
+    // chosen against the *whole frame*. What becomes the cursor is only the
+    // subject inside it, and a photograph of a car on a driveway may spend four
+    // fifths of its width on driveway. Capping first and cropping second throws
+    // those pixels away before finding out which ones mattered: a 4000 px photo
+    // whose subject is a quarter of the frame arrives here as a 256 px master,
+    // and the 128 px rung of the ladder is then a 2x enlargement of that — which
+    // is what "zoomed in and pixelated" looks like from the outside.
+    //
+    // So when the cap actually bit, the subject's rectangle is mapped back onto
+    // the original and re-cut at full resolution. The second cut is not wasted
+    // work: it runs on the subject alone, which is smaller than the frame the
+    // first one ran on, and it is the one whose alpha is kept.
+    let source = match recut_at_full_resolution(bitmap, &source, cut)? {
+        Some(better) => better,
+        None => source,
+    };
+
     let trimmed = source.trimmed();
     if trimmed.is_empty() {
         return Err(AppError::invalid(
@@ -304,6 +322,70 @@ pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
         ));
     }
     Ok(trimmed.squared().padded(1))
+}
+
+/// How much of the frame the subject must leave unused before it is worth
+/// cropping the original and cutting again.
+///
+/// A subject that already fills the frame has nothing to recover, and the second
+/// cut would be the same work for the same pixels.
+const RECUT_WORTH_IT: f32 = 0.9;
+
+/// Re-derives the master from the full-resolution original, cropped to the
+/// subject the proxy found.
+///
+/// `None` when there is nothing to gain: the image was never downscaled, the cut
+/// found no subject, or the subject already fills the frame.
+fn recut_at_full_resolution(
+    original: &Bitmap,
+    proxy: &Bitmap,
+    cut: Cut,
+) -> AppResult<Option<Bitmap>> {
+    if proxy.width == original.width && proxy.height == original.height {
+        return Ok(None); // never downscaled, so the proxy is the original
+    }
+    let Some((x0, y0, x1, y1)) = proxy.opaque_bounds() else {
+        return Ok(None);
+    };
+
+    let (pw, ph) = (proxy.width as f32, proxy.height as f32);
+    let covered = ((x1 - x0 + 1) as f32 / pw).max((y1 - y0 + 1) as f32 / ph);
+    if covered >= RECUT_WORTH_IT {
+        return Ok(None);
+    }
+
+    // A margin of one proxy pixel each way, because the cut feathers its edge
+    // and the bounds are measured on the feathered result. Cropping exactly to
+    // them would shave that feather off in the original.
+    let margin_x = 1.0 / pw;
+    let margin_y = 1.0 / ph;
+    let region = original.cropped(
+        (x0 as f32 / pw) - margin_x,
+        (y0 as f32 / ph) - margin_y,
+        ((x1 + 1) as f32 / pw) + margin_x,
+        ((y1 + 1) as f32 / ph) + margin_y,
+    );
+
+    // The cap now applies to the subject rather than to the frame around it.
+    let mut region = working_copy(&region)?;
+    log::debug!(
+        "re-cut the subject at {}x{} rather than the {}x{} the whole frame allowed",
+        region.width,
+        region.height,
+        proxy.width,
+        proxy.height
+    );
+    match cut {
+        Cut::Auto => crate::build::matte::remove_background(&mut region),
+        Cut::Force => crate::build::matte::remove_background_forced(&mut region),
+        Cut::Keep => crate::build::matte::MatteReport { removed: 0.0, already_had_alpha: false },
+    };
+
+    // If the second cut found nothing at all, the first one is still good.
+    if region.opaque_bounds().is_none() {
+        return Ok(None);
+    }
+    Ok(Some(region))
 }
 
 /// Geometric and tonal edits applied to a user's own artwork before it becomes
@@ -834,6 +916,54 @@ mod tests {
         for (frame, _) in &prepared {
             assert_eq!(frame.alpha(0, 0), 0, "the corner should be transparent");
         }
+    }
+
+    /// The bug this guards is invisible in the output and obvious on screen: a
+    /// photograph whose subject is a small part of the frame lost most of its
+    /// resolution before anything decided which part mattered.
+    ///
+    /// A 2048 px frame holding a 200 px subject used to arrive at the ladder as
+    /// a ~100 px master — because the frame was capped to 1024 first and the
+    /// crop came second — so the 128 px rung was an enlargement of it. That is
+    /// what "zoomed in and pixelated" looked like from outside.
+    #[test]
+    fn a_small_subject_in_a_large_frame_keeps_its_own_pixels() {
+        let mut frame = Bitmap::new(2048, 2048);
+        for y in 900..1100 {
+            for x in 900..1100 {
+                frame.set_pixel(x, y, [255, 255, 255, 255]);
+            }
+        }
+
+        let master = prepare_master(&frame).expect("a 200px subject is plenty to work from");
+
+        // Cropping after the cap would have produced about 100px plus padding.
+        assert!(
+            master.width >= 190,
+            "the subject came through at {}px, so it was cropped out of the capped copy",
+            master.width
+        );
+        // And it is the subject, not the whole frame brought along for the ride.
+        assert!(
+            master.width <= 260,
+            "{}px is the frame, not the subject",
+            master.width
+        );
+    }
+
+    /// A subject that already fills its frame has nothing to recover, and the
+    /// second cut would be the same work over the same pixels.
+    #[test]
+    fn a_subject_that_fills_the_frame_is_not_cut_twice() {
+        let mut frame = Bitmap::new(2048, 2048);
+        for y in 0..2048 {
+            for x in 0..2048 {
+                frame.set_pixel(x, y, [255, 255, 255, 255]);
+            }
+        }
+        // Still capped, because the whole frame is the subject.
+        let master = prepare_master_with(&frame, Cut::Keep).unwrap();
+        assert!(master.width <= WORKING_CAP + 2, "{}px", master.width);
     }
 
     #[test]

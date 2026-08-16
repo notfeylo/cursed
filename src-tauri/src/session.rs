@@ -47,16 +47,22 @@ fn file() -> AppResult<std::path::PathBuf> {
 
 pub fn save(descriptor: &AppliedDescriptor) -> AppResult<()> {
     let path = file()?;
-    let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, serde_json::to_string_pretty(descriptor)?)?;
-    std::fs::rename(&temp, &path)?;
-    Ok(())
+    crate::state::store::write(&path, &serde_json::to_string_pretty(descriptor)?)
 }
 
+/// What is applied, or `None` if nothing is.
+///
+/// Goes through the shared store so a descriptor damaged by a crash mid-write
+/// falls back to the previous good one rather than reading as "no cursor is
+/// applied" — which would silently hand the pointer back to Windows on the next
+/// launch and lose which pack, colour and size the user had chosen.
 pub fn load() -> Option<AppliedDescriptor> {
     let path = file().ok()?;
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(crate::util::strip_bom(&text)).ok()
+    // A missing file is the ordinary "nothing applied yet" case and the store
+    // reports it the same way it reports a default, so there is nothing extra
+    // to check here.
+    let (descriptor, _) = crate::state::store::read::<Option<AppliedDescriptor>>(&path);
+    descriptor
 }
 
 pub fn forget() {

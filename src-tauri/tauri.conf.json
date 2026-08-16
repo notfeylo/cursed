@@ -45,7 +45,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "createUpdaterArtifacts": false,
     "publisher": "feylo",
     "copyright": "Copyright (c) 2026 feylo",

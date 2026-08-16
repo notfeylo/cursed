@@ -9,7 +9,12 @@
 //! to run, so before it is launched it must match the SHA-256 published in the
 //! release's own `SHA256SUMS.txt`. If the hash is missing or does not match, the
 //! file is deleted and the update fails loudly. That check is the whole reason
-//! this module is allowed to exist — see [`verify_and_launch`].
+//! this module is allowed to exist — see [`verified_installer`].
+//!
+//! The installer is then run with [`INSTALLER_ARGUMENTS`], and those four flags
+//! matter as much as the checksum does: without them the Tauri NSIS template
+//! takes its fresh-install path, which runs the previous version's uninstaller
+//! and destroys the user's data. `docs/UPDATE_PATH_DIAGNOSIS.md` has the trace.
 //!
 //! The check itself sends nothing but the request: no identifiers, no telemetry.
 
@@ -652,7 +657,13 @@ pub fn verify_only(tag: &str, asset: &str) -> AppResult<String> {
     Ok(actual)
 }
 
-pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
+/// Checks the downloaded installer and returns where it is, without running it.
+///
+/// Split from the launch so the caller can verify **before** it starts tearing
+/// the app down. A checksum failure has to leave the app exactly as it was —
+/// hotkeys registered, watchdog defending, tray icon present — rather than
+/// half shut down around an installer that is never going to run.
+pub fn verified_installer(tag: &str, asset: &str) -> AppResult<PathBuf> {
     let file = download_dir()?.join(asset);
     if !is_our_installer(asset) || !file.exists() {
         return Err(AppError::invalid("there is no downloaded installer to run"));
@@ -666,7 +677,11 @@ pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
             "the downloaded installer does not match the checksum published with the release, so it was deleted",
         ));
     }
+    Ok(file)
+}
 
+/// Runs an installer that [`verified_installer`] has already vouched for.
+pub fn launch(file: &std::path::Path) -> AppResult<()> {
     // `CreateProcess`, not `ShellExecuteW`.
     //
     // The shell path returns as soon as it has *begun* the operation and tells
@@ -677,18 +692,195 @@ pub fn verify_and_launch(tag: &str, asset: &str) -> AppResult<()> {
     // dropped with the process that asked for it. Spawning directly sidesteps
     // the question: the child exists before this returns, or we get an error to
     // show instead of quietly exiting with nothing installed.
-    let child = std::process::Command::new(&file)
-        .current_dir(file.parent().unwrap_or(&file))
+    let child = std::process::Command::new(file)
+        .args(INSTALLER_ARGUMENTS)
+        .current_dir(file.parent().unwrap_or(file))
         .spawn()
         .map_err(|e| AppError::msg(format!("the installer would not start: {e}")))?;
 
-    log::info!("update: installer {} started as pid {}", file.display(), child.id());
+    log::info!(
+        "update: installer {} started as pid {} with {}",
+        file.display(),
+        child.id(),
+        INSTALLER_ARGUMENTS.join(" ")
+    );
     Ok(())
 }
+
+/// What the installer is told when it is run as an update.
+///
+/// **These four flags are the difference between an update and a reinstall.**
+/// Passing none of them — which is what this did until v1.21.0 — is not a
+/// cosmetic problem. The Tauri NSIS template decides everything from the command
+/// line, so an installer launched bare takes the *fresh install* path: it shows
+/// the reinstall page with "uninstall before installing" pre-selected, runs the
+/// previous version's uninstaller **without** `/UPDATE`, and that uninstaller
+/// then runs `installer-hooks.nsh` in full uninstall mode — restoring the stock
+/// Windows pointer scheme and offering to delete the user's presets, custom
+/// cursors and original-scheme snapshot with "delete" as the default answer.
+///
+/// The guard in those hooks is written correctly and keys on `$UpdateMode`. It
+/// could never fire, because `$UpdateMode` is set from the command line and
+/// nowhere else. See `docs/UPDATE_PATH_DIAGNOSIS.md` for the full trace.
+///
+/// | Flag | What it does, and where the template does it |
+/// |---|---|
+/// | `/UPDATE` | Sets `$UpdateMode`. Skips the reinstall page entirely, so the old uninstaller is never run and the hooks never fire. Also preserves the autostart entry and the shortcuts. |
+/// | `/P` | Passive: one progress bar, no pages, and — critically — suppresses the "Cursed is running, close it?" prompt, which is otherwise shown for any non-silent, non-passive run. |
+/// | `/R` | Relaunches the app afterwards. **Only honoured when `/P` or `/S` is also set**, so it is inseparable from the flag above. |
+/// | `/NS` | Do not recreate shortcuts. Redundant while `/UPDATE` is passed, and kept anyway: it is the flag that directly expresses the intent, and it keeps a duplicate desktop icon from appearing if `/UPDATE` is ever dropped. |
+///
+/// Deliberately **not** `/S`. Fully silent gives the user no sign that anything is
+/// happening during an install they explicitly asked for, and the brief asks for
+/// exactly one progress bar rather than none.
+///
+/// No `/ARGS` either. It would restart the app with extra arguments, and the only
+/// one worth passing is `--silent`, which sends it to the tray. An update is
+/// always started by someone clicking a button in the window, so the window is
+/// what they should get back.
+const INSTALLER_ARGUMENTS: &[&str] = &["/UPDATE", "/P", "/R", "/NS"];
 
 /// Where a downloaded installer is staged.
 pub fn downloaded_path(installer: &str) -> AppResult<PathBuf> {
     Ok(download_dir()?.join(installer))
+}
+
+// ── the pending-install record ───────────────────────────────────
+//
+// An update replaces the running binary and hands control to an installer that
+// may or may not finish. Nothing about that is observable from inside a process
+// that is about to exit, so what happened has to be worked out on the *next*
+// launch, from a note left behind before the handover.
+
+/// Written before the installer starts, read on the next launch, then deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PendingInstall {
+    /// The version that was running when the update was started.
+    from: String,
+    /// The version the installer was supposed to produce.
+    to: String,
+    started_at: String,
+    /// A copy of the binary that was running, kept until the update is known to
+    /// have worked.
+    rollback: Option<PathBuf>,
+}
+
+fn pending_file() -> AppResult<PathBuf> {
+    Ok(download_dir()?.join("pending.json"))
+}
+
+/// How an update attempt turned out, worked out on the launch after it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "outcome")]
+pub enum InstallOutcome {
+    /// The version now running is the one the installer was asked to produce.
+    Succeeded { from: String, to: String },
+    /// An update was started and the version did not change. The installer was
+    /// cancelled, aborted, or refused — and the user is owed a plain answer
+    /// rather than an app that silently looks exactly as it did before.
+    DidNotTake { from: String, to: String },
+}
+
+/// Records that an update is about to be attempted, and keeps the current
+/// binary.
+///
+/// The copy is what makes a rollback possible at all: once the installer runs,
+/// the previous executable is gone from the install directory and there is
+/// nowhere to get it back from short of downloading it again. It is deleted as
+/// soon as the new version is confirmed working, so it costs ~12 MB and only
+/// between two launches.
+pub fn record_pending_install(to: &str) -> AppResult<()> {
+    let from = env!("CARGO_PKG_VERSION").to_owned();
+    let rollback = match std::env::current_exe() {
+        Ok(exe) => {
+            let dir = download_dir()?.join("rollback");
+            std::fs::create_dir_all(&dir)?;
+            let kept = dir.join(format!("Cursed-{from}.exe"));
+            match std::fs::copy(&exe, &kept) {
+                Ok(_) => Some(kept),
+                Err(e) => {
+                    // Not fatal. An update without a rollback copy is still an
+                    // update; refusing to install because a spare could not be
+                    // written would be the worse failure.
+                    log::warn!("update: could not keep a copy of the current binary: {e}");
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("update: could not locate the running binary to keep: {e}");
+            None
+        }
+    };
+
+    let record = PendingInstall {
+        from,
+        to: to.trim_start_matches('v').to_owned(),
+        started_at: crate::util::iso_now(),
+        rollback,
+    };
+    let json = serde_json::to_string_pretty(&record)?;
+    let file = pending_file()?;
+    let temp = file.with_extension("json.tmp");
+    std::fs::write(&temp, &json)?;
+    std::fs::rename(&temp, &file)?;
+    log::info!("update: {} -> {} recorded before handover", record.from, record.to);
+    Ok(())
+}
+
+/// Works out how the last update attempt went, and clears the record.
+///
+/// Returns `None` when no update was pending, which is every ordinary launch.
+///
+/// **What this cannot detect:** a new version that installs and then fails to
+/// start. Nothing runs to notice, because the thing that would notice is the
+/// binary that will not run. Catching that needs a process outside this one —
+/// a service or a launcher — which is a larger decision than the update path,
+/// and until it is made the rollback copy is a manual recovery rather than an
+/// automatic one. Recorded here so the limit is not mistaken for coverage.
+pub fn settle_pending_install() -> Option<InstallOutcome> {
+    let file = pending_file().ok()?;
+    let text = std::fs::read_to_string(&file).ok()?;
+    let record: PendingInstall = serde_json::from_str(crate::util::strip_bom(&text)).ok()?;
+    let _ = std::fs::remove_file(&file);
+
+    let running = env!("CARGO_PKG_VERSION");
+    let outcome = if running == record.to {
+        // The rollback copy has done its job and is now 12 MB of a version
+        // nobody is going to run.
+        if let Some(kept) = &record.rollback {
+            let _ = std::fs::remove_file(kept);
+        }
+        log::info!("update: {} -> {} succeeded", record.from, record.to);
+        InstallOutcome::Succeeded {
+            from: record.from,
+            to: record.to,
+        }
+    } else {
+        // Deliberately keeping the rollback copy here. The version did not
+        // change, so whatever went wrong may still be going wrong, and the one
+        // copy of the previous binary is not worth discarding on a guess.
+        log::warn!(
+            "update: {} -> {} did not take; still running {running}",
+            record.from,
+            record.to
+        );
+        InstallOutcome::DidNotTake {
+            from: record.from,
+            to: record.to,
+        }
+    };
+    Some(outcome)
+}
+
+/// Settles the last update attempt and publishes the answer for the UI.
+///
+/// Called once from startup. Kept separate from [`settle_pending_install`] so
+/// the decision and the reporting of it can be tested apart.
+pub fn settle_and_report() {
+    if let Some(outcome) = settle_pending_install() {
+        update_state(|s| s.installed = Some(outcome.clone()));
+    }
 }
 
 /// Removes anything left in the update staging directory.
@@ -756,6 +948,13 @@ pub struct UpdateState {
     pub total: u64,
     pub status: Option<UpdateStatus>,
     pub error: Option<String>,
+    /// How the last update attempt turned out, worked out on this launch.
+    ///
+    /// `None` on every ordinary start. Set once, at startup, and left alone —
+    /// an update that succeeded is worth saying once, and an update that did
+    /// not take is worth saying plainly rather than leaving the user to notice
+    /// the version never changed.
+    pub installed: Option<InstallOutcome>,
 }
 
 fn state_slot() -> &'static std::sync::Mutex<UpdateState> {
@@ -1093,7 +1292,238 @@ mod tests {
 
     #[test]
     fn launching_without_a_downloaded_file_is_refused() {
-        assert!(verify_and_launch("1.0.0", "Cursed_9.9.9_x64-setup.exe").is_err());
-        assert!(verify_and_launch("1.0.0", "evil.exe").is_err());
+        assert!(verified_installer("1.0.0", "Cursed_9.9.9_x64-setup.exe").is_err());
+        assert!(verified_installer("1.0.0", "evil.exe").is_err());
+    }
+
+    /// The four flags are the whole difference between an update and a
+    /// reinstall, and three of them have a specific job that nothing else does.
+    ///
+    /// Passing none of them — which is what shipped through v1.20.0 — made the
+    /// installer take the fresh-install path: it ran the previous version's
+    /// uninstaller, which ran `installer-hooks.nsh` in full uninstall mode,
+    /// which restored the stock Windows pointer scheme and offered to delete
+    /// the user's presets with "delete" as the default. `docs/
+    /// UPDATE_PATH_DIAGNOSIS.md` traces it line by line.
+    #[test]
+    fn the_installer_is_told_that_this_is_an_update() {
+        // Without this the old uninstaller runs and the hooks fire.
+        assert!(
+            INSTALLER_ARGUMENTS.contains(&"/UPDATE"),
+            "an update that does not say it is an update is an uninstall"
+        );
+        // Without this the user is asked to close a running app mid-update.
+        assert!(INSTALLER_ARGUMENTS.contains(&"/P"));
+        // Without this the app never comes back.
+        assert!(INSTALLER_ARGUMENTS.contains(&"/R"));
+        assert!(INSTALLER_ARGUMENTS.contains(&"/NS"));
+
+        // `/R` is only honoured in silent or passive mode, so it is meaningless
+        // on its own — the template checks `$PassiveMode = 1 ${OrIf} ${Silent}`
+        // before even looking for it.
+        assert!(
+            !INSTALLER_ARGUMENTS.contains(&"/R") || INSTALLER_ARGUMENTS.contains(&"/P"),
+            "/R does nothing without /P"
+        );
+
+        // Not silent. An install the user asked for should show them something.
+        assert!(!INSTALLER_ARGUMENTS.contains(&"/S"));
+    }
+
+    /// Only NSIS ships, and the config has to agree.
+    ///
+    /// The updater cannot choose an MSI — `is_our_installer` accepts one shape
+    /// of name and it is the NSIS one — so an MSI built beside it is not a
+    /// second update path. It is a second *installer*, one hand-download away
+    /// from a user who now has two copies of Cursed in two directories with two
+    /// uninstall entries, because NSIS and the MSI record the install location
+    /// under different registry values and neither looks for the other's.
+    #[test]
+    fn the_bundle_ships_nsis_only() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let targets = config["bundle"]["targets"]
+            .as_array()
+            .expect("bundle.targets");
+        assert_eq!(
+            targets.iter().filter_map(|t| t.as_str()).collect::<Vec<_>>(),
+            vec!["nsis"],
+            "anything but nsis alone reintroduces the duplicate-install failure"
+        );
+    }
+
+    /// Per-user, so an update never needs elevation.
+    ///
+    /// `perMachine` or `both` make the installer request admin, and an updater
+    /// that cannot elevate silently fails with OS error 740 — the app quits and
+    /// the update simply does not happen.
+    #[test]
+    fn the_installer_never_needs_elevation() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        assert_eq!(
+            config["bundle"]["windows"]["nsis"]["installMode"].as_str(),
+            Some("currentUser")
+        );
+    }
+
+    /// The guard that makes `/UPDATE` matter has to still be in the hooks. If
+    /// somebody removes it, the flag above is protecting nothing.
+    #[test]
+    fn the_uninstall_hooks_still_check_update_mode() {
+        let hooks = include_str!("../installer-hooks.nsh");
+        // Both hooks run during an upgrade, and both would otherwise destroy
+        // something: the cursor scheme, and everything in %APPDATA%\Cursed.
+        let guards = hooks.matches("$UpdateMode = 1").count();
+        assert!(
+            guards >= 2,
+            "PREUNINSTALL and POSTUNINSTALL must each refuse to run during an update; found {guards}"
+        );
+        assert!(
+            hooks.contains(r#"RMDir /r "$APPDATA\Cursed""#),
+            "this test is guarding the deletion below; if it moved, re-point the test"
+        );
+    }
+
+    /// Extracts one `!macro NAME ... !macroend` block, as lines.
+    fn hook_body<'a>(source: &'a str, name: &str) -> Vec<&'a str> {
+        let opener = format!("!macro {name}");
+        let mut lines = source.lines().skip_while(|l| !l.trim_start().starts_with(&opener));
+        // Drop the `!macro` line itself so index 0 is the first statement.
+        lines.next();
+        lines
+            .take_while(|l| !l.trim_start().starts_with("!macroend"))
+            .collect()
+    }
+
+    /// Anything in an uninstall hook that a user would notice happening to them.
+    ///
+    /// `nsExec` is on the list because the thing it executes is
+    /// `--restore-defaults`, which puts the machine back on the stock Windows
+    /// arrow — the most visible of the lot, and the one least likely to be read
+    /// as destructive from the line itself.
+    fn destructive(line: &str) -> bool {
+        let line = line.trim_start();
+        if line.starts_with(';') {
+            return false;
+        }
+        ["RMDir", "Delete", "DeleteRegValue", "MessageBox", "nsExec::"]
+            .iter()
+            .any(|marker| line.starts_with(marker))
+    }
+
+    /// **The regression test for the data-loss bug.**
+    ///
+    /// Not "is there a guard" — there was a guard, it was correct, and it ran on
+    /// every update for three releases without firing, because the flag it keys
+    /// on was decided a process and a half away in a `spawn()` call with no
+    /// arguments. What has to hold is *reachability*: with `$UpdateMode = 1`,
+    /// control must leave each hook before it reaches anything destructive, and
+    /// come back after all of it.
+    ///
+    /// So the guard is traced. Find where it jumps to, find where that label
+    /// sits, and assert that every destructive statement in the macro lies
+    /// strictly between the two — i.e. that the jump goes over all of them and
+    /// lands past the last.
+    #[test]
+    fn an_update_cannot_reach_anything_the_uninstaller_destroys() {
+        let hooks = include_str!("../installer-hooks.nsh");
+
+        for name in ["NSIS_HOOK_PREUNINSTALL", "NSIS_HOOK_POSTUNINSTALL"] {
+            let body = hook_body(hooks, name);
+            assert!(!body.is_empty(), "{name} not found in installer-hooks.nsh");
+
+            let guard = body
+                .iter()
+                .position(|l| l.contains("$UpdateMode = 1"))
+                .unwrap_or_else(|| panic!("{name} has no $UpdateMode guard at all"));
+
+            // The `Goto` inside the guarded block is what actually skips the
+            // work. A guard whose body only prints a line changes nothing.
+            let (jump_offset, target) = body[guard..]
+                .iter()
+                .take_while(|l| !l.trim_start().starts_with("${EndIf}"))
+                .enumerate()
+                .find_map(|(offset, line)| {
+                    line.trim_start()
+                        .strip_prefix("Goto ")
+                        .map(|label| (offset, label.trim().to_owned()))
+                })
+                .unwrap_or_else(|| panic!("{name}'s update guard does not skip anything"));
+            let jump = guard + jump_offset;
+
+            let landing = body
+                .iter()
+                .position(|l| l.trim_start() == format!("{target}:"))
+                .unwrap_or_else(|| panic!("{name} jumps to {target}, which does not exist"));
+
+            assert!(
+                landing > jump,
+                "{name}'s guard jumps backwards, which is a loop rather than a skip"
+            );
+
+            let mut checked = 0;
+            for (index, line) in body.iter().enumerate() {
+                if !destructive(line) {
+                    continue;
+                }
+                checked += 1;
+                assert!(
+                    index > guard,
+                    "{name}: `{}` runs before the update guard is even read",
+                    line.trim()
+                );
+                assert!(
+                    index < landing,
+                    "{name}: `{}` sits past `{target}:`, so an update reaches it",
+                    line.trim()
+                );
+            }
+
+            assert!(
+                checked > 0,
+                "{name} has nothing destructive in it; this test is asserting nothing. \
+                 Either the hook was emptied or `destructive` stopped recognising its lines."
+            );
+        }
+    }
+
+    /// The order in `install_update`, asserted against the source.
+    ///
+    /// It cannot be asserted any other way — the function takes an `AppHandle`,
+    /// tears down a live Tauri app and launches an installer, none of which a
+    /// test may do. But the order is the thing that was wrong, and it is worth
+    /// pinning: verify the download **before** anything is torn down, record the
+    /// pending install **before** the process that would write it is gone, and
+    /// only launch once both have happened.
+    ///
+    /// The old order launched the installer first and then began shutting down,
+    /// on a one-second timer, which is a race dressed as a sequence.
+    #[test]
+    fn nothing_is_torn_down_before_the_installer_is_verified() {
+        let source = include_str!("commands.rs");
+        let body = source
+            .split("pub fn install_update")
+            .nth(1)
+            .expect("install_update")
+            .split("\n#[tauri::command]")
+            .next()
+            .expect("the body of install_update");
+
+        let at = |needle: &str| {
+            body.find(needle)
+                .unwrap_or_else(|| panic!("install_update no longer calls {needle}"))
+        };
+
+        let verify = at("verified_installer");
+        let record = at("record_pending_install");
+        let teardown = at("prepare_for_shutdown");
+        let launch = at("updates::launch");
+        let exit = at("app.exit(0)");
+
+        assert!(verify < teardown, "a checksum failure must leave the app intact");
+        assert!(record < teardown, "the record is written by the process being replaced");
+        assert!(teardown < launch, "the installer must not race a live app");
+        assert!(launch < exit, "exiting first would abandon the update");
     }
 }

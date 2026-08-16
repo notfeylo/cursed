@@ -13,16 +13,33 @@ use cursorforge_lib::cursor::roles::ALL_ROLES;
 use cursorforge_lib::packs::{brand, catalog, styles};
 use std::path::PathBuf;
 
-/// `genpacks --icon <out.png> [size]` renders the brand mark through the same
-/// rasteriser the catalog uses, so the icon and the in-app logo cannot drift.
+/// `genpacks --icon <out.png> [size] [--dev]` renders the brand mark through the
+/// same rasteriser the catalog uses, so the icon and the in-app logo cannot
+/// drift.
+///
+/// `--dev` renders it in the development channel's amber. The two channels
+/// install side by side, so their icons have to be tellable apart at tray size —
+/// see `packs::brand::IconPalette`.
 fn render_icon(args: &[String]) -> ! {
+    let dev = args.iter().any(|a| a == "--dev");
     let out = args
         .get(2)
+        .filter(|a| !a.starts_with("--"))
         .cloned()
         .unwrap_or_else(|| "src-tauri/icons/source.png".to_owned());
-    let size: u32 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1024);
+    let size: u32 = args
+        .get(3)
+        .filter(|a| !a.starts_with("--"))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1024);
 
-    match cursorforge_lib::build::svg::render(&brand::icon_svg(), size)
+    let svg = if dev {
+        brand::icon_svg_in(&brand::ICON_AMBER)
+    } else {
+        brand::icon_svg()
+    };
+
+    match cursorforge_lib::build::svg::render(&svg, size)
         .and_then(|b| b.to_png(image::codecs::png::CompressionType::Best))
     {
         Ok(png) => {
@@ -72,6 +89,56 @@ fn run_import(args: &[String]) -> ! {
             std::process::exit(1);
         }
     }
+}
+
+/// `genpacks --stress-handles [iterations]` hammers the cursor loader and
+/// reports whether the process's GDI and USER handle counts moved.
+///
+/// The leak this looks for cannot be found by reading the code — every path
+/// looks correct — and cannot be found by a short run, because one leaked handle
+/// per apply takes hours to matter and then takes the process down all at once.
+/// It is found by doing it thousands of times and watching a number.
+fn stress_handles(args: &[String]) -> ! {
+    let iterations: u32 = args
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2_000)
+        .clamp(1, 1_000_000);
+
+    let report = cursorforge_lib::stress::run_handle_stress(iterations);
+    if report.files.is_empty() {
+        eprintln!("no stock cursors found to test against; nothing was measured");
+        std::process::exit(2);
+    }
+
+    println!("files:      {}", report.files.len());
+    for file in &report.files {
+        println!("  {}", file.display());
+    }
+    println!("iterations: {} x {} loads", report.iterations, report.files.len());
+    println!(
+        "GDI:        {} -> {}  ({:+})",
+        report.gdi_before,
+        report.gdi_after,
+        report.gdi_growth()
+    );
+    println!(
+        "USER:       {} -> {}  ({:+})",
+        report.user_before,
+        report.user_after,
+        report.user_growth()
+    );
+    if report.failures > 0 {
+        println!("failures:   {}", report.failures);
+    }
+
+    if report.is_clean() {
+        println!("\nclean — the handle counts did not track the iteration count.");
+        std::process::exit(0);
+    }
+    println!("\nLEAK — the counts grew with the work done. Audit every");
+    println!("LoadImageW / CopyIcon / DestroyCursor path in cursor::engine.");
+    std::process::exit(1);
 }
 
 /// `genpacks --check-update` runs the real update check through the app's own
@@ -1059,6 +1126,9 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--check-update") {
         check_update();
+    }
+    if args.get(1).map(String::as_str) == Some("--stress-handles") {
+        stress_handles(&args);
     }
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);

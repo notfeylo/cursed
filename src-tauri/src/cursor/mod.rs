@@ -5,8 +5,11 @@
 //!   B. [`scheme`]   — `HKCU\Control Panel\Cursors`, survives reboot.
 //!   C. [`watchdog`] — notices when something else stomps on B, and re-applies.
 //!
-//! Plus [`restore`], which guarantees we can always hand the machine back.
+//! Plus [`restore`], which guarantees we can always hand the machine back, and
+//! [`crosschannel`], which decides which of two installed channels is allowed to
+//! defend the scheme — there being only one of it per Windows user.
 
+pub mod crosschannel;
 pub mod engine;
 pub mod restore;
 pub mod roles;
@@ -20,16 +23,22 @@ use std::sync::{Mutex, OnceLock};
 
 /// Every scheme we register is named with this prefix so an uninstall can find
 /// and remove exactly our entries and nobody else's.
-pub const SCHEME_PREFIX: &str = "Cursed — ";
+///
+/// Per channel, for that same reason: the cleanup matches by prefix, so two
+/// channels sharing one prefix would mean uninstalling either strips the other's
+/// saved schemes out of the Windows Pointers dropdown.
+pub const SCHEME_PREFIX: &str = crate::channel::SCHEME_PREFIX;
 
-/// The prefix used before the app was renamed.
+/// The prefix used before the app was renamed, when this channel inherits it.
 ///
 /// Kept so an uninstall still cleans up schemes registered by an earlier
 /// version. Leaving those behind would put dead entries in the Windows Pointers
-/// dropdown pointing at files that no longer exist.
-///
-/// Must stay the *old* name — if it equals `SCHEME_PREFIX` it cleans up nothing.
-pub const LEGACY_SCHEME_PREFIX: &str = "CursorForge — ";
+/// dropdown pointing at files that no longer exist. `None` on the dev channel,
+/// which never carried the old name and must not clean up after the one that
+/// did.
+pub fn legacy_scheme_prefix() -> Option<&'static str> {
+    crate::channel::legacy_scheme_prefix()
+}
 
 /// What is currently committed. Held in memory so the watchdog knows what
 /// "correct" looks like without re-deriving it from disk every five seconds.
@@ -90,7 +99,7 @@ pub fn active_state() -> AppResult<ActiveState> {
             // pointer is stock.
             let stripped = name
                 .strip_prefix(SCHEME_PREFIX)
-                .or_else(|| name.strip_prefix(LEGACY_SCHEME_PREFIX));
+                .or_else(|| legacy_scheme_prefix().and_then(|old| name.strip_prefix(old)));
             match stripped {
                 Some(pack_name) if !pack_name.is_empty() => ActiveState {
                     pack_id: None,
@@ -203,19 +212,43 @@ pub fn reapply() -> AppResult<bool> {
     Ok(true)
 }
 
+/// The last three components of a cursor path, lowercased, for comparison.
+///
+/// The registry stores an unexpanded `%APPDATA%\...` string, so the head of a
+/// path cannot be compared without expanding it first. The tail can be, and
+/// three components is what it takes to identify one of ours:
+///
+/// ```text
+/// cache\<pack>\<tint-outline>\Arrow.cur     a catalog pack
+/// custom\<cursor-id>\32.ani                 a cursor built from an image
+/// imported\<slug>\arrow.cur                 a downloaded pack
+/// ```
+///
+/// The file name alone is not enough, and quietly was not for a long time. Every
+/// pack writes the same seventeen names, so `Arrow.cur` matched `Arrow.cur`
+/// whichever pack it came out of — which means the thing the watchdog exists to
+/// catch, our scheme being swapped wholesale for another set of files, was the
+/// one thing it could not see. It only ever noticed a role reset to a *stock
+/// Windows* cursor, those being the only ones whose names differ.
+///
+/// Two components is not enough either: the appearance directory is shared
+/// across packs, so `v2-666666-o\Arrow.cur` is the same string for every one of
+/// them. The pack is the third component, and it is the one that matters.
+fn path_tail(text: &str) -> String {
+    let mut parts: Vec<&str> = text
+        .rsplit(['\\', '/'])
+        .filter(|part| !part.is_empty())
+        .take(3)
+        .collect();
+    parts.reverse();
+    parts.join("\\").to_ascii_lowercase()
+}
+
 /// True when the registry no longer reflects what we committed — i.e. a theme
 /// change, a personalisation reset, or another cursor tool has overwritten us.
 pub fn drifted() -> bool {
     let Some(state) = applied() else {
         return false;
-    };
-    // The registry stores an unexpanded `%APPDATA%\...` string; compare on the
-    // file name, which is stable across expansion and path formatting.
-    let file_name = |text: &str| {
-        text.rsplit(['\\', '/'])
-            .next()
-            .unwrap_or_default()
-            .to_ascii_lowercase()
     };
 
     // Every role, not only the arrow.
@@ -232,16 +265,69 @@ pub fn drifted() -> bool {
         let Ok(current) = scheme::read_role(*role) else {
             continue;
         };
-        let expected_name = expected
-            .file_name()
-            .map(|n| n.to_string_lossy().to_ascii_lowercase())
-            .unwrap_or_default();
-        if expected_name.is_empty() {
+        let expected_tail = path_tail(&expected.to_string_lossy());
+        if expected_tail.is_empty() {
             continue;
         }
-        if file_name(&current) != expected_name {
+        if path_tail(&current) != expected_tail {
             return true;
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The registry's `%APPDATA%` form and our absolute form must compare equal,
+    /// or the watchdog reads its own correct scheme as drift and re-applies it
+    /// every few seconds for ever — which, on an animated cursor, restarts the
+    /// animation on every pass.
+    #[test]
+    fn the_same_cursor_written_two_ways_is_not_drift() {
+        assert_eq!(
+            path_tail(r"%APPDATA%\Cursed\cache\pack\v2-666666-o\Arrow.cur"),
+            path_tail(r"C:\Users\someone\AppData\Roaming\Cursed\cache\pack\v2-666666-o\Arrow.cur")
+        );
+        // Separator and case are both formatting, not identity.
+        assert_eq!(path_tail("a/b/c/Arrow.cur"), path_tail(r"a\b\c\arrow.CUR"));
+    }
+
+    /// Every pack writes the same seventeen file names, so the name alone cannot
+    /// tell two cursors apart. This is the comparison that can.
+    #[test]
+    fn two_packs_sharing_a_file_name_are_told_apart() {
+        assert_ne!(
+            path_tail(r"%APPDATA%\Cursed\cache\pack-a\v2-666666-o\Arrow.cur"),
+            path_tail(r"%APPDATA%\Cursed\cache\pack-b\v2-666666-o\Arrow.cur"),
+            "a different pack is a different cursor"
+        );
+        assert_ne!(
+            path_tail(r"cache\pack\v2-666666-o\Arrow.cur"),
+            path_tail(r"cache\pack\v2-2e8bff-o\Arrow.cur"),
+            "a different colour is a different cursor"
+        );
+        assert_ne!(
+            path_tail(r"custom\trump-5b6b27cc\32.ani"),
+            path_tail(r"custom\elon-ad9854ad\32.ani"),
+            "a different custom cursor is a different cursor"
+        );
+        // And a stock Windows cursor, which is what a reset leaves behind.
+        assert_ne!(
+            path_tail(r"%SystemRoot%\cursors\aero_arrow.cur"),
+            path_tail(r"%APPDATA%\Cursed\cache\pack\v2-666666-o\Arrow.cur")
+        );
+    }
+
+    /// A short path has no third component to take, and must not panic reaching
+    /// for one.
+    #[test]
+    fn a_path_with_no_parent_is_still_comparable() {
+        assert_eq!(path_tail("Arrow.cur"), "arrow.cur");
+        assert_eq!(path_tail(r"pack\Arrow.cur"), r"pack\arrow.cur");
+        assert_eq!(path_tail(""), "");
+        // A trailing separator must not swallow the file name.
+        assert_eq!(path_tail(r"a\b\c\"), r"a\b\c");
+    }
 }

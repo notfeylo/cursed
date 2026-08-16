@@ -43,21 +43,26 @@ impl Preset {
     }
 }
 
+/// Reads the saved presets, recovering from the backup if the file is damaged.
+///
+/// This used to be `unwrap_or_default()` on a parse failure, which is the worst
+/// possible answer: a `presets.json` that would not parse became an empty list,
+/// the UI showed no presets, and the next save wrote that empty list over the
+/// only copy. A file the user could have opened in Notepad and fixed was gone
+/// by the time they noticed. Now a damaged file is set aside, the backup is
+/// tried, and nothing is overwritten on the strength of a failed read.
 fn read() -> AppResult<Vec<Preset>> {
     let file = paths::presets_file()?;
-    match std::fs::read_to_string(&file) {
-        Ok(text) => Ok(serde_json::from_str(crate::util::strip_bom(&text)).unwrap_or_default()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(e) => Err(e.into()),
+    let (presets, source) = crate::state::store::read::<Vec<Preset>>(&file);
+    if source == crate::state::store::Source::Backup {
+        log::warn!("presets were recovered from the backup copy");
     }
+    Ok(presets)
 }
 
 fn write(presets: &[Preset]) -> AppResult<()> {
     let file = paths::presets_file()?;
-    let temp = file.with_extension("json.tmp");
-    std::fs::write(&temp, serde_json::to_string_pretty(presets)?)?;
-    std::fs::rename(&temp, &file)?;
-    Ok(())
+    crate::state::store::write(&file, &serde_json::to_string_pretty(presets)?)
 }
 
 pub fn list() -> AppResult<Vec<Preset>> {

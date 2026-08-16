@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cursed Dev",
+  "mainBinaryName": "Cursed Dev",
+  "identifier": "dev.feylo.cursed.dev",
+  "bundle": {
+    "shortDescription": "Cursed — development channel",
+    "longDescription": "The development channel of Cursed. Installs alongside the released app with its own data directory, its own settings and its own tray icon. Not for general use.",
+    "icon": [
+      "icons/dev/32x32.png",
+      "icons/dev/128x128.png",
+      "icons/dev/128x128@2x.png",
+      "icons/dev/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "startMenuFolder": "Cursed Dev",
+        "installerIcon": "icons/dev/icon.ico"
+      }
+    }
+  }
+}

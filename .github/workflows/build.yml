@@ -34,13 +34,6 @@ jobs:
       - name: Frontend
         run: npm run build
 
-      # Two failures that are invisible by design: a font subset carrying no
-      # Latin glyphs, which silently renders in a fallback face, and an unused
-      # font reaching the installer because an emitted stylesheet is never
-      # tree-shaken. Also asserts the dev-only specimen route is absent.
-      - name: Bundle contents
-        run: npm run check:bundle
-
       # `working-directory` rather than `--manifest-path`, here and everywhere
       # else cargo is called: rustup picks a toolchain from the *current
       # directory*, and rust-toolchain.toml lives in src-tauri/. Called from the
@@ -54,6 +47,16 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test
+
+      # The two channels are #[cfg]-gated constants, so the run above never
+      # compiles the dev channel's code or the assertions holding it apart from
+      # the shipped one — a dev build that cannot compile would otherwise be
+      # found by the developer who needed it, months later.
+      - name: Dev channel
+        working-directory: src-tauri
+        run: |
+          cargo clippy --all-targets --features dev-channel -- -D warnings
+          cargo test --features dev-channel
 
       # Every pack must define all 17 roles; this fails the build if one doesn't.
       #
@@ -76,6 +79,18 @@ jobs:
       - name: Build the installer
         run: npm run tauri build
 
+      # Three failures that are invisible by design: a font subset carrying no
+      # Latin glyphs, which silently renders in a fallback face; an unused font
+      # reaching the installer because an emitted stylesheet is never
+      # tree-shaken; and a dev-channel binary about to ship as the release. Also
+      # asserts the dev-only specimen route is absent.
+      #
+      # After the build, not before. The first two checks only need `dist/`, but
+      # the channel marker is read out of the compiled `.exe` — run earlier, it
+      # finds no binaries and vouches for nothing.
+      - name: Bundle contents
+        run: npm run check:bundle
+
       - name: Installer size budget
         shell: bash
         run: |
@@ -92,12 +107,21 @@ jobs:
             echo "::warning::installer is ${mb} MB, over the 12 MB target"
           fi
 
+      # NSIS only, because that is the only thing that ships.
+      #
+      # An MSI was built and uploaded here for months. It was never attached to
+      # a release and the updater could never have chosen one — `is_our_installer`
+      # only accepts `Cursed_<version>_<arch>-setup.exe` — but it was one
+      # download away from a user installing it by hand. NSIS installs per-user
+      # to %LOCALAPPDATA%; an MSI would have gone to its own default location
+      # under its own uninstall entry, because the two record the install
+      # directory under different registry values and neither finds the other's.
+      # The result is two copies of Cursed and two uninstallers, which is the
+      # duplicate-install failure the update research brief opens with.
       - uses: actions/upload-artifact@v4
         with:
           name: cursed-installers
-          path: |
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/bundle/msi/*.msi
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
   # Releases ship x64, ARM64 and 32-bit. Only the host architecture is built

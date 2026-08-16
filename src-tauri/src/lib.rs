@@ -10,9 +10,11 @@
 pub mod autostart;
 pub mod build;
 pub mod bundled;
+pub mod channel;
 pub mod commands;
 pub mod cursor;
 pub mod custom;
+pub mod dataprint;
 pub mod error;
 pub mod hash;
 pub mod hotkeys;
@@ -23,6 +25,7 @@ pub mod paths;
 pub mod session;
 pub mod shell;
 pub mod state;
+pub mod stress;
 pub mod tray;
 pub mod updates;
 pub mod util;
@@ -31,12 +34,102 @@ pub mod window_state;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Manager, WindowEvent};
 
+/// The taskbar mark, embedded rather than read from the bundle — see where it is
+/// used. Per channel, because two side-by-side installs showing the same icon in
+/// the taskbar and the Alt-Tab list leave clicking as the only way to find out
+/// which is which.
+#[cfg(not(feature = "dev-channel"))]
+const WINDOW_ICON: &[u8] = include_bytes!("../icons/128x128.png");
+#[cfg(feature = "dev-channel")]
+const WINDOW_ICON: &[u8] = include_bytes!("../icons/dev/128x128.png");
+
 /// The window is created hidden so nobody ever sees an unpainted rectangle.
 /// Whoever gets here first wins: normally the frontend's `frontend_ready`, and
 /// otherwise the fallback below.
 static SHOWN: AtomicBool = AtomicBool::new(false);
 
+/// Set the moment a quit is asked for, and never cleared.
+///
+/// Several things in this app happen on a delay — the window fallback below, the
+/// pause before the updater exits — and a delay is a window in which the event
+/// loop can be torn down underneath them. Showing or focusing a window after
+/// that panics inside tao's runner with `cannot move state from Destroyed`,
+/// which is a crash on the way out, in a GUI process with no console, from a
+/// thread that has nothing to do with what the user just did. It was in this
+/// machine's log once with nothing around it to explain it.
+///
+/// Anything that wakes up after sleeping asks this first.
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Announces that this process is on its way out. Idempotent, one-way.
+pub fn begin_shutdown() {
+    SHUTTING_DOWN.store(true, Ordering::SeqCst);
+}
+
+/// Releases everything this process holds, before an installer replaces it.
+///
+/// An update hands the machine to an installer that is about to overwrite this
+/// binary and everything beside it. Whatever is still running at that moment is
+/// either something the installer has to kill, or something still writing to a
+/// directory being replaced.
+///
+/// The installer can cope — passive mode terminates a running copy without
+/// asking — but being killed is not the same as having exited. A killed process
+/// does not save its window position, does not flush its log, and leaves the
+/// watchdog's last act unknown. So everything that can be put down in order is
+/// put down here, and the kill becomes the fallback it should be rather than the
+/// mechanism.
+///
+/// Ordered deliberately: the watchdog stops defending *first*, because it is the
+/// one thing that would otherwise write registry values naming files the
+/// installer is deleting.
+pub fn prepare_for_shutdown(app: &tauri::AppHandle) {
+    begin_shutdown();
+
+    cursor::watchdog::disable();
+
+    // Global shortcuts belong to a process, and the replacement copy will want
+    // them back. Left registered, they are released by process death anyway —
+    // but only once Windows notices, which is not instant.
+    if let Err(e) = hotkeys::unregister_all(app) {
+        log::warn!("shutdown: hotkeys could not be released: {e}");
+    }
+
+    // The tray icon is the one piece of UI that outlives a killed process
+    // visibly: a stale icon sits in the notification area until something makes
+    // Windows re-scan it.
+    if let Err(e) = tray::set_visible(app, false) {
+        log::warn!("shutdown: the tray icon could not be removed: {e}");
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        // Saved first, because the position is read off a window that is about
+        // to stop existing.
+        window_state::save(&window);
+
+        // Hidden, **not** destroyed. Destroying the last window ends the event
+        // loop, and the caller has not launched the installer yet — so tidying
+        // up that thoroughly here would exit the process before the thing it is
+        // exiting for had been started, and the update would simply never
+        // happen. The webview goes with the process a moment later.
+        let _ = window.hide();
+    }
+
+    // The log is a rotating file writer and the process is about to end, so this
+    // is the last chance for the record of what happened to reach disk.
+    log::logger().flush();
+}
+
+pub fn is_shutting_down() -> bool {
+    SHUTTING_DOWN.load(Ordering::SeqCst)
+}
+
 pub fn show_main_window(app: &tauri::AppHandle) {
+    // Checked before `SHOWN`, so a quit that lands first does not also consume
+    // the one-shot and leave a genuine later show silently doing nothing.
+    if is_shutting_down() {
+        return;
+    }
     if SHOWN.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -161,6 +254,8 @@ pub fn run() {
             commands::clear_preview,
             commands::apply_pack,
             commands::restore_windows_default,
+            commands::get_scheme_status,
+            commands::acknowledge_scheme_loss,
             commands::list_presets,
             commands::save_preset,
             commands::delete_preset,
@@ -203,6 +298,13 @@ pub fn run() {
 
             log_startup_record();
 
+            // Whether the last launch handed the machine to an installer, and
+            // whether that installer did what it said. Answered here because it
+            // can only be answered here: the process that started the update is
+            // gone, and the version now running is the only evidence of how it
+            // went.
+            updates::settle_and_report();
+
             // Before anything else touches the registry: capture what was there
             // first. Idempotent, so this is a no-op on every launch but the
             // first (PRD §4.4).
@@ -213,6 +315,26 @@ pub fn run() {
             // Shipped packs land before the catalog is first asked for, so a
             // machine that has never run the app already has them.
             bundled::install_missing();
+
+            // Claimed here rather than left to the watchdog's first tick, which
+            // is a whole interval away. A channel that spends its first five
+            // seconds not knowing whether it owns the pointer cannot tell the
+            // person at the keyboard either, and the window is on screen by
+            // then.
+            if channel::guards_pointer_by_default() {
+                cursor::crosschannel::try_claim();
+            }
+            match cursor::crosschannel::deferral_notice() {
+                Some(notice) => log::info!("cross-channel: {notice}"),
+                // Worth a line of its own: it is the answer to "why is my dev
+                // build not putting the cursor back", and without it the only
+                // evidence is an absence of log lines.
+                None if !channel::guards_pointer_by_default() => log::info!(
+                    "cross-channel: the {} channel does not defend the pointer scheme",
+                    channel::NAME
+                ),
+                None => {}
+            }
 
             state::settings::propagate(&settings);
             cursor::watchdog::start();
@@ -240,7 +362,7 @@ pub fn run() {
                 // mark to the one person most likely to notice. Setting it here
                 // sources it from the binary every launch, which no cache sits in
                 // front of.
-                match tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png")) {
+                match tauri::image::Image::from_bytes(WINDOW_ICON) {
                     Ok(icon) => {
                         if let Err(e) = window.set_icon(icon) {
                             log::warn!("could not set the window icon: {e}");
@@ -263,7 +385,11 @@ pub fn run() {
                 if let Some(main) = window.app_handle().get_webview_window("main") {
                     window_state::save(&main);
                 }
-                if state::settings::get().close_to_tray {
+                // Not while shutting down. `prepare_for_shutdown` destroys the
+                // window on the way into an update, and answering that by
+                // hiding to the tray would leave the webview alive holding the
+                // files the installer is about to replace.
+                if !is_shutting_down() && state::settings::get().close_to_tray {
                     // Closing hides; quitting is a deliberate act from the tray
                     // or the hotkey, so the watchdog keeps working (PRD §9).
                     api.prevent_close();
@@ -292,11 +418,18 @@ pub fn run() {
 /// unconditionally, because a log that only starts after you know you needed it
 /// is not a log.
 fn log_startup_record() {
+    // The marker is printed rather than merely defined, and this is the only
+    // place it is read at runtime. `check-bundle.mjs` fails any release artifact
+    // containing the dev channel's marker, and it can only find a string the
+    // linker kept — which it does because this line uses it. A `#[used]` static
+    // would express the intent better and survive `/OPT:REF` worse.
     log::info!(
-        "Cursed {} ({}, {}) starting",
+        "Cursed {} ({}, {}, {} channel) starting [{}]",
         env!("CARGO_PKG_VERSION"),
         option_env!("CURSED_COMMIT").unwrap_or("local"),
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        channel::NAME,
+        channel::MARKER
     );
 
     for (label, dir) in [

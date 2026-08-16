@@ -17,6 +17,20 @@ pub fn register(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     let manager = app.global_shortcut();
     let _ = manager.unregister_all();
 
+    // A shortcut belongs to one process per session, first come first served.
+    // With both channels installed, whichever launched first would take
+    // `Ctrl+Alt+1` and the other would get nothing — no error, no log line, just
+    // a hotkey that does not work. The dev channel therefore does not ask, so
+    // the copy standing in for a real install behaves exactly as a stranger's
+    // would while it is being developed beside.
+    if !crate::channel::claims_hotkeys_by_default() {
+        log::info!(
+            "hotkeys: the {} channel yields global shortcuts to the released app",
+            crate::channel::NAME
+        );
+        return Ok(());
+    }
+
     let mut bindings: Vec<(String, Action)> = vec![
         (settings.hotkey_toggle.clone(), Action::Toggle),
         (settings.hotkey_open.clone(), Action::Open),

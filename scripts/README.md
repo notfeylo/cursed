@@ -7,9 +7,11 @@ PowerShell for the one thing that has to talk to a real Windows install.
 | --- | --- | --- |
 | `build-release.mjs` | `npm run release` | Cutting a release. Builds x64, ARM64 and 32-bit, then the x64 offline build with the WebView2 runtime embedded; stages each under both its versioned name and an unversioned alias, and writes `SHA256SUMS.txt` into `dist-release/`. |
 | `verify-uninstall.ps1` | `powershell -File scripts/verify-uninstall.ps1 -Snapshot` before installing, no arguments after uninstalling | **Release gate.** Asserts all seventeen pointer roles came back byte-identical and that no file, registry key, cursor scheme, autostart entry or shortcut remains. Exit code is the number of failed assertions, so it can gate a release automatically. |
-| `check-bundle.mjs` | `npm run check:bundle` (after `npm run build`) | Every CI run. Catches a font subset with no Latin glyphs — which silently renders in a fallback face and still looks fine at a glance — and the dev-only specimen route reaching production. |
+| `check-bundle.mjs` | `npm run check:bundle` (after `npm run build`) | Every CI run. Catches a font subset with no Latin glyphs — which silently renders in a fallback face and still looks fine at a glance — the dev-only specimen route reaching production, and a development-channel binary about to ship as the release. |
 | `set-version.mjs` | `npm run version:set 1.19.0` | Bumping the version. `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` each carry one; bumping by hand is how they drift, and a drifted version makes the updater compare against a version the app is not running. |
 | `make-icon.mjs` | `node scripts/make-icon.mjs src-tauri/icons/source.png` | Redrawing the app mark. Renders 1024×1024 with no image dependencies — Node's zlib is all a PNG encoder needs — and `tauri icon` derives the rest of the set from it. |
+| `build-dev.mjs` | `npm run build:dev` | Building the development channel's installer. The cargo feature and the config override are both required and neither is checked by the build, so this asserts afterwards that the artifact is the one that was asked for. See [`../docs/CHANNELS.md`](../docs/CHANNELS.md). |
+| `channels.mjs` | `npm run channels` | Working out which of the two installed channels is holding the pointer. Read-only: which channels are installed and running, how large each data directory is, who last claimed the scheme and who captured the original. |
 
 ## Why the release script builds four installers
 
@@ -31,8 +33,13 @@ update can never quietly pull 214 MB on a metered connection.
 npm run check:bundle
 cargo clippy --all-targets -- -D warnings     # from src-tauri, per shipped target
 cargo test                                    # from src-tauri
+cargo test --features dev-channel             # the other channel's constants
 npx tsc --noEmit
 ```
+
+The second `cargo test` is not redundant. The channels are `#[cfg]`-gated
+constants, so the default run never compiles the dev channel's code or the
+assertions that hold it apart from the shipped one.
 
 then the uninstall check above, which needs a real machine or a VM rolled back
 to a clean snapshot. What each release actually verified — and what it could

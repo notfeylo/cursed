@@ -111,12 +111,62 @@ pub const LOCKUP: &str = concat!(
     r#"<path fill-rule="evenodd" d="M85.94 36.98 L95.83 36.98 L98.44 38.54 L99.48 42.19 L99.48 55.73 L98.44 58.85 L96.35 60.42 L85.94 60.42 L85.94 37.50 Z M90.62 41.67 L94.79 42.19 L94.27 55.73 L90.62 55.73 L90.62 42.19 Z"/>"#,
 );
 
+/// The accent an icon is drawn in. Geometry is shared; only the hue moves.
+///
+/// The two channels install side by side, and each puts a mark in the tray, the
+/// taskbar, the Start menu and the Alt-Tab list. Identical icons in all four
+/// mean the only way to find out which app you are about to click is to click
+/// it. Hue rather than a badge or a corner dot, because the tray draws this at
+/// 16x16, where a badge is a smudge and a colour is still a colour.
+pub struct IconPalette {
+    /// Highlight along the tile's bevel.
+    pub edge_hi: &'static str,
+    /// The bevel's body, and the shaded stop of the mark's face.
+    pub accent: &'static str,
+    /// The lit stop of the mark's face.
+    pub face_hi: &'static str,
+    /// The fold across the wedge: lit, then in shadow.
+    pub fold_hi: &'static str,
+    pub fold_lo: &'static str,
+}
+
+/// What ships.
+pub const ICON_BLUE: IconPalette = IconPalette {
+    edge_hi: "#5cb8ff",
+    accent: "#2e8bff",
+    face_hi: "#7cc6ff",
+    fold_hi: "#2472d6",
+    fold_lo: "#123a72",
+};
+
+/// The development channel. Amber is the furthest thing from the product blue
+/// that still sits on the dark tile without vibrating against it.
+pub const ICON_AMBER: IconPalette = IconPalette {
+    edge_hi: "#ffc95c",
+    accent: "#ff9f0a",
+    face_hi: "#ffd27c",
+    fold_hi: "#d67f24",
+    fold_lo: "#7a4512",
+};
+
 /// The full app icon: the mark on a rounded, bevelled tile.
 ///
 /// Icons are composited against unknown backgrounds — a taskbar, a dark or light
 /// installer, a store listing — so this one carries its own ground rather than
 /// relying on transparency to look intentional.
 pub fn icon_svg() -> String {
+    icon_svg_in(&ICON_BLUE)
+}
+
+/// The same icon in another accent. See [`IconPalette`].
+pub fn icon_svg_in(palette: &IconPalette) -> String {
+    let IconPalette {
+        edge_hi,
+        accent,
+        face_hi,
+        fold_hi,
+        fold_lo,
+    } = *palette;
     format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
@@ -126,17 +176,17 @@ pub fn icon_svg() -> String {
       <stop offset="1" stop-color="#05070b"/>
     </linearGradient>
     <linearGradient id="edge" x1="0" y1="0" x2="0.3" y2="1">
-      <stop offset="0" stop-color="#5cb8ff" stop-opacity="0.75"/>
-      <stop offset="0.5" stop-color="#2e8bff" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#2e8bff" stop-opacity="0.05"/>
+      <stop offset="0" stop-color="{edge_hi}" stop-opacity="0.75"/>
+      <stop offset="0.5" stop-color="{accent}" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="{accent}" stop-opacity="0.05"/>
     </linearGradient>
     <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
-      <stop offset="0" stop-color="#7cc6ff"/>
-      <stop offset="1" stop-color="#2e8bff"/>
+      <stop offset="0" stop-color="{face_hi}"/>
+      <stop offset="1" stop-color="{accent}"/>
     </linearGradient>
     <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#2472d6"/>
-      <stop offset="1" stop-color="#123a72"/>
+      <stop offset="0" stop-color="{fold_hi}"/>
+      <stop offset="1" stop-color="{fold_lo}"/>
     </linearGradient>
     <filter id="cast" x="-40%" y="-40%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="13"/>
@@ -174,6 +224,41 @@ mod tests {
                 .unwrap_or_else(|e| panic!("icon failed at {size}px: {e}"));
             assert!(!bitmap.is_empty(), "icon rendered blank at {size}px");
         }
+    }
+
+    /// The dev channel's icon has to be tellable from the shipped one across a
+    /// taskbar. Sharing even one accent stop is how two marks end up looking
+    /// like the same mark at 16 px.
+    #[test]
+    fn the_two_channel_icons_share_no_accent() {
+        let blue = [
+            ICON_BLUE.edge_hi,
+            ICON_BLUE.accent,
+            ICON_BLUE.face_hi,
+            ICON_BLUE.fold_hi,
+            ICON_BLUE.fold_lo,
+        ];
+        for amber in [
+            ICON_AMBER.edge_hi,
+            ICON_AMBER.accent,
+            ICON_AMBER.face_hi,
+            ICON_AMBER.fold_hi,
+            ICON_AMBER.fold_lo,
+        ] {
+            assert!(!blue.contains(&amber), "{amber} is in both palettes");
+        }
+    }
+
+    /// Only the hue moves. If the geometry differs too, the dev icon has become
+    /// a second mark to maintain rather than a tint of the first.
+    #[test]
+    fn only_the_colour_differs_between_the_channel_icons() {
+        let shipped = icon_svg();
+        let dev = icon_svg_in(&ICON_AMBER);
+        assert_ne!(shipped, dev);
+        assert!(dev.contains(MARK) && dev.contains(WING));
+        assert_eq!(shipped.lines().count(), dev.lines().count());
+        assert!(crate::build::svg::render(&dev, 16).is_ok_and(|b| !b.is_empty()));
     }
 
     #[test]

@@ -17,6 +17,18 @@
  * tree-shaken, so declaring candidate faces in `styles.css` shipped all eight
  * inside the build. This asserts the built bundle contains exactly the faces
  * the app uses — no more — and that the dev-only specimen route is absent.
+ *
+ * **3. A dev-channel binary shipping as the release.**
+ * The two channels differ only by a cargo feature, so the wrong `--features`
+ * produces an installer that looks right, is named right, and installs an app
+ * that writes to `Cursed (Dev)` and refuses to defend the pointer. Every build
+ * stamps its channel marker into the executable (`src/channel.rs`), and this
+ * asserts the release binaries carry the user channel's and not the dev one's.
+ *
+ * The *installers* are not searched: NSIS compresses its payload with LZMA, so
+ * a marker inside one is not findable as text and a search would pass on every
+ * build including a bad one. The uncompressed `.exe` under `target/` is what
+ * gets read, and the installer is checked by name.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -88,6 +100,83 @@ for (const name of sourceFonts) {
   if (!EXPECTED_FONTS.some((e) => name.startsWith(e))) {
     fail(`${name} is in src/assets/fonts but no face uses it — delete it or add it to EXPECTED_FONTS`);
   }
+}
+
+// ── the shipped binaries belong to the user channel ──────────────
+//
+// Written out rather than parsed from channel.rs so that changing a marker is
+// a deliberate act in two places, the way EXPECTED_FONTS is. The assertion
+// below keeps the two from drifting apart silently.
+const USER_MARKER = "CURSED-CHANNEL:USER";
+const DEV_MARKER = "CURSED-CHANNEL:DEV";
+
+console.log("\nChannel markers");
+const channelSource = readFileSync(join(root, "src-tauri", "src", "channel.rs"), "utf8");
+for (const marker of [USER_MARKER, DEV_MARKER]) {
+  if (!channelSource.includes(`"${marker}"`)) {
+    fail(`src/channel.rs no longer defines ${marker} — this guard is searching for a string nothing emits`);
+  }
+}
+
+// Every release directory a build could have produced. `target/release` is the
+// host build — which is the one CI produces, and leaving it out was a guard
+// that ran on every push and inspected nothing.
+const target = join(root, "src-tauri", "target");
+const releaseDirs = [join(target, "release")];
+try {
+  for (const entry of readdirSync(target)) {
+    releaseDirs.push(join(target, entry, "release"));
+  }
+} catch {
+  // No target/ at all: nothing has been built here yet.
+}
+
+// Only the binary that ships. `genpacks.exe` is the offline catalog tool and is
+// not part of any installer, and `Cursed Dev.exe` is the dev channel's own
+// bundle — built on purpose, correctly marked, and never staged for release.
+const SHIPPED = "Cursed.exe";
+const markerAge = statSync(join(root, "src-tauri", "src", "channel.rs")).mtimeMs;
+
+let checked = 0;
+let stale = 0;
+for (const dir of releaseDirs) {
+  const exe = join(dir, SHIPPED);
+  let stat;
+  try {
+    stat = statSync(exe);
+  } catch {
+    continue;
+  }
+  const text = readFileSync(exe, "latin1");
+
+  if (text.includes(DEV_MARKER)) {
+    fail(`${exe} is a DEV-CHANNEL build — it must not be released`);
+  } else if (text.includes(USER_MARKER)) {
+    checked += 1;
+    console.log(`  ok  ${USER_MARKER}  ${dir}`);
+  } else if (stat.mtimeMs < markerAge) {
+    // Built before channel.rs existed, so it cannot carry a marker and its
+    // absence proves nothing. Said out loud rather than skipped silently: a
+    // guard that quietly inspects nothing reads exactly like one that passed.
+    stale += 1;
+    console.log(`  --  ${exe}\n      predates the channel marker; rebuild to have it checked`);
+  } else {
+    // Newer than the marker and still without one: something is emitting a
+    // binary this guard cannot vouch for.
+    fail(`${exe} carries no channel marker despite being built after channel.rs`);
+  }
+}
+if (checked === 0 && stale === 0) {
+  console.log("  --  no release binary built yet; nothing to check");
+}
+
+// The staging directory only ever holds what a release publishes.
+try {
+  for (const name of readdirSync(join(root, "dist-release"))) {
+    if (/dev/i.test(name)) fail(`dist-release/${name} is named as a dev-channel artifact`);
+  }
+} catch {
+  // Nothing staged; `npm run release` has not been run since the last clean.
 }
 
 let dist;

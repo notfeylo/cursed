@@ -69,6 +69,23 @@ export const applyPack = (args: ApplyArgs) => call<void>("apply_pack", { args })
 export const restoreWindowsDefault = () => call<void>("restore_windows_default");
 export const getCursorBaseSize = () => call<number>("get_cursor_base_size");
 
+/** What "restore" can actually give back on this machine. */
+export interface SchemeStatus {
+  /**
+   * True when the machine's pre-Cursed pointers were destroyed before Cursed
+   * could record them — which is what every in-app update up to and including
+   * v1.20.0 did. Restore still works and still returns a normal Windows
+   * pointer; it just cannot return a customisation that predates Cursed.
+   */
+  originalLost: boolean;
+  /** Whether the user has already been told, and dismissed it. */
+  acknowledged: boolean;
+}
+
+export const getSchemeStatus = () => call<SchemeStatus>("get_scheme_status");
+/** Dismisses the lost-scheme notice permanently. */
+export const acknowledgeSchemeLoss = () => call<void>("acknowledge_scheme_loss");
+
 /* ── presets ───────────────────────────────────────────────── */
 
 export const listPresets = () => call<Preset[]>("list_presets");
@@ -189,6 +206,18 @@ export const installUpdate = (version: string, installer: string) =>
 
 export const clearUpdateDownloads = () => call<void>("clear_update_downloads");
 
+/**
+ * How the last update attempt turned out, decided on this launch.
+ *
+ * An update replaces the running binary, so nothing about the outcome can be
+ * observed by the process that started it. The answer is worked out on the next
+ * launch, by comparing the version now running against the one the installer
+ * was asked to produce.
+ */
+export type InstallOutcome =
+  | { outcome: "succeeded"; from: string; to: string }
+  | { outcome: "didNotTake"; from: string; to: string };
+
 export interface UpdateState {
   checking: boolean;
   downloading: boolean;
@@ -199,6 +228,8 @@ export interface UpdateState {
   total: number;
   status: UpdateStatus | null;
   error: string | null;
+  /** `null` on every ordinary launch. */
+  installed: InstallOutcome | null;
 }
 
 /** What the background updater has found. Cheap enough to poll. */

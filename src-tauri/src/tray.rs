@@ -79,7 +79,13 @@ pub fn create(app: &AppHandle) -> AppResult<()> {
                     crate::session::forget();
                     refresh_tooltip(app);
                 }
-                QUIT => app.exit(0),
+                QUIT => {
+                    // Before the exit, not after: the tray menu is one of the
+                    // few things still able to raise a window while the event
+                    // loop is being torn down.
+                    crate::begin_shutdown();
+                    app.exit(0)
+                }
                 other => {
                     if let Some(preset_id) = other.strip_prefix(PRESET_PREFIX) {
                         if let Ok(preset) = presets::get(preset_id) {
@@ -140,6 +146,12 @@ pub fn set_visible(app: &AppHandle, visible: bool) -> AppResult<()> {
 
 /// Brings the window back, on the monitor the pointer is on (PRD §10.1).
 pub fn show_window(app: &AppHandle) {
+    // A tray click and a quit can arrive in either order, and this one is also
+    // what the single-instance plugin calls when a second copy is launched — so
+    // it can fire while the event loop is already going away.
+    if crate::is_shutting_down() {
+        return;
+    }
     let Some(window) = app.get_webview_window("main") else {
         return;
     };

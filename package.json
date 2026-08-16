@@ -13,10 +13,14 @@
     "tauri": "tauri",
     "generate:packs": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- assets/packs",
     "generate:icon": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --icon src-tauri/icons/source.png 1024",
+    "generate:icon:dev": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --icon src-tauri/icons/dev-source.png 1024 --dev && npm run tauri -- icon src-tauri/icons/dev-source.png -o src-tauri/icons/dev",
     "lint:types": "tsc --noEmit",
     "version:set": "node scripts/set-version.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
-    "release": "node scripts/build-release.mjs"
+    "release": "node scripts/build-release.mjs",
+    "dev:channel": "npm run tauri -- dev --features dev-channel --config dev.tauri.conf.json",
+    "build:dev": "node scripts/build-dev.mjs",
+    "channels": "node scripts/channels.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

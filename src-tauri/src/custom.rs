@@ -312,6 +312,30 @@ fn file_for(id: &str, size: u32) -> AppResult<PathBuf> {
     file_for_role(id, size, false)
 }
 
+/// The animation to use for a requested size, preferring the rung *above* it.
+///
+/// A custom cursor's `.ani` files are written once, one per ladder rung, while
+/// the size control moves a pixel at a time — so the requested size usually
+/// falls between two rungs and Windows has to rescale whichever it is handed.
+///
+/// Which side it comes from decides how it looks. Given a smaller rung the shell
+/// enlarges: bilinear, unpremultiplied, no gamma correction, and every edge goes
+/// soft and blocky — which is most of what a large animated cursor looked like.
+/// Given a larger one it shrinks instead, and a minified bitmap keeps its edges.
+/// So the smallest rung at or above the request wins, and only when there is
+/// none does it fall back downwards, largest first, to keep the enlargement as
+/// small as possible.
+fn best_animation(dir: &std::path::Path, prefix: &str, size: u32) -> Option<PathBuf> {
+    let mut rungs = TARGET_SIZES;
+    rungs.sort_unstable();
+    let at_or_above = rungs.iter().copied().filter(|&rung| rung >= size);
+    let below = rungs.iter().copied().filter(|&rung| rung < size).rev();
+    at_or_above
+        .chain(below)
+        .map(|rung| dir.join(format!("{prefix}{rung}.ani")))
+        .find(|candidate| candidate.exists())
+}
+
 /// The same, but able to return the hover artwork when there is any.
 fn file_for_role(id: &str, size: u32, hand: bool) -> AppResult<PathBuf> {
     let dir = cursor_dir(id)?;
@@ -320,8 +344,7 @@ fn file_for_role(id: &str, size: u32, hand: bool) -> AppResult<PathBuf> {
         if still.exists() {
             return Ok(still);
         }
-        let animated = dir.join(format!("hand-{}.ani", pipeline::nearest_size(size)));
-        if animated.exists() {
+        if let Some(animated) = best_animation(&dir, "hand-", size) {
             return Ok(animated);
         }
         // No hover image: fall through to the main cursor, which is what a
@@ -331,8 +354,7 @@ fn file_for_role(id: &str, size: u32, hand: bool) -> AppResult<PathBuf> {
     if still.exists() {
         return Ok(still);
     }
-    let animated = dir.join(format!("{}.ani", pipeline::nearest_size(size)));
-    if animated.exists() {
+    if let Some(animated) = best_animation(&dir, "", size) {
         return Ok(animated);
     }
     Err(AppError::invalid(
@@ -358,7 +380,11 @@ pub fn build_set(
             let pack = blend_pack.ok_or_else(|| {
                 AppError::invalid("blending needs a catalog pack for the other roles")
             })?;
-            catalog::build_set(pack, spec)?
+            // The descriptor stored this id when the cursor was applied, and it
+            // may name one of the 290 generated packs that no longer exist — in
+            // which case failing here would leave the size and colour controls
+            // permanently doing nothing. See `catalog::resolve_blend_base`.
+            catalog::build_set(&catalog::resolve_blend_base(pack), spec)?
         }
         _ => CursorSet::default(),
     };
@@ -487,6 +513,42 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// An animated custom cursor is drawn at whatever `CursorBaseSize` says,
+    /// while its files exist only at the ladder rungs — so one of them has to be
+    /// rescaled by Windows, and which side it comes from decides how it looks.
+    ///
+    /// Enlarging is the shell's bilinear stretch with no premultiplication and
+    /// no gamma correction; shrinking keeps its edges. Picking the *nearest*
+    /// rung sent 78 px to the 64 px file and enlarged it. The rung above is the
+    /// one to take.
+    #[test]
+    fn an_animation_is_shrunk_to_size_rather_than_stretched_up_to_it() {
+        let id = "test-rung-choice";
+        let Ok(dir) = cursor_dir(id) else { return };
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+
+        for rung in TARGET_SIZES {
+            std::fs::write(dir.join(format!("{rung}.ani")), b"frames").expect("write");
+        }
+
+        // 78 is nearer to 64, and 64 is the wrong answer.
+        let chosen = best_animation(&dir, "", 78).expect("a rung");
+        assert!(
+            chosen.ends_with("96.ani"),
+            "78px should shrink the 96px file, not stretch the 64px one: got {chosen:?}"
+        );
+        // An exact rung is taken exactly.
+        assert!(best_animation(&dir, "", 48).expect("a rung").ends_with("48.ani"));
+
+        // Above every rung there is nothing to shrink, so the largest wins and
+        // the enlargement is as small as it can be.
+        assert!(best_animation(&dir, "", 200).expect("a rung").ends_with("128.ani"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use std::io::Cursor as IoCursor;
 
     fn png(width: u32, height: u32) -> Vec<u8> {

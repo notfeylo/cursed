@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
   debugLogging: false,
   firstRunDone: false,
+  schemeLossAcknowledged: false,
 };
 
 const DEFAULT_ACTIVE: ActiveState = {

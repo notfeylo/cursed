@@ -246,6 +246,46 @@ pub fn restore_windows_default(app: AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// What "restore" is actually able to give back on this machine.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchemeStatus {
+    /// True when this machine's pre-Cursed pointers were destroyed before they
+    /// could be recorded — see `cursor::restore::Provenance::Lost`.
+    pub original_lost: bool,
+    /// Whether the user has already been told.
+    pub acknowledged: bool,
+}
+
+/// Whether the machine's original pointer scheme survived.
+///
+/// Cheap: one file read, already cached by the OS, and the Settings screen asks
+/// for it once when it opens.
+#[tauri::command]
+pub fn get_scheme_status() -> AppResult<SchemeStatus> {
+    Ok(SchemeStatus {
+        original_lost: !cursor::restore::provenance().is_real(),
+        acknowledged: settings::get().scheme_loss_acknowledged,
+    })
+}
+
+/// Dismisses the lost-scheme notice, permanently.
+///
+/// Its own command rather than a `save_settings` round trip: the frontend would
+/// otherwise have to send back the entire settings object to change one flag,
+/// and a stale copy of that object — one loaded before the user changed
+/// something in another panel — would quietly revert their change.
+#[tauri::command]
+pub fn acknowledge_scheme_loss() -> AppResult<()> {
+    let mut current = settings::get();
+    if current.scheme_loss_acknowledged {
+        return Ok(());
+    }
+    current.scheme_loss_acknowledged = true;
+    settings::save(current)?;
+    Ok(())
+}
+
 /* ── presets ───────────────────────────────────────────────── */
 
 #[tauri::command]
@@ -659,6 +699,29 @@ pub fn get_diagnostics() -> AppResult<String> {
             .unwrap_or_else(|e| e.to_string())
     );
 
+    // Which of the two installs this is, and whether it is the one defending
+    // the scheme. On almost every machine there is one channel and these are two
+    // dull lines; on the machines where there are two, they are the difference
+    // between a bug and two apps disagreeing.
+    let _ = writeln!(
+        out,
+        "channel {} ({})",
+        crate::channel::PRODUCT_NAME,
+        crate::channel::NAME
+    );
+    let _ = writeln!(
+        out,
+        "pointer {}",
+        if crate::cursor::crosschannel::owns_pointer() {
+            "held by this process".to_owned()
+        } else {
+            match crate::cursor::crosschannel::holder() {
+                Some(other) => format!("held by {} (pid {})", other.product_name, other.pid),
+                None => "not claimed".to_owned(),
+            }
+        }
+    );
+
     // A profile that cannot be written is the difference between a working
     // catalog and a screen with nothing on it.
     let _ = writeln!(out, "\nSTORAGE");
@@ -792,19 +855,35 @@ pub fn download_update(version: String, installer: String) -> AppResult<u64> {
 /// release, then launches it. Refuses to run anything that does not match.
 #[tauri::command]
 pub fn install_update(app: AppHandle, version: String, installer: String) -> AppResult<()> {
-    updates::verify_and_launch(&version, &installer)?;
+    // Verified first, and nothing is torn down until it passes. A checksum
+    // failure has to leave the app exactly as it was rather than half closed
+    // around an installer that will never run.
+    let file = updates::verified_installer(&version, &installer)?;
 
-    // The installer needs our files unlocked, and leaving a stale copy running
-    // behind a fresh install is how you get two tray icons.
-    //
-    // Exiting on a short delay rather than in the same breath. NSIS looks for a
-    // running copy within moments of starting, and quitting *while* it looks is
-    // the race that ends in a prompt about a locked file. A second is invisible
-    // to the user and puts the two events in a defined order.
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(1_000));
-        app.exit(0);
-    });
+    // Recorded before the handover, because after it there is no "before" left
+    // to record: the binary is replaced and this process is gone. The next
+    // launch reads this to work out whether the update actually happened.
+    if let Err(e) = updates::record_pending_install(&version) {
+        // Not fatal. Losing the ability to *report* on an update is not a
+        // reason to refuse to perform one.
+        log::warn!("update: the pending-install record could not be written: {e}");
+    }
+
+    // Then everything this process holds, released in order.
+    crate::prepare_for_shutdown(&app);
+
+    // Only now. If this fails, the app has been torn down but not replaced —
+    // so the error is returned and the frontend can say so, and the user is one
+    // relaunch away from a working app rather than looking at an installer that
+    // silently did nothing.
+    updates::launch(&file)?;
+
+    // Immediately, not on a timer. The old code waited a second before exiting
+    // in the hope of winning a race against the installer's running-app check;
+    // that check no longer runs, because `/P` makes the installer terminate a
+    // straggler silently instead of asking. Leaving promptly means there is
+    // usually nothing left to terminate at all.
+    app.exit(0);
     Ok(())
 }
 
@@ -894,6 +973,7 @@ pub fn hide_to_tray(app: AppHandle) -> AppResult<()> {
 
 #[tauri::command]
 pub fn quit_app(app: AppHandle) -> AppResult<()> {
+    crate::begin_shutdown();
     app.exit(0);
     Ok(())
 }

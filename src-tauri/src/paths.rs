@@ -5,15 +5,11 @@
 use crate::error::{AppError, AppResult};
 use std::path::{Component, Path, PathBuf};
 
-const APP_DIR: &str = "Cursed";
-/// What the storage folder was called before the app was renamed.
-///
-/// Must stay the *old* name. If it ever equals `APP_DIR` the migration below
-/// silently does nothing and every existing user's settings, presets and
-/// imported cursors are stranded in a folder the app no longer looks at.
-const LEGACY_APP_DIR: &str = "CursorForge";
+/// `Cursed`, or `Cursed (Dev)` on the development channel. Never written as a
+/// literal anywhere else — see `crate::channel`.
+const APP_DIR: &str = crate::channel::DATA_DIR;
 
-/// `%APPDATA%\Cursed`
+/// `%APPDATA%\Cursed`, or `%APPDATA%\Cursed (Dev)`
 ///
 /// Renaming the app must not cost anyone their settings, presets and imported
 /// cursors, so the first call after an upgrade moves the old folder across.
@@ -25,15 +21,24 @@ pub fn root() -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::storage("APPDATA is not set"))?;
     let dir = base.join(APP_DIR);
 
+    // The migration fires when this channel's directory is absent — which is
+    // true of the dev channel on its very first run, on a machine whose
+    // `CursorForge` folder belongs to the *user* channel. Without this gate the
+    // first `npm run tauri dev` would move the real install's settings, presets
+    // and imported artwork into the dev channel and leave the user channel to
+    // start from nothing. Only the channel that inherited the old name may
+    // claim the old folder.
     if !dir.exists() {
-        let legacy = base.join(LEGACY_APP_DIR);
-        if legacy.is_dir() {
-            // A rename is atomic and cheap. If it fails — the old folder is open
-            // in Explorer, say — fall through and start fresh rather than refuse
-            // to launch.
-            match std::fs::rename(&legacy, &dir) {
-                Ok(()) => log::info!("moved existing data from {LEGACY_APP_DIR} to {APP_DIR}"),
-                Err(e) => log::warn!("could not migrate {LEGACY_APP_DIR}: {e}"),
+        if let Some(legacy_name) = crate::channel::legacy_data_dir() {
+            let legacy = base.join(legacy_name);
+            if legacy.is_dir() {
+                // A rename is atomic and cheap. If it fails — the old folder is
+                // open in Explorer, say — fall through and start fresh rather
+                // than refuse to launch.
+                match std::fs::rename(&legacy, &dir) {
+                    Ok(()) => log::info!("moved existing data from {legacy_name} to {APP_DIR}"),
+                    Err(e) => log::warn!("could not migrate {legacy_name}: {e}"),
+                }
             }
         }
     }
@@ -214,10 +219,30 @@ mod tests {
     /// must never be equal.
     #[test]
     fn the_legacy_data_folder_is_not_the_current_one() {
-        assert_ne!(
-            APP_DIR, LEGACY_APP_DIR,
-            "migration would be a no-op and existing data would be orphaned"
-        );
+        if let Some(legacy) = crate::channel::legacy_data_dir() {
+            assert_ne!(
+                APP_DIR, legacy,
+                "migration would be a no-op and existing data would be orphaned"
+            );
+        }
+    }
+
+    /// The dev channel must not adopt the folder the user channel came from.
+    /// If it ever does, the first dev launch on this machine takes the real
+    /// install's data with it.
+    #[test]
+    fn the_dev_channel_inherits_nothing() {
+        if crate::channel::IS_DEV {
+            assert!(crate::channel::legacy_data_dir().is_none());
+        }
+    }
+
+    /// The two channels must not share a data directory. This is the single
+    /// most important separation in the product: one root holds the settings,
+    /// the presets, the imported artwork and the original-scheme snapshot.
+    #[test]
+    fn the_channels_do_not_share_a_root() {
+        assert_eq!(APP_DIR == "Cursed", !crate::channel::IS_DEV);
     }
 
     #[test]

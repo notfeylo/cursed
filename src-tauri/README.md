@@ -29,7 +29,8 @@ is not reachable from one of those two files, it is not reachable at all.
 | `cursor/` | The three layers of applying a cursor — see below. |
 | `build/` | Artwork in, cursor files out. Pure, and unit-tested: no registry, no Win32. |
 | `packs/` | The catalog: parametric artwork, the brand mark, and the renderer. |
-| `state/` | `settings.rs` (what the user chose) and `presets.rs` (saved looks). |
+| `state/` | `settings.rs` (what the user chose), `presets.rs` (saved looks), and `store.rs` — **the only place a state file is read or written.** Write, flush, `sync_all`, rename; a `.bak` beside every file; a file that will not parse is set aside rather than overwritten. |
+| `stress.rs` | The resource-leak harness behind `genpacks --stress-handles`. Loads and releases cursor handles thousands of times and watches the GDI and USER counters, because a leak of one handle per apply is invisible by reading and fatal by Thursday. |
 | `session.rs` | What is applied *now*, across launches. The registry persists the cursor; this persists the reason — which pack, which tint, which size — so the watchdog can tell a theme reset from a deliberate change. |
 | `custom.rs` | The image-to-cursor feature. Staging (decode, normalise, show) is deliberately separate from building (write the files): nothing touches the pointer until the user has seen what they are about to get. |
 | `import.rs` | Folders and zips of `.cur`/`.ani` someone already had, turned into first-class catalog entries. |
@@ -37,6 +38,7 @@ is not reachable from one of those two files, it is not reachable at all.
 | `updates.rs` | Check, download, verify, install — on WinHTTP rather than an HTTP crate, so it uses the OS certificate store and proxy settings and keeps ~2 MB of TLS stack out of a 12 MB binary. |
 | `hash.rs` | SHA-256 through Windows CNG, used to verify a downloaded installer against the published checksum *before* it is executed. |
 | `paths.rs` | Every path the app writes, and the only place that decides what a legal path is. Nothing else builds one. |
+| `channel.rs` | Which of the two side-by-side installs this binary is, resolved at compile time. Every name that lets Windows tell them apart comes from here and is written nowhere else — see [`../docs/CHANNELS.md`](../docs/CHANNELS.md). |
 | `tray.rs` | The tray icon and its menu — switch preset, put Windows back, quit. This app spends most of its life here. |
 | `hotkeys.rs` | Global shortcuts. Registration is per-accelerator: one clash skips one shortcut instead of losing them all. |
 | `autostart.rs` | Launch on sign-in, per-user under `HKCU\...\Run`. `--silent` is what sends an autostarted launch to the tray instead of throwing a window at someone who just signed in. |
@@ -55,6 +57,7 @@ is not reachable from one of those two files, it is not reachable at all.
 | `watchdog.rs` | **C.** Notices when something else stomps on B — a theme change, a settings sync, another cursor app — and re-applies. |
 | `restore.rs` | Undo. Hands the machine back exactly as it was found, and is used by Settings *and* by the uninstaller. |
 | `roles.rs` | The seventeen roles and their registry names. |
+| `crosschannel.rs` | Not a layer — the arbitration above them. There is one pointer scheme per Windows user and two installs that both write it, so this decides which may defend it, and which channel's capture of the original counts. |
 
 ### `build/` — artwork to cursor files
 

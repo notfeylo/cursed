@@ -68,6 +68,14 @@ pub struct Settings {
     // Advanced
     pub debug_logging: bool,
     pub first_run_done: bool,
+    /// Whether the user has seen the notice about their original pointer scheme
+    /// having been lost to the update bug that shipped through v1.20.0.
+    ///
+    /// A setting rather than a marker file because it is exactly what a setting
+    /// is: a per-user preference about the app's behaviour, and one the user
+    /// sets by dismissing a banner. The notice is shown once and never again,
+    /// and there is nothing to un-dismiss — the information is gone either way.
+    pub scheme_loss_acknowledged: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +117,7 @@ impl Default for Settings {
 
             debug_logging: false,
             first_run_done: false,
+            scheme_loss_acknowledged: false,
         }
     }
 }
@@ -139,13 +148,22 @@ impl Settings {
 
 fn slot() -> &'static Mutex<Settings> {
     static SETTINGS: OnceLock<Mutex<Settings>> = OnceLock::new();
-    SETTINGS.get_or_init(|| Mutex::new(read_from_disk().unwrap_or_default().sanitised()))
+    SETTINGS.get_or_init(|| Mutex::new(read_from_disk().sanitised()))
 }
 
-fn read_from_disk() -> AppResult<Settings> {
-    let file = paths::settings_file()?;
-    let text = std::fs::read_to_string(file)?;
-    Ok(serde_json::from_str::<Settings>(crate::util::strip_bom(&text))?)
+/// Reads the settings, recovering from the backup if the file will not parse.
+///
+/// Cannot fail. Settings that will not load must not stop the app starting —
+/// the defaults are a working app, and `sanitised` makes them a coherent one.
+fn read_from_disk() -> Settings {
+    let Ok(file) = paths::settings_file() else {
+        return Settings::default();
+    };
+    let (settings, source) = crate::state::store::read::<Settings>(&file);
+    if source == crate::state::store::Source::Backup {
+        log::warn!("settings were recovered from the backup copy");
+    }
+    settings
 }
 
 pub fn get() -> Settings {
@@ -158,9 +176,7 @@ pub fn get() -> Settings {
 pub fn save(next: Settings) -> AppResult<Settings> {
     let next = next.sanitised();
     let file = paths::settings_file()?;
-    let temp = file.with_extension("json.tmp");
-    std::fs::write(&temp, serde_json::to_string_pretty(&next)?)?;
-    std::fs::rename(&temp, &file)?;
+    crate::state::store::write(&file, &serde_json::to_string_pretty(&next)?)?;
 
     if let Ok(mut guard) = slot().lock() {
         *guard = next.clone();

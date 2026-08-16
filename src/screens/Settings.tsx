@@ -35,6 +35,7 @@ export function SettingsScreen() {
   const [imported, setImported] = useState<ipc.ImportedPack[]>([]);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [schemeStatus, setSchemeStatus] = useState<ipc.SchemeStatus | null>(null);
 
   const refreshImported = () => {
     void ipc.listImported().then(setImported).catch(() => undefined);
@@ -45,8 +46,21 @@ export function SettingsScreen() {
     void ipc.getStorageDir().then(setStorageDir).catch(() => undefined);
     void ipc.getCacheSize().then(setCacheBytes).catch(() => undefined);
     void ipc.getCursorBaseSize().then(setSystemSize).catch(() => undefined);
+    void ipc.getSchemeStatus().then(setSchemeStatus).catch(() => undefined);
     refreshImported();
   }, []);
+
+  /** Shown once, to the users an earlier version's update bug took something from. */
+  const originalLost = schemeStatus?.originalLost === true;
+  const showSchemeLoss = originalLost && schemeStatus?.acknowledged === false;
+
+  const dismissSchemeLoss = () => {
+    setSchemeStatus((s) => (s ? { ...s, acknowledged: true } : s));
+    // Optimistic: the banner is gone from the screen either way, and a failed
+    // write means it comes back on the next launch, which is the harmless
+    // direction to fail in.
+    void ipc.acknowledgeSchemeLoss().catch(() => undefined);
+  };
 
   const importFolder = async () => {
     const folder = await openDialog({ directory: true, multiple: false });
@@ -99,6 +113,31 @@ export function SettingsScreen() {
       </ScreenHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        {showSchemeLoss && (
+          <div className="mt-3 rounded-xs border border-danger/50 bg-danger/5 p-3">
+            <p className="text-[11px] font-medium text-danger">
+              Your original pointer scheme was lost
+            </p>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Updating Cursed used to run the previous version's uninstaller, which deleted{" "}
+              everything in its data folder — including the record of what your pointers looked
+              like before Cursed was installed. That record cannot be rebuilt: once a Cursed
+              cursor is applied, the pointers it replaced are no longer anywhere on the machine
+              to read back.
+            </p>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Restore Windows default still works and still gives you a normal Windows pointer.
+              It just cannot give you back a pointer you had customised before Cursed. This was
+              our bug, it is fixed in this version, and it will not happen again.
+            </p>
+            <div className="mt-2 flex justify-end">
+              <Button variant="ghost" onClick={dismissSchemeLoss}>
+                UNDERSTOOD
+              </Button>
+            </div>
+          </div>
+        )}
+
         <SectionTitle>Updates</SectionTitle>
         <UpdatePanel autoCheck />
 
@@ -415,8 +454,12 @@ export function SettingsScreen() {
             {confirmRestore ? (
               <div className="space-y-2">
                 <p className="text-[11px] text-danger">
-                  This puts every pointer back exactly as it was before Cursed was
-                  installed. Your presets are kept.
+                  {originalLost
+                    ? "This puts every pointer back to the Windows default. The record of what " +
+                      "your pointers were before Cursed was lost to a bug in an earlier " +
+                      "version, so that is what restore can give back. Your presets are kept."
+                    : "This puts every pointer back exactly as it was before Cursed was " +
+                      "installed. Your presets are kept."}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="ghost" onClick={() => setConfirmRestore(false)}>

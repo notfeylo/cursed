@@ -17,6 +17,26 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
   const [message, setMessage] = useState<string | null>(null);
 
   const [progress, setProgress] = useState<{ got: number; total: number } | null>(null);
+  const [installed, setInstalled] = useState<ipc.InstallOutcome | null>(null);
+
+  // How the *last* update went, read once whether or not this panel polls.
+  //
+  // Separate from the poll below because that only runs with `autoCheck`, and
+  // the one thing worth saying after an update that did not take is worth
+  // saying wherever the user happens to open the panel.
+  useEffect(() => {
+    if (!ipc.isDesktop()) return;
+    let cancelled = false;
+    void ipc
+      .getUpdateState()
+      .then((s) => {
+        if (!cancelled) setInstalled(s.installed);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const check = async () => {
     setPhase("checking");
@@ -125,6 +145,22 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
 
   return (
     <Card>
+      {/* What happened last time, before anything about what happens next.
+          An update that silently did not take looks exactly like an update
+          that was never started, and leaving the user to notice the version
+          never changed is how an updater loses their trust for good. */}
+      {installed?.outcome === "succeeded" && (
+        <p className="mb-2 text-center text-[11px] text-success">
+          Updated to v{installed.to}.
+        </p>
+      )}
+      {installed?.outcome === "didNotTake" && (
+        <p className="mb-2 text-center text-[11px] break-words text-danger">
+          The update to v{installed.to} didn't finish, so you're still on v{installed.from}.
+          Your presets and cursors were not touched.
+        </p>
+      )}
+
       {offering ? (
         <div className="space-y-2">
           <div className="flex items-baseline justify-between gap-2">

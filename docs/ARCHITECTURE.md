@@ -124,6 +124,15 @@ Settings → Restore Windows Default replays that snapshot. So does the
 uninstaller, via `Cursed.exe --restore-defaults`, before it deletes
 anything.
 
+The snapshot is only idempotent against its own data directory, which matters
+because the app is developed as two installs side by side. The second one to run
+on a machine starts with an empty directory and a Cursed cursor already on
+screen, so it would capture *that* and call it the original. It does not: it
+adopts whatever the first channel captured, and only the first channel's capture
+is ever authoritative. The same one-of-a-kind problem governs the watchdog,
+which must not run in both copies at once — see
+[`CHANNELS.md`](CHANNELS.md).
+
 ## Rendering
 
 `packs/art.rs` describes all 17 role glyphs as parametric SVG and
@@ -228,6 +237,7 @@ src-tauri/src/
 ├── lib.rs            plugins, setup, window lifecycle
 ├── commands.rs       the ONLY #[tauri::command] surface
 ├── error.rs          AppError — one type across the IPC boundary
+├── channel.rs        which of the two side-by-side installs this binary is
 ├── paths.rs          the only place that decides what a legal path is
 ├── session.rs        what is applied, and why, across launches
 ├── custom.rs         staging and building cursors from user images
@@ -239,7 +249,8 @@ src-tauri/src/
 │   ├── engine.rs     live layer, CopyIcon discipline
 │   ├── scheme.rs     HKCU scheme layer
 │   ├── watchdog.rs   drift detection
-│   └── restore.rs    snapshot and restore
+│   ├── restore.rs    snapshot and restore
+│   └── crosschannel.rs  which channel may defend the scheme, and who captured it
 ├── build/
 │   ├── cur_writer.rs ICONDIR / ICONDIRENTRY / BGRA DIB / AND mask
 │   ├── ani_writer.rs RIFF ACON / anih / rate / seq / fram

@@ -42,7 +42,8 @@ shapes · `store.ts` state · `styles.css` every design token.
 | --- | --- |
 | `src/lib.rs` | Setup, in the order things actually happen. Start here. |
 | `src/commands.rs` | **The only `#[tauri::command]` surface.** Every call the UI can make. |
-| `src/cursor/` | The three layers: `engine` (live `SetSystemCursor`), `scheme` (the registry), `watchdog` (puts it back when Windows changes it), `restore` (undo, used by Settings *and* the uninstaller). |
+| `src/cursor/` | The three layers: `engine` (live `SetSystemCursor`), `scheme` (the registry), `watchdog` (puts it back when Windows changes it), `restore` (undo, used by Settings *and* the uninstaller), `crosschannel` (which of two installed channels may defend the scheme). |
+| `src/channel.rs` | Which of the two side-by-side installs this binary is. Every per-channel name comes from here and nowhere else — see [`../docs/CHANNELS.md`](CHANNELS.md). |
 | `src/build/` | Artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`, `cur_reader`. Pure and unit-tested — no registry, no Win32. |
 | `src/packs/` | `styles.rs` defines the one generated blend base, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it, `cfpack.rs` is the pack format. |
 | `src/bundled.rs` | **The catalog.** The 36 packs embedded in the binary and installed on first run. |
@@ -53,6 +54,7 @@ shapes · `store.ts` state · `styles.css` every design token.
 | `src/session.rs`, `src/state/` | What is applied now, and the settings behind it. |
 | `src/bin/genpacks.rs` | The offline tool: exports the catalog, draws the icon, renders the review sheets. |
 | `tauri.conf.json`, `capabilities/` | Window and bundle config, and exactly which plugin commands the webview may call. |
+| `dev.tauri.conf.json` | Merged over the above to build the development channel. Product name, identifier and icons only. |
 | `installer-hooks.nsh` | NSIS install/uninstall hooks. Both uninstall hooks return immediately in update mode. |
 | `rust-toolchain.toml`, `deny.toml` | The pinned compiler with every shipped target, and the licence/ban policy scoped to those same targets. |
 | `icons/` | The app icon set, all derived from `source.png`. |
@@ -69,9 +71,11 @@ drawing code shows up as a change to a picture; nothing reads it at runtime.
 | --- | --- |
 | `build-release.mjs` (`npm run release`) | Cutting a release. Builds x64 + ARM64 + 32-bit + the offline installer, stages aliases, writes `SHA256SUMS.txt`. |
 | `verify-uninstall.ps1` | Before a release. `-Snapshot` before installing, no arguments after uninstalling. **Release gate.** |
-| `check-bundle.mjs` (`npm run check:bundle`) | Run by CI. Catches fonts with no Latin glyphs and the dev-only specimen route reaching production. |
+| `check-bundle.mjs` (`npm run check:bundle`) | Run by CI. Catches fonts with no Latin glyphs, the dev-only specimen route reaching production, and a dev-channel binary about to ship as the release. |
 | `set-version.mjs` (`npm run version:set`) | Bumping the version in all three files that carry one. |
 | `make-icon.mjs` | Regenerating the icon master from the mark. |
+| `build-dev.mjs` (`npm run build:dev`) | Building the development channel, and proving the build was invoked correctly. |
+| `channels.mjs` (`npm run channels`) | Finding out which of the two installed channels is holding the pointer. |
 
 ## `.github/`
 
