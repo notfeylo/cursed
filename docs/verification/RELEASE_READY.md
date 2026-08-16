@@ -1,11 +1,16 @@
 # v1.21.0 — is it ready?
 
-**No. Not yet, and deliberately not.**
+**Published 2026-08-16, with one row still owed.**
 
-The version is bumped, the code is written, the suite is green and the whole
-thing is sitting on `main` unreleased. What is missing is not code. It is two
-things only the owner can do, and one of them exists precisely because the last
-three releases shipped a change like this one without it.
+The signing key exists, the release is signed, and the update path has *not* yet
+been observed working on a clean machine. That ordering is deliberate and is
+explained under "the chicken and the egg" below: the update path can only be
+verified against a published release, so the release goes out and the VM run
+follows it immediately, with the release pulled if a row fails.
+
+**The VM matrix is the outstanding item.** Until it is run, this release is
+verified the same way the bug it fixes was verified — which is to say, not in
+the way that would have caught it.
 
 ---
 
@@ -77,37 +82,26 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1 `
 
 It prints a Markdown table. Paste it into `update-path.md`.
 
-### 2. The signing key — **BLOCKED. Checked 2026-08-16: no secrets exist.**
+### 2. The signing key — **CLEARED 2026-08-16**
 
-```
-$ gh api repos/notfeylo/cursed/actions/secrets
-{"total_count":0,"secrets":[]}
-```
+All three secrets were added by the owner and confirmed present before tagging:
 
-Not one of the three is set. Checked as `notfeylo` with `repo` scope — the API
-answered 200 with an empty list rather than refusing, so this is an absence and
-not a permissions artefact. Environment secrets are empty too, and the
-repository is user-owned, so there are no organisation secrets to inherit.
-
-| Secret | Present |
+| Secret | Added |
 | --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | **no** |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **no** |
-| `CURSED_UPDATE_PUBLIC_KEY` | **no** |
+| `CURSED_UPDATE_PUBLIC_KEY` | 2026-08-16T20:17:12Z |
+| `TAURI_SIGNING_PRIVATE_KEY` | 2026-08-16T20:17:12Z |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 2026-08-16T20:26:20Z |
 
-**Tagging `v1.21.0` today produces a failed workflow, not an unsigned release.**
-The first step of `release.yml` checks for the two that must be non-empty and
-exits non-zero. That is the intended behaviour and it is why this is a blocker
-rather than a risk: a release published without a signature leaves every copy
-that installs it unable to verify the *next* one, including the release that
-would fix it.
+Only the names are readable, which is the point of a secret — the values are
+proven by the build succeeding and by a `.minisig` appearing beside every
+versioned installer.
 
-The password is deliberately not checked, because a key generated without one
-has an empty password and an empty value is a legitimate answer.
+The password is deliberately not checked for emptiness by the workflow: a key
+generated without one has an empty password, and an empty value is a legitimate
+answer.
 
-[`SIGNING.md`](../SIGNING.md) has the procedure. It is one command on a trusted
-machine and three secrets pasted into the repository settings. Nothing in this
-repository generates the key, and nothing should.
+[`SIGNING.md`](../SIGNING.md) has the rotation procedure, which is the part that
+is easy to get backwards.
 
 ---
 
