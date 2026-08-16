@@ -73,7 +73,19 @@ That writes two files:
 | File | What it is | Where it goes |
 | --- | --- | --- |
 | `~/.cursed/cursed.key` | the private key | **stays on that machine**, backed up offline |
-| `~/.cursed/cursed.key.pub` | the public key, one line | into the repository's secrets, and into every build |
+| `~/.cursed/cursed.key.pub` | the public key | into the repository's secrets, and into every build |
+
+**Paste `cursed.key.pub` exactly as it is.** What Tauri writes there is not the
+key line you may have seen in minisign documentation — it is the whole
+`minisign.pub` file, base64-encoded onto one line, and it looks like meaningless
+base64 rather than like a key.
+
+`signing::parse_public_key` accepts all three shapes this comes in: that blob,
+the two-line file it decodes to, and the bare `RW…` key line on its own. Being
+liberal here costs nothing — whatever shape arrives either decodes to the same
+32 bytes or does not decode at all — and it removes the failure where the app
+builds fine, the release signs fine, and **every update is refused as tampered**
+because the key was pasted in the shape the documentation told you to use.
 
 ### Put the halves where they belong
 

@@ -70,6 +70,81 @@ pub fn enforced() -> bool {
     public_key().is_some()
 }
 
+/// Reads a minisign public key in any of the three shapes it comes in.
+///
+/// **All three occur, and two of them are what a person will actually paste.**
+///
+///  1. The two-line `minisign.pub` file: a comment, then the key. This is the
+///     only shape `minisign_verify::PublicKey::decode` accepts.
+///  2. The bare key line, `RW…`, which is what most documentation quotes and
+///     what somebody copying "the key" out of that file will take.
+///  3. **A single-line base64 blob of the whole file**, which is what
+///     `tauri signer generate` writes into `<name>.key.pub`.
+///
+/// The third is the trap. `docs/SIGNING.md` says to put the contents of that
+/// file into the secret, so the shape the owner is most likely to paste is the
+/// one `decode` cannot read — it would take the whole blob as the comment line,
+/// find no second line, and fail. The build would succeed, the release would be
+/// signed, and **every update would be refused as tampered**, on every machine,
+/// with the only clue in a log file.
+///
+/// So all three are accepted. Being liberal about the encoding of a public key
+/// costs nothing: whatever shape it arrives in, it either decodes to the same
+/// 32 bytes or it does not decode at all.
+fn parse_public_key(text: &str) -> Option<minisign_verify::PublicKey> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    // 1. The file as minisign writes it.
+    if let Ok(key) = minisign_verify::PublicKey::decode(text) {
+        return Some(key);
+    }
+    // 2. Just the key line.
+    if let Ok(key) = minisign_verify::PublicKey::from_base64(text) {
+        return Some(key);
+    }
+    // 3. The file, base64'd — Tauri's `.key.pub`. Decoded once, then tried
+    //    again as (1) and (2). Not recursive: a base64 blob of a base64 blob is
+    //    not a shape any tool produces, and refusing it keeps this bounded.
+    let decoded = base64_decode(text)?;
+    let decoded = std::str::from_utf8(&decoded).ok()?.trim();
+    minisign_verify::PublicKey::decode(decoded)
+        .or_else(|_| minisign_verify::PublicKey::from_base64(decoded))
+        .ok()
+}
+
+/// Standard base64, ignoring whitespace, rejecting anything else.
+///
+/// Twenty lines rather than a dependency. The only thing it is ever pointed at
+/// is a public key that already has to parse as one afterwards, so a bug here
+/// fails closed — it cannot turn a wrong key into a right one.
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let mut buffer = 0u32;
+    let mut bits = 0u32;
+    for byte in text.bytes() {
+        if byte.is_ascii_whitespace() {
+            continue;
+        }
+        if byte == b'=' {
+            break;
+        }
+        let value = ALPHABET.iter().position(|c| *c == byte)? as u32;
+        buffer = (buffer << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
 /// What to tell the user, and the log, about this build's guarantee.
 pub fn describe() -> &'static str {
     if enforced() {
@@ -93,14 +168,12 @@ pub fn verify(bytes: &[u8], signature: &str) -> AppResult<()> {
         ));
     };
 
-    let key = minisign_verify::PublicKey::decode(key_text).map_err(|e| {
+    let key = parse_public_key(key_text).ok_or_else(|| {
         // A malformed key is a build-time mistake, not a user's problem, and it
         // is worth saying so precisely — the alternative is "signature check
-        // failed" on every update from a build whose key was pasted with a
-        // trailing newline.
-        AppError::msg(format!(
-            "the signing key compiled into this build is not a valid minisign key: {e}"
-        ))
+        // failed" on every update from a build whose key was pasted in the
+        // wrong shape.
+        AppError::msg("the signing key compiled into this build is not a valid minisign key")
     })?;
 
     let signature = minisign_verify::Signature::decode(signature)
@@ -115,6 +188,103 @@ pub fn verify(bytes: &[u8], signature: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A throwaway key pair, generated once for these tests and used nowhere
+    /// else. Its private half was never committed and no longer exists.
+    ///
+    /// In the shape `tauri signer generate` writes it: **the whole file,
+    /// base64'd onto one line.** That is the shape the owner pastes into the
+    /// secret, so it is the shape the test has to use — a fixture in the
+    /// convenient shape would pass while the real thing failed.
+    const TEST_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERGOUU2\
+                            ODUxMEFGNEI0QTkKUldTcHRQUUtVV2llM3dzK3JYN1V4VldNZXgxZGpkaFc5\
+                            eTV4LzhqWXd3SWFiV0MrNmJxd2t1YlEK";
+
+    /// Produced by running `scripts/sign-release.mjs` over `TEST_PAYLOAD` with
+    /// the matching private key. Not hand-written: this is the script's actual
+    /// output, unwrapped from Tauri's extra base64 layer exactly as it will be
+    /// on a release.
+    const TEST_SIGNATURE: &str = "untrusted comment: signature from tauri secret key\n\
+        RUSptPQKUWie3yQCtdMxtIEOfWl67APgQ7zsvjJV/ITQZBrPH+VhpnpgBLSbnjglgn3QIFHhGn5UvpFovwu7dn1gExm2vQHfWQM=\n\
+        trusted comment: timestamp:1786913886\tfile:Cursed_9.9.9_x64-setup.exe\n\
+        hXXgjMO1bCUNacFob30uZz5P+WCtr3kAiCrgzfoHeqA3GWkQd0pQk803kWnH284zJqFBuDX4L0+O8803RC+pDg==\n";
+
+    const TEST_PAYLOAD: &[u8] = b"cursed-signature-fixture";
+
+    /// **The end-to-end test.** A signature this project's own script produced,
+    /// against a key in the shape its own documentation tells you to paste,
+    /// verified by the code that gates an update.
+    ///
+    /// Written after the first release attempt, which failed for two reasons
+    /// neither of which any test could see: the signing script could not spawn
+    /// the CLI, and the key shape it produces is one `PublicKey::decode`
+    /// refuses. Both were invisible until a real build ran.
+    #[test]
+    fn a_signature_from_the_release_script_verifies() {
+        let key = parse_public_key(TEST_KEY).expect("the key shape tauri writes must parse");
+        let signature =
+            minisign_verify::Signature::decode(TEST_SIGNATURE).expect("the signature must parse");
+        key.verify(TEST_PAYLOAD, &signature, false)
+            .expect("a genuine signature must verify");
+    }
+
+    /// And the same signature against different bytes must not.
+    #[test]
+    fn a_signature_does_not_verify_against_other_bytes() {
+        let key = parse_public_key(TEST_KEY).expect("key");
+        let signature = minisign_verify::Signature::decode(TEST_SIGNATURE).expect("signature");
+        assert!(
+            key.verify(b"a different installer", &signature, false).is_err(),
+            "a signature that verifies anything verifies nothing"
+        );
+    }
+
+    /// All three shapes a public key arrives in have to work, because two of
+    /// them are what a person actually pastes.
+    #[test]
+    fn every_shape_of_public_key_is_accepted() {
+        let file = String::from_utf8(base64_decode(TEST_KEY).expect("decodes")).expect("utf8");
+        let bare = file.lines().nth(1).expect("key line").to_owned();
+        let padded = format!("  {bare}\n");
+
+        // Compared by what they *do*, not by struct equality. A bare key line
+        // carries no comment and the two-line file does, so the structs
+        // legitimately differ in a field that has nothing to do with identity —
+        // asserting on it would be asserting on a cosmetic difference and
+        // failing for the wrong reason, which is exactly what it did.
+        let signature =
+            minisign_verify::Signature::decode(TEST_SIGNATURE).expect("the signature must parse");
+
+        for (shape, text) in [
+            ("tauri's base64 file", TEST_KEY),
+            ("the minisign.pub file", file.as_str()),
+            ("the bare key line", bare.as_str()),
+            ("a key pasted with whitespace", padded.as_str()),
+        ] {
+            let key = parse_public_key(text).unwrap_or_else(|| panic!("{shape} did not parse"));
+            key.verify(TEST_PAYLOAD, &signature, false)
+                .unwrap_or_else(|_| panic!("{shape} parsed but did not verify"));
+        }
+    }
+
+    #[test]
+    fn nonsense_is_not_a_public_key() {
+        for bad in ["", "   ", "not a key", "RW", "!!!!", "dGhpcyBpcyBub3QgYSBrZXk="] {
+            assert!(parse_public_key(bad).is_none(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn base64_matches_the_published_test_vectors() {
+        assert_eq!(base64_decode("").unwrap(), b"");
+        assert_eq!(base64_decode("Zg==").unwrap(), b"f");
+        assert_eq!(base64_decode("Zm8=").unwrap(), b"fo");
+        assert_eq!(base64_decode("Zm9v").unwrap(), b"foo");
+        assert_eq!(base64_decode("Zm9vYmFy").unwrap(), b"foobar");
+        // Whitespace is skipped; anything else is refused.
+        assert_eq!(base64_decode("Zm9v\n YmFy").unwrap(), b"foobar");
+        assert!(base64_decode("Zm9v*YmFy").is_none());
+    }
 
     /// The whole design in one assertion: no key means no enforcement, and no
     /// enforcement must never be reachable as a *successful* verification.

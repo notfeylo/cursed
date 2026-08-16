@@ -31,11 +31,33 @@
  */
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const staging = join(root, "dist-release");
+
+/**
+ * The Tauri CLI's own entry point, run through this Node rather than through
+ * `npx`.
+ *
+ * **Not `npx`, and not `npx.cmd`.** Node 20 and later refuse to spawn a `.cmd`
+ * or `.bat` through `child_process` without `shell: true` — the fix for
+ * CVE-2024-27980, where a batch file's arguments could be re-parsed by cmd.exe.
+ * `execFileSync("npx.cmd", …)` therefore throws `EINVAL` before anything runs,
+ * and because nothing ran there is no exit status: the failure arrives as
+ * `undefined`, which is how the first attempt at this reported "exit ?" for
+ * three files in 150 milliseconds.
+ *
+ * Turning on `shell: true` would fix the spawn and reintroduce exactly the
+ * argument-parsing problem that restriction exists to prevent, on a command
+ * line that used to carry a private key. Resolving the CLI's JavaScript and
+ * handing it to `process.execPath` avoids the shell altogether.
+ */
+const tauriCli = createRequire(join(root, "package.json")).resolve(
+  "@tauri-apps/cli/tauri.js",
+);
 
 const privateKey = process.env.TAURI_SIGNING_PRIVATE_KEY?.trim();
 if (!privateKey) {
@@ -68,24 +90,31 @@ for (const name of targets) {
   const wanted = `${file}.minisig`;
 
   try {
-    execFileSync(
-      process.platform === "win32" ? "npx.cmd" : "npx",
-      ["tauri", "signer", "sign", "--private-key", privateKey, file],
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          // Passed through rather than on the command line: a password in argv
-          // is readable by every other process on the machine.
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-            process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
-        },
+    // The key and its password go through the environment, never argv.
+    //
+    // The CLI reads both from there by documented default. argv is readable by
+    // every other process on the machine, it is what ends up quoted in a crash
+    // report, and keeping the key out of it means an error can be printed in
+    // full — which is the difference between diagnosing this in one build and
+    // diagnosing it in three.
+    execFileSync(process.execPath, [tauriCli, "signer", "sign", file], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        TAURI_SIGNING_PRIVATE_KEY: privateKey,
+        TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+          process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
       },
-    );
+    });
   } catch (e) {
-    // Never echo the error verbatim: the private key was passed as an argument
-    // and some CLIs put their whole argv in a failure message.
-    console.error(`  FAIL  ${name} could not be signed (exit ${e.status ?? "?"})`);
+    const why = [
+      e.status === undefined ? `did not start (${e.code ?? e.message})` : `exit ${e.status}`,
+      e.stderr?.toString().trim(),
+      e.stdout?.toString().trim(),
+    ]
+      .filter(Boolean)
+      .join(" — ");
+    console.error(`  FAIL  ${name}: ${why}`);
     failures += 1;
     continue;
   }
