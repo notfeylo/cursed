@@ -98,6 +98,35 @@ export const exportPreset = (id: string, dest: string) =>
   call<string>("export_preset", { id, dest });
 export const importCfpack = (src: string) => call<Preset>("import_cfpack", { src });
 
+/* ── backup and restore ────────────────────────────────────── */
+
+export interface BackupReport {
+  path: string;
+  files: number;
+  bytes: number;
+}
+
+export interface RestoreReport {
+  files: number;
+  skipped: number;
+  /** At most ten, each naming a file that was refused and why. */
+  problems: string[];
+}
+
+/** `cursed-backup-YYYY-MM-DD.zip`, so a second backup does not land on the first. */
+export const suggestedBackupName = () => call<string>("suggested_backup_name");
+
+/**
+ * Everything the user has made, in one zip: settings, presets, custom cursors,
+ * imported packs, and the original-scheme snapshot. Rendered cache, logs and
+ * downloads are left out — they regenerate, and including them would bury the
+ * four kilobytes that matter.
+ */
+export const exportAllData = (dest: string) => call<BackupReport>("export_all_data", { dest });
+
+/** Writes a backup's files over the data directory, leaving anything else alone. */
+export const importAllData = (src: string) => call<RestoreReport>("import_all_data", { src });
+
 /* ── custom import ─────────────────────────────────────────── */
 
 /**

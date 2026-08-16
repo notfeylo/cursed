@@ -8,6 +8,7 @@
 //! rather than merely small.
 
 pub mod autostart;
+pub mod backup;
 pub mod build;
 pub mod bundled;
 pub mod channel;
@@ -16,6 +17,8 @@ pub mod cursor;
 pub mod custom;
 pub mod dataprint;
 pub mod error;
+#[cfg(test)]
+mod fuzz;
 pub mod hash;
 pub mod hotkeys;
 pub mod idle;
@@ -394,6 +397,9 @@ pub fn run() {
             commands::apply_preset,
             commands::export_preset,
             commands::import_cfpack,
+            commands::suggested_backup_name,
+            commands::export_all_data,
+            commands::import_all_data,
             commands::import_image,
             commands::import_image_bytes,
             commands::preview_custom,

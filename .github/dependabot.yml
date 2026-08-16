@@ -1,0 +1,64 @@
+version: 2
+
+# Weekly rather than daily, and grouped rather than one PR per crate.
+#
+# This is a two-person repository at most. A dependency bot that opens eleven
+# pull requests every morning does not get a codebase updated — it gets its
+# notifications muted, and then the one PR that mattered is in the pile nobody
+# opens. Weekly and grouped keeps it to something a person actually reads.
+#
+# Security updates are exempt from the grouping and the schedule: GitHub raises
+# those immediately regardless of what is written here, which is the correct
+# behaviour and the reason it is worth keeping the routine noise low.
+updates:
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      # Tauri's crates move together and are meaningless apart: bumping
+      # tauri without tauri-build produces a build failure, not an upgrade.
+      tauri:
+        patterns:
+          - tauri
+          - tauri-*
+      # Everything else, in one PR. The suite is the review.
+      rust:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - tauri
+          - tauri-*
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      frontend:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+
+  # The workflows pin actions by major version, which is a supply-chain surface
+  # of its own: `actions/checkout@v4` is a moving reference to whatever that tag
+  # points at today.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2

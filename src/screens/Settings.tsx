@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, FolderPlus, Info, Trash2 } from "lucide-react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { UpdatePanel } from "../components/UpdatePanel";
 import {
@@ -36,6 +36,8 @@ export function SettingsScreen() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [schemeStatus, setSchemeStatus] = useState<ipc.SchemeStatus | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
 
   const refreshImported = () => {
     void ipc.listImported().then(setImported).catch(() => undefined);
@@ -85,6 +87,56 @@ export function SettingsScreen() {
       setImportMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setImporting(false);
+    }
+  };
+
+  const backUp = async () => {
+    const suggested = await ipc.suggestedBackupName().catch(() => "cursed-backup.zip");
+    const dest = await saveDialog({
+      defaultPath: suggested,
+      filters: [{ name: "Backup", extensions: ["zip"] }],
+    });
+    if (typeof dest !== "string") return;
+
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const report = await ipc.exportAllData(dest);
+      setBackupMsg(
+        `Saved ${report.files} file${report.files === 1 ? "" : "s"} ` +
+          `(${formatBytes(report.bytes)}) to ${report.path}.`,
+      );
+    } catch (e) {
+      setBackupMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const restoreData = async () => {
+    const src = await openDialog({
+      multiple: false,
+      filters: [{ name: "Backup", extensions: ["zip"] }],
+    });
+    if (typeof src !== "string") return;
+
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const report = await ipc.importAllData(src);
+      setBackupMsg(
+        `Restored ${report.files} file${report.files === 1 ? "" : "s"}` +
+          (report.skipped ? `, skipped ${report.skipped}.` : ".") +
+          (report.problems.length ? ` ${report.problems[0]}` : "") +
+          " Restart Cursed for all of it to take effect.",
+      );
+      // The parts that can be re-read without a restart, are.
+      await bootstrap();
+      await refreshActive();
+    } catch (e) {
+      setBackupMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -419,6 +471,23 @@ export function SettingsScreen() {
                 <FolderOpen size={13} />
               </button>
             </div>
+          </Field>
+
+          <Field label="Everything you have made">
+            <p className="mb-2 text-[11px] text-text-muted">
+              One zip with your settings, presets, custom cursors, imported packs and the
+              record of your original Windows pointers. Restoring writes those files back and
+              leaves anything newer alone.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => void backUp()} disabled={backupBusy}>
+                {backupBusy ? "WORKING" : "BACK UP"}
+              </Button>
+              <Button variant="ghost" onClick={() => void restoreData()} disabled={backupBusy}>
+                RESTORE
+              </Button>
+            </div>
+            {backupMsg && <p className="mt-2 text-[11px] text-text-muted">{backupMsg}</p>}
           </Field>
 
           <Field label="Generated cursor cache">

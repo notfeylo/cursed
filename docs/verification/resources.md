@@ -52,3 +52,49 @@ against files nobody here wrote.
 
 The number above is real and the method is repeatable. It is one row of §8, not
 §8.
+
+---
+
+## Parsers under damage — 2026-08-15, working tree
+
+**Covers the fuzzing half of §2.4.** Runs on every push; `src-tauri/src/fuzz.rs`.
+
+| | |
+| --- | --- |
+| Method | seeded mutation of valid inputs, in the ordinary test suite |
+| Property | no input may panic |
+| Inputs per run | ~24,600 across six parsers |
+| Panics found | **0** |
+| Wall clock | ~14 s of the suite's 22 s |
+
+| Parser | Iterations | Result |
+| --- | --- | --- |
+| `pipeline::sniff` | 4,000 × 4 seeds | clean |
+| `pipeline::decode` | 600 × 3 seeds | clean |
+| `.cfpack` manifest | 4,000 × 3 seeds | clean |
+| `settings.json` (parse + `sanitised`) | 4,000 | clean |
+| `presets.json` | 4,000 | clean |
+| `original_scheme.json` | 4,000 | clean |
+| `paths::validate_relative` | 4,000 × 4 seeds | clean |
+
+Six mutation strategies: bit flips, truncation, run overwrite, insertion,
+deletion, and a hostile length field written across the header. The seed is
+fixed, so a failure names an input that can be reproduced.
+
+### What this does not cover
+
+- **`.cur` and `.ani` decoding**, deliberately. `build::cur_reader` hands the
+  path to `LoadImageW`; fuzzing it would be fuzzing Windows' own loader from a
+  test suite, on the developer's live session.
+- **The zip layer**, as opposed to the manifest inside it. `cfpack::import` and
+  `backup::import` are checked by unit tests against specific hostile entries —
+  traversal, executables, reserved names, expansion ratio — rather than by
+  mutation. A generated archive is a much bigger harness than the guards it
+  would be testing.
+- **`cargo-fuzz` proper**, with coverage guidance. It needs a nightly toolchain
+  and libFuzzer support the pinned Windows MSVC toolchain does not have.
+  `SECURITY.md` names the entry points for anyone with a Linux box.
+
+Zero panics is the expected result and not a strong one on its own — it is the
+floor. What makes it worth recording is that it now runs on every push, so the
+floor stays where it is.

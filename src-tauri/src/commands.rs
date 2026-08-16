@@ -376,6 +376,27 @@ pub fn import_cfpack(src: String) -> AppResult<Preset> {
     packs::cfpack::import(&PathBuf::from(src))
 }
 
+/* ── backup and restore ────────────────────────────────────── */
+
+/// The filename to offer in the save dialog. Dated, so a second backup does not
+/// land on top of the first.
+#[tauri::command]
+pub fn suggested_backup_name() -> AppResult<String> {
+    Ok(crate::backup::suggested_name())
+}
+
+/// Everything the user has made, in one zip they can put somewhere else.
+#[tauri::command]
+pub fn export_all_data(dest: String) -> AppResult<crate::backup::BackupReport> {
+    crate::backup::export(&PathBuf::from(dest))
+}
+
+/// Restores a backup over the data directory, merging rather than replacing.
+#[tauri::command]
+pub fn import_all_data(src: String) -> AppResult<crate::backup::RestoreReport> {
+    crate::backup::import(&PathBuf::from(src))
+}
+
 /* ── custom import ─────────────────────────────────────────── */
 
 #[tauri::command]

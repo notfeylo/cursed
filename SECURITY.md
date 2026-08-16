@@ -127,12 +127,48 @@ Until the installer is code-signed, this checksum chain is what stands between a
 compromised release asset and code execution. It is not optional and should not
 be relaxed.
 
+## Fuzzing
+
+Every parser this project owns is run against thousands of deliberately damaged
+inputs on every push, as part of the ordinary test suite —
+`src-tauri/src/fuzz.rs`. The property is narrow and absolute: **no input may
+panic.** Rejection is expected and fine; indexing out of bounds, unwrapping a
+`None`, or allocating on a length field taken from the file is not. A panic in a
+command path takes the whole app down, and on a cursor tool that means the
+watchdog stops with the pointer left wherever it was.
+
+Covered: format sniffing, image decoding through the guards above, the `.cfpack`
+manifest, `settings.json`, `presets.json`, `original_scheme.json`, and the
+relative-path validator that decides where an archive entry is allowed to land.
+
+Not covered, deliberately: `.cur` and `.ani` *decoding*. The app does not parse
+them — it hands the path to `LoadImageW`. Fuzzing that would be fuzzing Windows'
+own image loader from a test suite, with the results landing on the developer's
+session. What this project writes is covered by round-trip tests in
+`build::cur_writer` and `build::ani_writer`.
+
+This is not `cargo-fuzz`: libFuzzer on Windows MSVC needs a nightly toolchain
+and sanitiser support the pinned toolchain does not have, and a fuzzer that only
+runs on a machine nobody has is a fuzzer that never runs. To point `cargo-fuzz`
+at the same entry points from a Linux box, the targets are
+`build::pipeline::sniff`, `build::pipeline::decode`, and
+`serde_json::from_str::<packs::cfpack::Manifest>`; the seed corpus is the
+`png`/`gif`/`bmp` helpers in the test module.
+
 ## Supply chain
 
-`cargo audit` and `npm audit` run in CI on every push and pull request, and the
-build fails on a high or critical advisory. `Cargo.lock` and `package-lock.json`
-are committed. Releases publish SHA-256 checksums.
+`cargo audit`, `cargo deny` and `npm audit` run in CI on every push and pull
+request, and the build fails on a high or critical advisory. Dependabot is
+configured in `.github/dependabot.yml` — weekly and grouped, because a bot that
+opens eleven pull requests a morning gets muted, and then the one that mattered
+is in the pile nobody opens. `Cargo.lock` and `package-lock.json` are committed
+and the Rust toolchain is pinned in `src-tauri/rust-toolchain.toml`.
 
-**Code signing:** v1.0 alpha builds are unsigned, so Windows SmartScreen will
-warn on first run. Signing via Azure Trusted Signing is planned before a public
-launch. Until then, verify the published SHA-256 of anything you download.
+Releases publish SHA-256 checksums, and — once the signing key exists — a
+minisign signature per installer that the app verifies before running an update.
+See `docs/SIGNING.md`; the checksum alone protects against a corrupted download
+and not against anyone who can replace both files.
+
+**Code signing:** builds are unsigned, so Windows SmartScreen will warn on first
+run. Signing via Azure Trusted Signing is planned. Until then, verify the
+published SHA-256 of anything you download.

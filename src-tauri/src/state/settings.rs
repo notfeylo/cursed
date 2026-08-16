@@ -236,4 +236,95 @@ mod tests {
         .sanitised();
         assert!(crate::packs::styles::find(&stale.blend_pack).is_some());
     }
+
+    /// A settings file written by v1.6, loaded into this build.
+    ///
+    /// This is the migration test, and the reason there is no schema version
+    /// number to go with it: the format has only ever gained fields, and
+    /// `#[serde(default)]` on the struct means a field that did not exist yet
+    /// takes its default rather than failing the parse. A version number would
+    /// be a second thing to keep correct that nothing would read.
+    ///
+    /// What matters is that the user's *choices* survive. Someone who turned
+    /// autostart off in 1.6 must not find it back on after updating, and a
+    /// blend pack from the 291-pack generated catalog — which no longer
+    /// exists — must not leave every imported cursor failing to apply.
+    #[test]
+    fn a_settings_file_from_v1_6_still_loads_with_its_choices_intact() {
+        // Field for field what v1.6.0 wrote: no scaleAllRoles, no
+        // schemeLossAcknowledged, and a blendPack from the catalog of the day.
+        let old = r##"{
+            "launchOnStartup": false,
+            "startMinimized": false,
+            "closeToTray": true,
+            "showTrayIcon": false,
+            "autoCheckUpdates": false,
+            "cursorSize": 64,
+            "tint": "#FF6A2E",
+            "outline": false,
+            "applyMode": "All",
+            "blendPack": "neon-plasma-042",
+            "tintPreviews": true,
+            "animationSpeed": 1.5,
+            "reapplyOnResume": false,
+            "watchdogEnabled": false,
+            "watchdogIntervalSecs": 12,
+            "reapplyAfterThemeChange": false,
+            "hotkeyToggle": "Ctrl+Alt+9",
+            "hotkeyOpen": "Ctrl+Alt+K",
+            "hotkeyPresets": ["Ctrl+Alt+1", "Ctrl+Alt+2", "Ctrl+Alt+3", "Ctrl+Alt+4", "Ctrl+Alt+5"],
+            "debugLogging": true,
+            "firstRunDone": true
+        }"##;
+
+        let loaded: Settings = serde_json::from_str(old).expect("a v1.6 file must parse");
+        let loaded = loaded.sanitised();
+
+        // Every choice they made, still made.
+        assert!(!loaded.launch_on_startup);
+        assert!(!loaded.start_minimized);
+        assert!(!loaded.show_tray_icon);
+        assert!(!loaded.auto_check_updates);
+        assert_eq!(loaded.cursor_size, Some(64));
+        assert_eq!(loaded.tint, "#FF6A2E");
+        assert!(!loaded.outline);
+        assert_eq!(loaded.apply_mode, ApplyMode::All);
+        assert!(loaded.tint_previews);
+        assert_eq!(loaded.animation_speed, 1.5);
+        assert!(!loaded.watchdog_enabled);
+        assert_eq!(loaded.watchdog_interval_secs, 12);
+        assert_eq!(loaded.hotkey_toggle, "Ctrl+Alt+9");
+        assert!(loaded.debug_logging);
+        assert!(loaded.first_run_done);
+
+        // Fields that did not exist yet take their defaults.
+        assert!(!loaded.scale_all_roles);
+        assert!(
+            !loaded.scheme_loss_acknowledged,
+            "an older user has not been shown the notice yet"
+        );
+
+        // And the one value that has to be *corrected* rather than kept: a pack
+        // id from a catalog this build does not have.
+        assert!(
+            crate::packs::styles::find(&loaded.blend_pack).is_some(),
+            "a stale blend pack would make every imported cursor fail to apply"
+        );
+    }
+
+    /// The other direction: a file written by a *newer* build, opened by this
+    /// one after a downgrade or a rollback. Unknown fields must be ignored
+    /// rather than fail the parse and reset everything to defaults.
+    #[test]
+    fn a_settings_file_from_a_newer_version_does_not_reset_everything() {
+        let newer = r##"{
+            "launchOnStartup": false,
+            "tint": "#00FF88",
+            "somethingAddedLater": { "nested": true },
+            "anotherNewField": 42
+        }"##;
+        let loaded: Settings = serde_json::from_str(newer).expect("unknown fields must be ignored");
+        assert!(!loaded.launch_on_startup);
+        assert_eq!(loaded.tint, "#00FF88");
+    }
 }
