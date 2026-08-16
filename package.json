@@ -17,6 +17,8 @@
     "lint:types": "tsc --noEmit",
     "version:set": "node scripts/set-version.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
+    "check:roles": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --check-roles",
+    "soak": "cargo run --manifest-path src-tauri/Cargo.toml --release --bin genpacks -- --soak",
     "release": "node scripts/build-release.mjs",
     "dev:channel": "npm run tauri -- dev --features dev-channel --config dev.tauri.conf.json",
     "build:dev": "node scripts/build-dev.mjs",

@@ -141,6 +141,142 @@ fn stress_handles(args: &[String]) -> ! {
     std::process::exit(1);
 }
 
+/// `genpacks --soak [minutes] [csv-path]` runs the work loop for hours and
+/// watches every counter that matters.
+///
+/// The handle harness above answers one question thoroughly. This answers a
+/// different one badly, and is worth running anyway: Cursed lives in the tray
+/// for weeks, so a leak of one anything per operation is invisible in every test
+/// in the suite and fatal on day eleven. The only way to see that is to do the
+/// work for a long time and watch the numbers.
+///
+/// Default is 24 hours, sampled every minute. Rows are written to the CSV as
+/// they are taken rather than at the end, so a run that is interrupted — a
+/// reboot, a closed laptop, a killed terminal — still leaves everything it
+/// measured up to that point. A soak whose results only exist in memory is a
+/// soak that produces nothing the first time anything goes wrong, which on a
+/// twenty-four hour run is most of the time.
+fn soak(args: &[String]) -> ! {
+    use std::io::Write as _;
+
+    let minutes: u64 = args
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(24 * 60)
+        .clamp(1, 7 * 24 * 60);
+    let csv_path = args
+        .get(3)
+        .cloned()
+        .unwrap_or_else(|| "soak.csv".to_owned());
+
+    // A sample a minute for a day is 1,440 rows: enough to see a slope, few
+    // enough to open in anything.
+    let interval = std::time::Duration::from_secs(60);
+
+    println!("soaking for {minutes} minute(s), sampling every 60s -> {csv_path}");
+    println!("{}", cursorforge_lib::stress::Sample::header());
+
+    let file = std::fs::File::create(&csv_path);
+    let mut sink = match file {
+        Ok(f) => Some(std::io::BufWriter::new(f)),
+        Err(e) => {
+            eprintln!("could not open {csv_path}: {e} — the run will print but not record");
+            None
+        }
+    };
+    if let Some(out) = sink.as_mut() {
+        let _ = writeln!(out, "{}", cursorforge_lib::stress::Sample::header());
+        let _ = out.flush();
+    }
+
+    let report = cursorforge_lib::stress::run_soak(
+        std::time::Duration::from_secs(minutes * 60),
+        interval,
+        |sample| {
+            let line = sample.as_csv();
+            println!("{line}");
+            if let Some(out) = sink.as_mut() {
+                let _ = writeln!(out, "{line}");
+                // Flushed per row. The whole point is surviving an interruption.
+                let _ = out.flush();
+            }
+        },
+    );
+
+    println!("\ncycles:            {}", report.cycles);
+    println!("cursor loads:      {}", report.work.cursor_loads);
+    println!("images decoded:    {}", report.work.image_decodes);
+    println!("cursors built:     {}", report.work.cursors_built);
+    println!("state round trips: {}", report.work.state_round_trips);
+    println!("failures:          {}", report.work.failures);
+
+    match report.growth() {
+        Some((gdi, user, threads, handles, working_set, private)) => {
+            println!("\ngrowth from first sample to last:");
+            println!("  GDI objects   {gdi:+}");
+            println!("  USER objects  {user:+}");
+            println!("  threads       {threads:+}");
+            println!("  handles       {handles:+}");
+            println!("  working set   {:+.1} MB", working_set as f64 / 1_048_576.0);
+            println!("  private bytes {:+.1} MB", private as f64 / 1_048_576.0);
+            println!("\nRead the slope, not the endpoints: memory moves for a dozen reasons");
+            println!("that are not leaks, and a number that tracks the cycle count is the");
+            println!("only shape that means anything.");
+            std::process::exit(0);
+        }
+        None => {
+            eprintln!("the run produced no samples");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `genpacks --check-roles` reads all seventeen pointer roles and checks each.
+///
+/// This is the answer to "the cursor does not change in Firefox". A role that
+/// fails to follow is almost never the application refusing to cooperate — it is
+/// a malformed or missing entry among these seventeen, and Windows falls back to
+/// its own cursor for any of them silently, with nothing written anywhere. Which
+/// looks exactly like a browser being difficult.
+///
+/// So it is checked before anybody starts screenshotting browsers.
+fn check_roles() -> ! {
+    let audit = cursorforge_lib::cursor::audit_roles();
+
+    println!("{:<12} {:<8} {:<24} VALUE", "ROLE", "FORMAT", "STATUS");
+    let mut faults = 0;
+    for role in &audit {
+        let status = if !role.set {
+            "unset (Windows default)"
+        } else if !role.exists {
+            "FILE DOES NOT EXIST"
+        } else if !role.ok {
+            "BAD HEADER"
+        } else {
+            "ok"
+        };
+        if !role.ok {
+            faults += 1;
+        }
+        println!(
+            "{:<12} {:<8} {:<24} {}",
+            role.role, role.format, status, role.value
+        );
+    }
+
+    let set = audit.iter().filter(|r| r.set).count();
+    println!("\n{set} of 17 roles set, {faults} fault(s)");
+    if faults == 0 {
+        println!("Every role that is set resolves to a real cursor file.");
+        println!("A role that still does not follow in an application is that");
+        println!("application's own decision, not a broken entry.");
+        std::process::exit(0);
+    }
+    println!("Fix these before blaming an application: Windows silently draws its");
+    println!("own cursor for any role it cannot load, with no error anywhere.");
+    std::process::exit(1);
+}
+
 /// `genpacks --check-update` runs the real update check through the app's own
 /// WinHTTP code.
 ///
@@ -1130,6 +1266,12 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--stress-handles") {
         stress_handles(&args);
     }
+    if args.get(1).map(String::as_str) == Some("--soak") {
+        soak(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--check-roles") {
+        check_roles();
+    }
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);
     }
@@ -1226,6 +1368,19 @@ fn main() {
                 std::process::exit(1);
             }
         }
+    }
+
+    // An unrecognised flag is an error, not an output directory.
+    //
+    // Everything above matches an exact string and falls through otherwise, so
+    // a mistyped or not-yet-built subcommand reached the pack exporter below and
+    // was treated as a path — which created a directory literally called
+    // `--check-roles` and filled it with 17 cursors. Silently doing something
+    // unrelated to what was asked is the worst answer available.
+    if let Some(flag) = args.get(1).filter(|a| a.starts_with("--")) {
+        eprintln!("genpacks: unknown option {flag}");
+        eprintln!("If this is a new subcommand, the binary may predate it — rebuild.");
+        std::process::exit(2);
     }
 
     // Relative to the caller's working directory, which for `cargo run` is

@@ -33,3 +33,6 @@ release-notes.md
 # moment the mark changed: a repo full of renders of a logo we no longer use is
 # worse than no renders at all.
 logo-sheets/
+
+# Soak output: a day of samples per run, regenerated on demand.
+docs/verification/soak/*.csv

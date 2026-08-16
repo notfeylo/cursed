@@ -244,6 +244,110 @@ fn path_tail(text: &str) -> String {
     parts.join("\\").to_ascii_lowercase()
 }
 
+/// One pointer role, as Windows currently has it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleAudit {
+    pub role: String,
+    /// The registry value, unexpanded — `%APPDATA%\...` as Windows stores it.
+    pub value: String,
+    /// Where that resolves to. Empty when the value is absent.
+    pub resolved: String,
+    /// Absent means "Windows draws its own", which is a real state and not a
+    /// fault.
+    pub set: bool,
+    pub exists: bool,
+    /// What the first bytes say it is: `cur`, `ani`, or a complaint.
+    pub format: String,
+    pub ok: bool,
+}
+
+/// Reads all seventeen roles and checks each one end to end.
+///
+/// **This is where a role that "does not follow in a browser" is actually
+/// diagnosed.** The instinct is to blame the application — Firefox does its own
+/// thing, Chrome ignores this, and so on — and that instinct is nearly always
+/// wrong. A pointer role that fails to change is overwhelmingly a malformed or
+/// missing entry among these seventeen: a path Windows cannot resolve, a file
+/// the uninstaller deleted, a `.cur` with the wrong `idType`, an `.ani` that is
+/// not a RIFF. Windows silently falls back to its own cursor for any of those,
+/// with no error anywhere, which looks exactly like an application refusing to
+/// cooperate.
+///
+/// So this checks the thing that can be checked before anybody starts
+/// screenshotting browsers.
+pub fn audit_roles() -> Vec<RoleAudit> {
+    roles::ALL_ROLES
+        .into_iter()
+        .map(|role| {
+            let value = scheme::read_role(role).unwrap_or_default();
+            if value.is_empty() {
+                return RoleAudit {
+                    role: role.to_string(),
+                    value,
+                    resolved: String::new(),
+                    set: false,
+                    exists: false,
+                    format: "windows default".to_owned(),
+                    // Not a fault. An unset role is Windows drawing its own, and
+                    // "arrow only" mode deliberately leaves sixteen like this.
+                    ok: true,
+                };
+            }
+
+            let resolved = crate::util::expand_env(&value);
+            let path = std::path::Path::new(&resolved);
+            let exists = path.is_file();
+            let format = if exists {
+                describe_cursor_file(path)
+            } else {
+                "missing".to_owned()
+            };
+            let ok = exists && (format == "cur" || format == "ani");
+
+            RoleAudit {
+                role: role.to_string(),
+                value,
+                resolved,
+                set: true,
+                exists,
+                format,
+                ok,
+            }
+        })
+        .collect()
+}
+
+/// What a file's first bytes say it is.
+///
+/// Read rather than inferred from the extension: a `.cur` that is really a PNG
+/// loads as nothing, and the extension is the one part of the file that cannot
+/// be wrong in a way Windows notices.
+fn describe_cursor_file(path: &std::path::Path) -> String {
+    let Ok(bytes) = std::fs::read(path) else {
+        return "unreadable".to_owned();
+    };
+    if bytes.len() < 12 {
+        return "too short".to_owned();
+    }
+    // `.ani` is RIFF with an ACON form type at offset 8.
+    if &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"ACON" {
+        return "ani".to_owned();
+    }
+    // `.cur` is an ICONDIR: reserved 0, type 2 (1 would be an icon), count > 0.
+    let reserved = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let kind = u16::from_le_bytes([bytes[2], bytes[3]]);
+    let count = u16::from_le_bytes([bytes[4], bytes[5]]);
+    if reserved == 0 && kind == 2 && count > 0 {
+        return "cur".to_owned();
+    }
+    if reserved == 0 && kind == 1 {
+        // Windows will not use an icon as a cursor: it has no hotspot.
+        return "an icon, not a cursor".to_owned();
+    }
+    "not a cursor file".to_owned()
+}
+
 /// True when the registry no longer reflects what we committed — i.e. a theme
 /// change, a personalisation reset, or another cursor tool has overwritten us.
 pub fn drifted() -> bool {

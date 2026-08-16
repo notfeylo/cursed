@@ -150,6 +150,343 @@ pub fn run_handle_stress(iterations: u32) -> HandleReport {
     }
 }
 
+// ── the soak ─────────────────────────────────────────────────────
+//
+// The handle run above answers one question thoroughly: does loading and
+// releasing a cursor leak a handle. A soak answers a different one — does
+// anything at all drift over hours of ordinary work — and it answers it worse,
+// because "ordinary work" has to be simulated and every number it samples moves
+// for reasons that are not leaks.
+//
+// It is still worth running, for a reason specific to this app: Cursed lives in
+// the tray for weeks. A leak of one anything per apply is invisible in every
+// test written so far and fatal on day eleven. The only way to see that is to
+// do the work for a long time and watch the numbers.
+
+/// One reading of everything worth watching.
+#[derive(Debug, Clone, Copy)]
+pub struct Sample {
+    /// Seconds since the run started.
+    pub at_secs: u64,
+    pub gdi: u32,
+    pub user: u32,
+    pub threads: u32,
+    pub handles: u32,
+    /// Bytes.
+    pub working_set: u64,
+    pub private: u64,
+}
+
+impl Sample {
+    pub fn header() -> &'static str {
+        "seconds,gdi,user,threads,handles,working_set_bytes,private_bytes"
+    }
+
+    pub fn as_csv(&self) -> String {
+        format!(
+            "{},{},{},{},{},{},{}",
+            self.at_secs, self.gdi, self.user, self.threads, self.handles, self.working_set,
+            self.private
+        )
+    }
+}
+
+/// Reads every counter at once, so a row is one moment rather than seven.
+pub fn sample(at_secs: u64) -> Sample {
+    let (gdi, user) = gui_handles();
+    let (working_set, private) = memory();
+    Sample {
+        at_secs,
+        gdi,
+        user,
+        threads: thread_count(),
+        handles: handle_count(),
+        working_set,
+        private,
+    }
+}
+
+/// Working set and private bytes.
+///
+/// Private bytes is the number that matters for a leak: the working set falls
+/// when Windows trims the process, which happens whenever the machine is under
+/// memory pressure and has nothing to do with whether this app is holding on to
+/// anything. A working set that stays flat while private bytes climb is a leak
+/// that looks like health.
+fn memory() -> (u64, u64) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::ProcessStatus::{
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+        };
+        use windows::Win32::System::Threading::GetCurrentProcess;
+
+        let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
+        // SAFETY: the struct is a stack local sized by `cb` as the API requires,
+        // and the EX form is layout-compatible with the base one — which is why
+        // the cast is the documented way to call this.
+        let ok = unsafe {
+            GetProcessMemoryInfo(
+                GetCurrentProcess(),
+                &mut counters as *mut _ as *mut PROCESS_MEMORY_COUNTERS,
+                std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+            )
+        };
+        if ok.is_ok() {
+            return (counters.WorkingSetSize as u64, counters.PrivateUsage as u64);
+        }
+        (0, 0)
+    }
+    #[cfg(not(windows))]
+    {
+        (0, 0)
+    }
+}
+
+/// Open kernel handles. A thread, file or event never closed shows up here and
+/// nowhere else — GDI and USER counters do not see them.
+fn handle_count() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+        let mut count = 0u32;
+        // SAFETY: writing a `u32` we own, through the current-process
+        // pseudo-handle, which needs no cleanup.
+        let ok = unsafe { GetProcessHandleCount(GetCurrentProcess(), &mut count) };
+        if ok.is_ok() {
+            count
+        } else {
+            0
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+fn thread_count() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+        };
+        let us = std::process::id();
+        // SAFETY: the snapshot is owned and closed at the end of the scope, and
+        // the entry is a stack local sized by `dwSize` as the API requires.
+        unsafe {
+            let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) else {
+                return 0;
+            };
+            let snapshot = windows::core::Owned::new(snapshot);
+            let mut entry = THREADENTRY32 {
+                dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
+                ..Default::default()
+            };
+            if Thread32First(*snapshot, &mut entry).is_err() {
+                return 0;
+            }
+            let mut count = 0u32;
+            loop {
+                if entry.th32OwnerProcessID == us {
+                    count += 1;
+                }
+                if Thread32Next(*snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+            count
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+/// What one cycle of the soak does, and how many times it did it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Work {
+    pub cursor_loads: u64,
+    pub image_decodes: u64,
+    pub cursors_built: u64,
+    pub state_round_trips: u64,
+    pub failures: u64,
+}
+
+/// One pass of everything the app does repeatedly, without touching the
+/// machine's actual pointer.
+///
+/// **`SetSystemCursor` and the registry are deliberately absent**, for the same
+/// reason `run_handle_stress` leaves them out and a stronger one: a soak runs
+/// for hours, and a harness that spent those hours applying cursors would fight
+/// the released copy of the app, the watchdog, and the person trying to use the
+/// machine. What it costs is coverage of the apply path specifically; what it
+/// buys is a harness anybody will actually leave running.
+fn one_cycle(work: &mut Work, files: &[PathBuf]) {
+    // The load and release path, which is the one with a known-hard ownership
+    // rule.
+    for file in files {
+        match crate::cursor::engine::verify_loadable(file) {
+            Ok(_) => work.cursor_loads += 1,
+            Err(_) => work.failures += 1,
+        }
+    }
+
+    // The import pipeline, end to end: decode, matte, resample, write a real
+    // `.cur`. This is the heaviest thing the app does and the one most likely
+    // to hold on to something.
+    let png = synthetic_png(64, 64, work.image_decodes as u8);
+    match crate::build::pipeline::decode(png) {
+        Ok(source) => {
+            work.image_decodes += 1;
+            match source
+                .first()
+                .ok()
+                .cloned()
+                .and_then(|bitmap| crate::build::pipeline::prepare_master(&bitmap).ok())
+            {
+                Some(master) => {
+                    let sizes =
+                        crate::build::pipeline::sizes_for_source(master.width, master.height);
+                    let options = crate::build::pipeline::Finish::default();
+                    if crate::build::pipeline::build_cur(&master, (0.5, 0.5), &options, &sizes)
+                        .is_ok()
+                    {
+                        work.cursors_built += 1;
+                    } else {
+                        work.failures += 1;
+                    }
+                }
+                None => work.failures += 1,
+            }
+        }
+        Err(_) => work.failures += 1,
+    }
+
+    // The state layer, which every setting change and every preset save goes
+    // through. Written to a scratch file rather than the real data directory:
+    // a soak must not be able to damage the thing it is protecting.
+    let scratch = std::env::temp_dir()
+        .join("cursorforge-soak")
+        .join("state.json");
+    let settings = crate::state::settings::Settings::default();
+    if let Ok(json) = serde_json::to_string(&settings) {
+        if crate::state::store::write(&scratch, &json).is_ok() {
+            let (_read, _source) =
+                crate::state::store::read::<crate::state::settings::Settings>(&scratch);
+            work.state_round_trips += 1;
+        } else {
+            work.failures += 1;
+        }
+    }
+}
+
+/// A different image every time, so the decoder is not handed the same bytes
+/// twice and nothing downstream can be caching its way to a flat line.
+fn synthetic_png(width: u32, height: u32, seed: u8) -> Vec<u8> {
+    let mut image = image::RgbaImage::new(width, height);
+    for (x, y, pixel) in image.enumerate_pixels_mut() {
+        let on = ((x / 4) + (y / 4) + seed as u32) % 2 == 0;
+        *pixel = if on {
+            image::Rgba([seed, 40u8.wrapping_add(seed), 200, 255])
+        } else {
+            image::Rgba([255, 255, 255, 255])
+        };
+    }
+    let mut out = std::io::Cursor::new(Vec::new());
+    let _ = image::DynamicImage::ImageRgba8(image).write_to(&mut out, image::ImageFormat::Png);
+    out.into_inner()
+}
+
+/// What a soak found.
+#[derive(Debug, Clone)]
+pub struct SoakReport {
+    pub samples: Vec<Sample>,
+    pub work: Work,
+    pub cycles: u64,
+}
+
+impl SoakReport {
+    pub fn first(&self) -> Option<&Sample> {
+        self.samples.first()
+    }
+
+    pub fn last(&self) -> Option<&Sample> {
+        self.samples.last()
+    }
+
+    /// Growth in each counter from the first sample to the last.
+    pub fn growth(&self) -> Option<(i64, i64, i64, i64, i64, i64)> {
+        let (a, b) = (self.first()?, self.last()?);
+        Some((
+            b.gdi as i64 - a.gdi as i64,
+            b.user as i64 - a.user as i64,
+            b.threads as i64 - a.threads as i64,
+            b.handles as i64 - a.handles as i64,
+            b.working_set as i64 - a.working_set as i64,
+            b.private as i64 - a.private as i64,
+        ))
+    }
+
+    pub fn csv(&self) -> String {
+        let mut out = String::from(Sample::header());
+        out.push('\n');
+        for sample in &self.samples {
+            out.push_str(&sample.as_csv());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+/// Runs the work loop for `duration`, sampling every `interval`.
+///
+/// The first sample is taken *after* a warm-up cycle. Every subsystem here
+/// allocates something long-lived the first time it is used — a decoder table, a
+/// thread pool, whatever the loader touched — and counting that as growth would
+/// report a leak on every clean run, which is how a check gets ignored.
+pub fn run_soak(
+    duration: std::time::Duration,
+    interval: std::time::Duration,
+    mut on_sample: impl FnMut(&Sample),
+) -> SoakReport {
+    let files = sample_files();
+    let mut work = Work::default();
+
+    one_cycle(&mut work, &files);
+    work = Work::default();
+
+    let started = std::time::Instant::now();
+    let mut samples = vec![sample(0)];
+    on_sample(&samples[0]);
+
+    let mut next_sample = started + interval;
+    let mut cycles = 0u64;
+
+    while started.elapsed() < duration {
+        one_cycle(&mut work, &files);
+        cycles += 1;
+
+        if std::time::Instant::now() >= next_sample {
+            let taken = sample(started.elapsed().as_secs());
+            on_sample(&taken);
+            samples.push(taken);
+            next_sample += interval;
+        }
+    }
+
+    let taken = sample(started.elapsed().as_secs());
+    on_sample(&taken);
+    samples.push(taken);
+
+    SoakReport {
+        samples,
+        work,
+        cycles,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +519,52 @@ mod tests {
             report.gdi_growth(),
             report.user_growth()
         );
+    }
+
+    /// Every counter the soak samples has to return something.
+    ///
+    /// A soak whose numbers are all zero reports a beautifully flat line for any
+    /// leak whatsoever, which is worse than not running it — it is a graph that
+    /// says everything is fine.
+    #[test]
+    fn every_sampled_counter_reports_something() {
+        let taken = sample(0);
+        assert!(taken.gdi > 0 || taken.user > 0, "GUI counters are dead");
+        assert!(taken.threads > 0, "a running process has at least one thread");
+        assert!(taken.handles > 0, "a running process has open handles");
+        assert!(taken.working_set > 0, "working set reads as zero");
+        assert!(taken.private > 0, "private bytes read as zero");
+    }
+
+    /// A short soak, so the loop itself is covered by the suite. The real run is
+    /// `genpacks --soak`, which is not bound by how long a unit test may take.
+    #[test]
+    fn a_short_soak_does_work_and_produces_rows() {
+        let report = run_soak(
+            std::time::Duration::from_millis(400),
+            std::time::Duration::from_millis(100),
+            |_| {},
+        );
+
+        assert!(report.cycles > 0, "the soak did no work");
+        assert!(report.samples.len() >= 2, "a growth figure needs two samples");
+        assert!(report.work.image_decodes > 0, "the image path was never exercised");
+        assert!(report.work.state_round_trips > 0, "the state path was never exercised");
+        assert!(report.growth().is_some());
+
+        // The CSV is what a long run leaves behind, so its shape matters as much
+        // as the numbers.
+        let csv = report.csv();
+        assert!(csv.starts_with(Sample::header()));
+        assert_eq!(csv.lines().count(), report.samples.len() + 1);
+    }
+
+    /// Each cycle must be handed different bytes, or the decoder is being asked
+    /// the same question a hundred thousand times and any cache in the stack
+    /// flattens the graph for free.
+    #[test]
+    fn the_synthetic_image_differs_between_cycles() {
+        assert_ne!(synthetic_png(32, 32, 1), synthetic_png(32, 32, 2));
+        assert_eq!(synthetic_png(32, 32, 7), synthetic_png(32, 32, 7));
     }
 }

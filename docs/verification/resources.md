@@ -55,6 +55,59 @@ The number above is real and the method is repeatable. It is one row of §8, not
 
 ---
 
+## The soak — started 2026-08-15, running
+
+**Covers the 24-hour half of §8.** Started, not finished; the row is here so the
+run is recorded whether or not anybody is watching when it ends.
+
+```bash
+npm run soak -- 1440 docs/verification/soak/soak-2026-08-15.csv
+```
+
+Runs the app's repeated work in a loop for a day, sampling seven counters every
+minute into a CSV. Rows are flushed as they are taken, so a reboot or a closed
+laptop still leaves everything measured up to that point — a soak whose results
+only exist in memory produces nothing the first time anything goes wrong, which
+on a twenty-four hour run is most of the time.
+
+Each cycle: four cursor loads and releases, one image decoded and built into a
+multi-resolution `.cur`, and one state file written and read back through the
+durable store. A different image every cycle, so nothing downstream can cache
+its way to a flat line.
+
+### First ten minutes
+
+| | Start | +10 min |
+| --- | --- | --- |
+| GDI objects | 4 | 4 |
+| USER objects | 1 | 1 |
+| Threads | 4 | 3 |
+| Open handles | 109 | 118 |
+| Working set | 8.1 MB | 13.7 MB |
+| Private bytes | 1.4 MB | 4.0 MB |
+
+Both GUI counters are flat. Handles settled at 117 within the first minute and
+have moved by one since. Memory rose during warm-up — decoder tables, the
+allocator's first arenas — and has been level since minute two.
+
+**Read the slope, not the endpoints.** A number that tracks the cycle count is
+a leak; a number that rises once and stops is a subsystem waking up.
+
+### What the soak deliberately leaves out
+
+- **`SetSystemCursor` and the registry.** The same reason the handle harness
+  leaves them out, and a stronger one: this runs for hours, and a harness that
+  spent those hours applying cursors would fight the released copy of the app,
+  the watchdog, and the person trying to use the machine.
+- **Everything that needs the UI.** The brief's 200 clicks per control, 100
+  catalog scrolls, 100 window/tray cycles and 60 seconds of continuous resize
+  all need a driven GUI. There is no UI automation harness in this project and
+  building one is a larger piece of work than the rows it would fill.
+- **The frame graph.** Catalog scroll performance and the 60 fps target need a
+  profiler attached to a running window, which is the same missing harness.
+
+---
+
 ## Parsers under damage — 2026-08-15, working tree
 
 **Covers the fuzzing half of §2.4.** Runs on every push; `src-tauri/src/fuzz.rs`.

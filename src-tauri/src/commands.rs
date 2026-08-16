@@ -856,25 +856,34 @@ pub fn get_diagnostics() -> AppResult<String> {
         "scheme  {}",
         crate::cursor::scheme::read_scheme_name().unwrap_or_else(|_| "(none)".into())
     );
-    for role in crate::cursor::roles::ALL_ROLES {
-        match crate::cursor::scheme::read_role(role) {
-            Ok(value) if value.trim().is_empty() => {
-                let _ = writeln!(out, "  {:<12} (empty -- Windows default)", role.registry_value());
-            }
-            Ok(value) => {
-                let present = std::path::Path::new(&crate::util::expand_env(&value)).exists();
-                let _ = writeln!(
-                    out,
-                    "  {:<12} {value}{}",
-                    role.registry_value(),
-                    if present { "" } else { "   << FILE MISSING" }
-                );
-            }
-            Err(e) => {
-                let _ = writeln!(out, "  {:<12} unreadable: {e}", role.registry_value());
-            }
+    // Through the audit rather than reading the values directly, so the report
+    // says what each file *is* and not only whether it exists. A `.cur` with the
+    // wrong `idType`, or an icon saved under a cursor's name, exists perfectly
+    // and loads as nothing — and Windows falls back to its own pointer for it
+    // silently. That is the state behind almost every "the cursor doesn't work
+    // in <application>", and it is invisible in a listing that only checks for
+    // presence.
+    let audit = crate::cursor::audit_roles();
+    for role in &audit {
+        if !role.set {
+            let _ = writeln!(out, "  {:<12} (empty -- Windows default)", role.role);
+            continue;
         }
+        let note = if !role.exists {
+            "   << FILE MISSING"
+        } else if !role.ok {
+            "   << NOT A LOADABLE CURSOR"
+        } else {
+            ""
+        };
+        let _ = writeln!(out, "  {:<12} {}{note}", role.role, role.value);
     }
+    let faults = audit.iter().filter(|r| !r.ok).count();
+    let _ = writeln!(
+        out,
+        "  {} of 17 set, {faults} fault(s)",
+        audit.iter().filter(|r| r.set).count()
+    );
 
     let _ = writeln!(out, "\nSAFETY NET");
     let _ = writeln!(
