@@ -144,6 +144,33 @@ export const importImage = (path: string, cut: Cut = "auto") =>
 export const importImageBytes = (bytes: number[], cut: Cut = "auto") =>
   call<ImportedImage>("import_image_bytes", { bytes, cut });
 
+/* ── the matte editor ──────────────────────────────────────── */
+
+export interface MatteSession {
+  /** The staged image with no background removal applied. */
+  originalDataUri: string;
+  width: number;
+  height: number;
+  /** Where the slider starts: what the automatic path would have chosen. */
+  suggestedTolerance: number;
+  minTolerance: number;
+  maxTolerance: number;
+}
+
+/** Opens the editor on a staged image. */
+export const openMatteEditor = (token: string) =>
+  call<MatteSession>("open_matte_editor", { token });
+
+/**
+ * Keys the staged image at one tolerance and returns a preview.
+ *
+ * Runs the real matte rather than anything approximated here, so what the user
+ * drags against is what they get. An editor that previews with a different
+ * algorithm than it applies is worse than no preview.
+ */
+export const previewMatte = (token: string, tolerance: number) =>
+  call<string>("preview_matte", { token, tolerance });
+
 export interface BuildArgs {
   token: string;
   name: string;

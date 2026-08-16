@@ -23,9 +23,23 @@ use std::sync::{Mutex, OnceLock};
 /// Staged images live in memory, never on disk, and never outlive the session.
 /// The frontend holds only an opaque token — it never learns a path, and it
 /// cannot ask for one (PRD §13.4).
-fn staging() -> &'static Mutex<HashMap<String, Source>> {
-    static STAGING: OnceLock<Mutex<HashMap<String, Source>>> = OnceLock::new();
+fn staging() -> &'static Mutex<HashMap<String, Staged>> {
+    static STAGING: OnceLock<Mutex<HashMap<String, Staged>>> = OnceLock::new();
     STAGING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// A staged image, and what it looked like before the matte touched it.
+///
+/// Both, because the editor needs something to reset to and something to re-key
+/// from at a different tolerance. Keeping only the processed copy means "reset
+/// to original" can only be honoured by asking the user to drop the file again,
+/// which is not an undo.
+#[derive(Debug, Clone)]
+struct Staged {
+    /// Decoded, normalised for size, **not** keyed.
+    original: Source,
+    /// What the user is currently working with.
+    current: Source,
 }
 
 /// At most a handful of staged images at once; a long session should not
@@ -78,6 +92,21 @@ pub fn stage(bytes: Vec<u8>) -> AppResult<ImportedImage> {
 
 pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage> {
     let source = pipeline::decode(bytes)?;
+
+    // The image as it arrived, normalised for size and never keyed.
+    //
+    // Kept so the editor has something to reset to and something to re-key from
+    // at a different tolerance. It costs one extra resize per import, which is
+    // the price of "reset to original" meaning anything at all — the alternative
+    // is asking the user to drop the file in again, which is not an undo.
+    let untouched = match &source {
+        Source::Static(bitmap) => {
+            Source::Static(pipeline::prepare_master_with(bitmap, pipeline::Cut::Keep)?)
+        }
+        Source::Animated(frames) => {
+            Source::Animated(pipeline::prepare_animation_with(frames, pipeline::Cut::Keep)?)
+        }
+    };
 
     // Normalise every frame the same way, or an animation's frames drift
     // relative to each other and the hotspot means something different per frame.
@@ -145,7 +174,13 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
                 staged.remove(&key);
             }
         }
-        staged.insert(token, normalised);
+        staged.insert(
+            token,
+            Staged {
+                original: untouched,
+                current: normalised,
+            },
+        );
     }
     Ok(image)
 }
@@ -154,7 +189,22 @@ fn take_staged(token: &str) -> AppResult<Source> {
     staging()
         .lock()
         .ok()
-        .and_then(|staged| staged.get(token).cloned())
+        .and_then(|staged| staged.get(token).map(|s| s.current.clone()))
+        .ok_or_else(|| {
+            AppError::invalid("that image is no longer staged — drop it in again")
+        })
+}
+
+/// The staged image as it arrived, before any background removal.
+///
+/// The editor's starting point. Returned as a single bitmap because the editor
+/// works on one frame: an animation's matte is decided from its first frame and
+/// applied to the sequence, so that is the frame worth editing.
+pub fn staged_original(token: &str) -> AppResult<crate::build::bitmap::Bitmap> {
+    staging()
+        .lock()
+        .ok()
+        .and_then(|staged| staged.get(token).and_then(|s| s.original.first().ok().cloned()))
         .ok_or_else(|| {
             AppError::invalid("that image is no longer staged — drop it in again")
         })

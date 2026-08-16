@@ -397,6 +397,8 @@ pub fn run() {
             commands::apply_preset,
             commands::export_preset,
             commands::import_cfpack,
+            commands::open_matte_editor,
+            commands::preview_matte,
             commands::suggested_backup_name,
             commands::export_all_data,
             commands::import_all_data,

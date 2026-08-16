@@ -503,7 +503,31 @@ pub fn already_cut_out(bitmap: &Bitmap) -> bool {
 ///
 /// Refuses rather than guesses. See [`attempt`].
 pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
-    attempt(bitmap, false)
+    attempt(bitmap, false, None)
+}
+
+/// Keys at a tolerance the user chose, rather than one derived from the border.
+///
+/// The editor's slider. A hand-set tolerance is an explicit instruction and
+/// carries the same weight as `force`: the keyability refusal is skipped,
+/// because the person moving the slider is looking at the result while they
+/// move it. The sanity check on what comes back still applies.
+pub fn remove_background_at(bitmap: &mut Bitmap, tolerance: i32) -> MatteReport {
+    attempt(bitmap, false, Some(tolerance))
+}
+
+/// The range the slider spans, and what "automatic" would have picked.
+pub fn tolerance_range() -> (i32, i32) {
+    (MIN_TOLERANCE, SOFT_TOLERANCE)
+}
+
+/// What the automatic path would choose for this image, so the slider can start
+/// where the app would have.
+pub fn suggested_tolerance(bitmap: &Bitmap) -> i32 {
+    match sample_border(bitmap) {
+        Some(background) => tolerance_for(border_spread(bitmap, background)),
+        None => TOLERANCE,
+    }
 }
 
 /// The same, but ignoring the "this already has transparency" shortcut **and**
@@ -519,7 +543,7 @@ pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
 /// anyway" is a reasonable thing for a user to mean; "hand me back an
 /// unrecognisable blob" is not, and no button in this app means that.
 pub fn remove_background_forced(bitmap: &mut Bitmap) -> MatteReport {
-    attempt(bitmap, true)
+    attempt(bitmap, true, None)
 }
 
 /// Decides whether to key, keys on a copy, checks the result, and only then
@@ -537,7 +561,7 @@ pub fn remove_background_forced(bitmap: &mut Bitmap) -> MatteReport {
 ///  4. **Check what came back.** A key that claimed almost everything and left
 ///     scattered debris is a destroyed image, whatever its coverage figure says.
 ///  5. **Commit, or revert and say why.**
-fn attempt(bitmap: &mut Bitmap, force: bool) -> MatteReport {
+fn attempt(bitmap: &mut Bitmap, force: bool, tolerance: Option<i32>) -> MatteReport {
     let (w, h) = (bitmap.width, bitmap.height);
     if w < 3 || h < 3 {
         return MatteReport::untouched(Keyability {
@@ -577,7 +601,7 @@ fn attempt(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     // Not applied under `force`: a user who has looked at the preview and asked
     // for it anyway has overruled the guess, and they are allowed to. The
     // result is still checked at step 4.
-    if !force && !keyability.confident {
+    if !force && tolerance.is_none() && !keyability.confident {
         log::info!(
             "matte: refusing to key — corners disagree by {}, border varies by {}, \
              {:.1} border colours per 1000, {:.0}% of the border on an edge",
@@ -592,7 +616,7 @@ fn attempt(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     // 3. On a copy. The original is what the user gets back if any of this goes
     // wrong, and it cannot be reconstructed from a bad matte.
     let mut candidate = bitmap.clone();
-    let report = cut(&mut candidate, force);
+    let report = cut(&mut candidate, force, tolerance);
 
     // 4. What came back.
     if report.removed < MIN_USEFUL_COVERAGE {
@@ -835,7 +859,7 @@ fn luma(rgb: [u8; 3]) -> i32 {
 ///
 /// Assumes its caller has already decided this image is worth keying and is
 /// working on a copy — see [`attempt`], which is the only caller.
-fn cut(bitmap: &mut Bitmap, _force: bool) -> MatteReport {
+fn cut(bitmap: &mut Bitmap, _force: bool, override_tolerance: Option<i32>) -> MatteReport {
     let (w, h) = (bitmap.width, bitmap.height);
     let empty = MatteReport::untouched(Keyability::default());
     if w < 3 || h < 3 {
@@ -849,7 +873,13 @@ fn cut(bitmap: &mut Bitmap, _force: bool) -> MatteReport {
     // How much slack this particular image gets, from how uniform its border is.
     // A flat card is keyed almost exactly; a noisy photographic backdrop is given
     // room. See `border_spread`.
-    let tolerance = tolerance_for(border_spread(bitmap, background));
+    // The user's slider wins when there is one. The derived value is a good
+    // default and is never better than a person looking at the result: the
+    // whole reason the editor exists is that some images need a number nothing
+    // can infer.
+    let tolerance = override_tolerance
+        .map(|t| t.clamp(MIN_TOLERANCE, SOFT_TOLERANCE))
+        .unwrap_or_else(|| tolerance_for(border_spread(bitmap, background)));
     let soft = soft_for(tolerance);
 
     // Flood from the edges rather than clearing every matching pixel anywhere.

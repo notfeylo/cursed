@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { MatteEditor } from "../components/MatteEditor";
 import { Button, Select, Slider, TextInput, Toggle } from "../components/ui";
 import * as ipc from "../lib/ipc";
 import type { ApplyMode, ImportedImage } from "../lib/types";
@@ -45,6 +46,10 @@ export function CustomImport() {
   // and validation — a hover cursor is a cursor.
   const [hand, setHand] = useState<ImportedImage | null>(null);
   const [handBusy, setHandBusy] = useState(false);
+  // The manual editor, opened from the refusal banner or from the toggle's
+  // hint. Modal over the whole screen, because cutting an edge by hand needs
+  // the pixels as large as they will go.
+  const [editing, setEditing] = useState(false);
 
   const accept = useCallback(
     async (loader: () => Promise<ImportedImage>) => {
@@ -177,6 +182,21 @@ export function CustomImport() {
 
   return (
     <div className="screen-in flex h-full flex-col">
+      {editing && image && (
+        <MatteEditor
+          image={image}
+          onCancel={() => setEditing(false)}
+          onApply={(next) => {
+            setEditing(false);
+            setImage(next);
+            setHotspot(next.suggestedHotspot);
+            void ipc
+              .previewCustom(next.token, outline)
+              .then(setPreviews)
+              .catch(() => undefined);
+          }}
+        />
+      )}
       <ScreenHeader title="CUSTOM">
         {image && (
           <button
@@ -250,10 +270,14 @@ export function CustomImport() {
                 <p className="text-[11px] text-text">{image.refusal}</p>
                 {!image.keyable && (
                   <p className="mt-1 text-[11px] text-text-dim">
-                    You can still turn this on to try anyway — it will not be stopped, it
-                    just probably will not look good.
+                    You can still turn it on to try anyway — it will not be stopped, it just
+                    probably will not look good.
                   </p>
                 )}
+                {/* The way out. A refusal with nowhere to go is a dead end. */}
+                <Button full variant="ghost" onClick={() => setEditing(true)}>
+                  CUT IT OUT MYSELF
+                </Button>
               </div>
             )}
 

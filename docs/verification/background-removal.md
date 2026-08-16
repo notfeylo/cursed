@@ -184,8 +184,46 @@ against the first: **consistent to 0.00%.**
 | Morphological refinement / despeckle | done |
 | Premultiplied alpha end to end | done |
 | Consistent matte across animation frames | done, now measured |
-| **Manual editor: brush, undo, tolerance slider** | **not built** |
+| Manual editor: brush, undo, tolerance slider | **done** |
 
-The editor is the honest gap. A low-confidence refusal without one is a dead
-end: the app says it cannot do this and offers no way for the user to do it
-themselves.
+## The editor
+
+Shipped with the refusal, because a refusal without somewhere to go is a dead
+end. Reached from the banner: **CUT IT OUT MYSELF**.
+
+| | |
+| --- | --- |
+| Checkerboard-backed preview at real size | yes — on a flat ground a hole and a white subject look identical, which is the thing the user is there to tell apart |
+| Erase and restore brush, adjustable 4–96 px | yes, with squared falloff so a hand-worked edge is no harder than the antialiased one beside it |
+| Undo | yes, whole-alpha snapshots, bounded at 20 |
+| Tolerance slider with live preview | yes, keyed by the **real** matte on the backend |
+| Reset to original | yes |
+| Apply, or cancel and keep the original | yes |
+
+Three decisions worth writing down:
+
+**Only alpha is edited.** A brush that painted colour would be a paint program.
+This decides, per pixel, how much of the image is there — which is what a matte
+is — and makes "apply" nothing more than reading the canvas back out.
+
+**Restore puts colour back too.** A pixel the matte cleared had its colour zeroed
+along with its alpha, so restoring alpha alone would paint transparent black. The
+untouched original is held for exactly this, which is also what makes "reset"
+mean something rather than "drop the file in again".
+
+**The slider round-trips to the backend.** It could have approximated a key in
+the frontend and been smoother. An editor that previews with a different
+algorithm than it applies is worse than one with no preview, because it is
+confidently wrong at the moment the user is deciding.
+
+Applying goes back through the ordinary import path with `keep`, so the user's
+alpha is not re-keyed on the way in and nothing about the editor bypasses the
+validation every other import goes through.
+
+### Not covered by a test
+
+The editor is canvas and pointer events, and there is no DOM test harness in
+this project. What is tested is everything underneath it: the tolerance override,
+the preview command, and that a hand-set tolerance skips the keyability refusal
+the same way `force` does — because the person moving the slider is looking at
+the result while they move it.

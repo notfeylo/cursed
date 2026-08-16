@@ -376,6 +376,51 @@ pub fn import_cfpack(src: String) -> AppResult<Preset> {
     packs::cfpack::import(&PathBuf::from(src))
 }
 
+/* ── the matte editor ──────────────────────────────────────── */
+
+/// What the editor needs to open: the image as it arrived, and where to start.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatteSession {
+    /// The staged image with **no background removal applied**, so the editor
+    /// has something to reset to and something to key from.
+    pub original_data_uri: String,
+    pub width: u32,
+    pub height: u32,
+    /// The tolerance the automatic path would have chosen for this image.
+    pub suggested_tolerance: i32,
+    pub min_tolerance: i32,
+    pub max_tolerance: i32,
+}
+
+/// Opens the editor on a staged image.
+#[tauri::command]
+pub fn open_matte_editor(token: String) -> AppResult<MatteSession> {
+    let original = custom::staged_original(&token)?;
+    let (min_tolerance, max_tolerance) = crate::build::matte::tolerance_range();
+    Ok(MatteSession {
+        suggested_tolerance: crate::build::matte::suggested_tolerance(&original),
+        width: original.width,
+        height: original.height,
+        original_data_uri: original.to_png_data_uri()?,
+        min_tolerance,
+        max_tolerance,
+    })
+}
+
+/// Keys the staged image at one tolerance and hands back a preview.
+///
+/// The live half of the slider. Runs the real matte rather than anything the
+/// frontend approximates, so what the user is dragging against is what they
+/// will get — an editor that previews with a different algorithm than it
+/// applies is worse than no preview.
+#[tauri::command]
+pub fn preview_matte(token: String, tolerance: i32) -> AppResult<String> {
+    let mut image = custom::staged_original(&token)?;
+    crate::build::matte::remove_background_at(&mut image, tolerance);
+    image.to_png_data_uri()
+}
+
 /* ── backup and restore ────────────────────────────────────── */
 
 /// The filename to offer in the save dialog. Dated, so a second backup does not
