@@ -26,6 +26,7 @@ export function SettingsScreen() {
   const refreshActive = useStore((s) => s.refreshActive);
 
   const bootstrap = useStore((s) => s.bootstrap);
+  const packs = useStore((s) => s.packs);
 
   const [storageDir, setStorageDir] = useState("");
   const [cacheBytes, setCacheBytes] = useState(0);
@@ -379,6 +380,24 @@ export function SettingsScreen() {
             />
           </Field>
 
+          {/* The pack that fills the sixteen roles a custom cursor does not
+              define. It was settable nowhere: the import screen has its own
+              dropdown that only ever set local state, so this value stayed on
+              its default for every user, for every build, while still deciding
+              what fifteen of their pointers looked like. */}
+          {settings.applyMode === "Blend" && (
+            <Field
+              label="Blend with"
+              hint="Fills the roles a custom cursor does not define"
+            >
+              <Select
+                value={settings.blendPack}
+                onChange={(v) => void patch({ blendPack: v })}
+                options={packs.map((pack) => ({ value: pack.id, label: pack.name }))}
+              />
+            </Field>
+          )}
+
           <div className="py-2">
             <Slider
               label="ANIMATION SPEED"
@@ -389,6 +408,13 @@ export function SettingsScreen() {
               value={settings.animationSpeed}
               onChange={(v) => void patch({ animationSpeed: v })}
             />
+            {/* Said out loud because it is otherwise a control that appears to
+                do nothing: the speed is baked into an .ani when it is written,
+                so moving this cannot change a cursor that already exists. */}
+            <p className="mt-2 text-[11px] text-text-dim">
+              Applies to animated cursors built from here on. Cursors you have already made
+              keep the speed they were built with.
+            </p>
           </div>
 
           <Toggle

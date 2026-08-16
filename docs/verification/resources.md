@@ -75,20 +75,24 @@ multi-resolution `.cur`, and one state file written and read back through the
 durable store. A different image every cycle, so nothing downstream can cache
 its way to a flat line.
 
-### First ten minutes
+### First 25 minutes
 
-| | Start | +10 min |
-| --- | --- | --- |
-| GDI objects | 4 | 4 |
-| USER objects | 1 | 1 |
-| Threads | 4 | 3 |
-| Open handles | 109 | 118 |
-| Working set | 8.1 MB | 13.7 MB |
-| Private bytes | 1.4 MB | 4.0 MB |
+| | Start | +2 min | +25 min |
+| --- | --- | --- | --- |
+| GDI objects | 4 | 4 | **4** |
+| USER objects | 1 | 1 | **1** |
+| Threads | 4 | 1 | 1 |
+| Open handles | 109 | 117 | 118 |
+| Working set | 8.1 MB | 13.4 MB | 13.0 MB |
+| Private bytes | 1.4 MB | 3.6 MB | 2.8 MB |
 
-Both GUI counters are flat. Handles settled at 117 within the first minute and
-have moved by one since. Memory rose during warm-up — decoder tables, the
-allocator's first arenas — and has been level since minute two.
+Both GUI counters have not moved once. Handles settled at 117 within the first
+minute and have risen by one since. Memory rose through warm-up — decoder
+tables, the allocator's first arenas — and has oscillated around 14 MB with no
+trend since minute two; the last row is lower than the second.
+
+Nothing here tracks the cycle count, which is the only shape that would mean
+anything.
 
 **Read the slope, not the endpoints.** A number that tracks the cycle count is
 a leak; a number that rises once and stops is a subsystem waking up.

@@ -2,6 +2,11 @@
 
 **Your pointer. Possessed.**
 
+[![build](https://github.com/notfeylo/cursed/actions/workflows/build.yml/badge.svg)](https://github.com/notfeylo/cursed/actions/workflows/build.yml)
+[![latest release](https://img.shields.io/github/v/release/notfeylo/cursed?label=download)](https://github.com/notfeylo/cursed/releases/latest)
+[![Windows 10 1803+](https://img.shields.io/badge/Windows-10%201803%2B-0078D4)](#requirements)
+[![licence](https://img.shields.io/github/license/notfeylo/cursed)](LICENSE)
+
 A ~10 MB Windows app that replaces every pointer role with a crisp,
 multi-resolution cursor scheme, turns any image you drop on it into a real
 `.cur` or `.ani`, and stops Windows quietly reverting it.
@@ -198,9 +203,13 @@ no `SetWindowsHookEx`. See [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
+- [CHANGELOG.md](CHANGELOG.md) — what changed, and where it matters more, what
+  was wrong before
 - [REPO_MAP.md](docs/REPO_MAP.md) — where everything lives, one screen
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the three layers fit together
 - [CURSOR_FORMAT.md](docs/CURSOR_FORMAT.md) — the `.cur` / `.ani` byte layouts
+- [SIGNING.md](docs/SIGNING.md) — the two signatures, and why the free one
+  matters more
 - [LICENSES.md](docs/LICENSES.md) — every bundled pack and font, and its licence
 - [verification/](docs/verification/) — per release: what was checked, what was
   not, and what could not be

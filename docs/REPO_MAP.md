@@ -51,8 +51,13 @@ shapes · `store.ts` state · `styles.css` every design token.
 | `src/import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
 | `src/updates.rs` | The one network request the app makes, on WinHTTP. Architecture-aware asset matching, checksum verified before anything is executed. |
 | `src/paths.rs` | Every path the app writes. Nothing else builds one. |
+| `src/signing.rs` | Verifies a downloaded installer against the release signature, when a key is compiled in. See [`SIGNING.md`](SIGNING.md). |
+| `src/backup.rs` | Everything the user made, in one zip. Restore merges rather than replaces. |
+| `src/dataprint.rs` | Fingerprints the data directory, so `verify-release.ps1` can prove an update touched nothing. |
+| `src/stress.rs` | The handle harness and the soak: what the counters do over hours of work. |
+| `src/fuzz.rs` | Test-only. Thousands of damaged inputs per parser, per push. No input may panic. |
 | `src/session.rs`, `src/state/` | What is applied now, and the settings behind it. |
-| `src/bin/genpacks.rs` | The offline tool: exports the catalog, draws the icon, renders the review sheets. |
+| `src/bin/genpacks.rs` | The offline tool: exports the catalog, draws the icon, renders the review sheets, checks the seventeen roles, runs the soak. |
 | `tauri.conf.json`, `capabilities/` | Window and bundle config, and exactly which plugin commands the webview may call. |
 | `dev.tauri.conf.json` | Merged over the above to build the development channel. Product name, identifier and icons only. |
 | `installer-hooks.nsh` | NSIS install/uninstall hooks. Both uninstall hooks return immediately in update mode. |
@@ -70,12 +75,22 @@ drawing code shows up as a change to a picture; nothing reads it at runtime.
 | Script | Run it when |
 | --- | --- |
 | `build-release.mjs` (`npm run release`) | Cutting a release. Builds x64 + ARM64 + 32-bit + the offline installer, stages aliases, writes `SHA256SUMS.txt`. |
-| `verify-uninstall.ps1` | Before a release. `-Snapshot` before installing, no arguments after uninstalling. **Release gate.** |
-| `check-bundle.mjs` (`npm run check:bundle`) | Run by CI. Catches fonts with no Latin glyphs, the dev-only specimen route reaching production, and a dev-channel binary about to ship as the release. |
+| `verify-release.ps1` | **In a VM, before publishing.** The whole matrix in one command: baseline, first install, update, data comparison, roles, uninstall, pass/fail table. See [`verification/VM_SETUP.md`](verification/VM_SETUP.md). |
+| `verify-uninstall.ps1` | Before a release. `-Snapshot` before installing, no arguments after uninstalling. **Release gate**, and called by the above. |
+| `sign-release.mjs` | Signs each versioned installer with the release key. Run by the release workflow, which refuses to build without the secrets. |
+| `check-bundle.mjs` (`npm run check:bundle`) | Run by CI. Catches fonts with no Latin glyphs, the dev-only specimen route reaching production, a dev-channel binary about to ship as the release, an update path that could reach the uninstaller, anything bundled that is not NSIS, and mojibake anywhere in the source. |
 | `set-version.mjs` (`npm run version:set`) | Bumping the version in all three files that carry one. |
 | `make-icon.mjs` | Regenerating the icon master from the mark. |
 | `build-dev.mjs` (`npm run build:dev`) | Building the development channel, and proving the build was invoked correctly. |
 | `channels.mjs` (`npm run channels`) | Finding out which of the two installed channels is holding the pointer. |
+
+Two more live in `genpacks` rather than in `scripts/`, because they need the
+app's own code:
+
+| Command | Run it when |
+| --- | --- |
+| `npm run check:roles` | A cursor does not change in some application. Reads all seventeen registry entries and checks each resolves to a loadable cursor. Almost always the answer. |
+| `npm run soak -- <minutes> <csv>` | Before a release, or after anything that touches the cursor lifecycle. Samples GDI, USER, threads, handles and memory once a minute. |
 
 ## `.github/`
 
