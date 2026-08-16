@@ -1,10 +1,29 @@
 # cursorforge.vercel.app
 
-The landing page. Static HTML and CSS, no build step, no JavaScript.
+The landing page. Static HTML and CSS, no JavaScript **on the page**.
 
 ```bash
 vercel deploy --prod          # from this directory
 ```
+
+## The version number syncs itself now
+
+`vercel.json` sets `buildCommand` to `node scripts/sync-release.mjs`, so every
+deploy rewrites the version, installer size and release date from the live
+GitHub release before publishing.
+
+That script already existed and nothing ran it. The result was the published
+site sitting on **1.17** while the repository had said 1.20.0 for a week:
+syncing was a manual step in front of a manual deploy, and a step you have to
+remember is a step that gets missed. Three releases missed it.
+
+It fails soft by design — an unreachable GitHub API leaves the committed values
+in place and the deploy succeeds — so wiring it in cannot break a deploy, only
+keep one honest.
+
+The page still ships no JavaScript. The sync runs at build time, on Vercel's
+builder, and what reaches the browser is plain HTML with the numbers already in
+it. That is why the CSP can stay at `script-src 'none'`.
 
 ## Why there is no JavaScript
 
