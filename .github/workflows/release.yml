@@ -63,6 +63,19 @@ jobs:
           fi
           exit $missing
 
+      # Existing and being correct are different things.
+      #
+      # Signing is the last step of a twenty-five minute build, so a wrong
+      # password costs a full build to discover and another to confirm the fix.
+      # This signs eight bytes and exits. It is thirty seconds, and it is the
+      # difference between a mistake in a secret costing a minute and costing an
+      # hour — which is not hypothetical: it cost an hour.
+      - name: The signing key actually signs
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release.mjs --selftest
+
       # Builds x64, ARM64 and 32-bit, plus the x64 offline installer, stages them
       # with an unversioned alias each, and writes SHA256SUMS.txt. Running the
       # same script CI runs is the point: a release built by hand on one machine

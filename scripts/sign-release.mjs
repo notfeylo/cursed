@@ -30,8 +30,17 @@
  * `untrusted comment:` and passes it through unchanged.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +68,38 @@ const tauriCli = createRequire(join(root, "package.json")).resolve(
   "@tauri-apps/cli/tauri.js",
 );
 
+/**
+ * Signs one file in place, leaving `<file>.sig` beside it.
+ *
+ * The key and its password go through the environment, never argv. The CLI
+ * reads both from there by documented default; argv is readable by every other
+ * process on the machine and is what ends up quoted in a crash report. Keeping
+ * the key out of it is also what lets `describe` print an error in full, which
+ * is the difference between diagnosing a failure in one build and in three.
+ */
+function sign(file) {
+  execFileSync(process.execPath, [tauriCli, "signer", "sign", file], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      TAURI_SIGNING_PRIVATE_KEY: privateKey,
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
+    },
+  });
+}
+
+/** Why a spawn failed, including whether it started at all. */
+function describe(e) {
+  return [
+    e.status === undefined ? `did not start (${e.code ?? e.message})` : `exit ${e.status}`,
+    e.stderr?.toString().trim(),
+    e.stdout?.toString().trim(),
+  ]
+    .filter(Boolean)
+    .join(" — ");
+}
+
 const privateKey = process.env.TAURI_SIGNING_PRIVATE_KEY?.trim();
 if (!privateKey) {
   console.error(
@@ -66,6 +107,38 @@ if (!privateKey) {
       "does not generate a key, and must not.",
   );
   process.exit(1);
+}
+
+/**
+ * `--selftest` proves the key and password work, without needing a build.
+ *
+ * Signing is the last step of a twenty-five minute release build, so every
+ * mistake in a secret costs a full build to discover and another to confirm the
+ * fix. This signs eight bytes in a temporary directory and exits, which turns
+ * "wrong password" from a twenty-six minute failure into a thirty second one.
+ *
+ * Run early in the release workflow, immediately after the secrets are checked
+ * for existence — because existing and being correct are different things, and
+ * only one of them was being checked.
+ */
+if (process.argv.includes("--selftest")) {
+  const scratch = mkdtempSync(join(tmpdir(), "cursed-signtest-"));
+  const probe = join(scratch, "Cursed_0.0.0_x64-setup.exe");
+  writeFileSync(probe, "selftest");
+  try {
+    sign(probe);
+    console.log("The signing key and password work.");
+    process.exit(0);
+  } catch (e) {
+    console.error(`::error::the signing key cannot sign: ${describe(e)}`);
+    console.error("Check TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD.");
+    console.error("See docs/SIGNING.md. A key generated with a password needs that");
+    console.error("password in the secret; an empty secret only works for a key that");
+    console.error("was generated without one.");
+    process.exit(1);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 if (!existsSync(staging)) {
@@ -90,31 +163,9 @@ for (const name of targets) {
   const wanted = `${file}.minisig`;
 
   try {
-    // The key and its password go through the environment, never argv.
-    //
-    // The CLI reads both from there by documented default. argv is readable by
-    // every other process on the machine, it is what ends up quoted in a crash
-    // report, and keeping the key out of it means an error can be printed in
-    // full — which is the difference between diagnosing this in one build and
-    // diagnosing it in three.
-    execFileSync(process.execPath, [tauriCli, "signer", "sign", file], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        TAURI_SIGNING_PRIVATE_KEY: privateKey,
-        TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-          process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
-      },
-    });
+    sign(file);
   } catch (e) {
-    const why = [
-      e.status === undefined ? `did not start (${e.code ?? e.message})` : `exit ${e.status}`,
-      e.stderr?.toString().trim(),
-      e.stdout?.toString().trim(),
-    ]
-      .filter(Boolean)
-      .join(" — ");
-    console.error(`  FAIL  ${name}: ${why}`);
+    console.error(`  FAIL  ${name}: ${describe(e)}`);
     failures += 1;
     continue;
   }

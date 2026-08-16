@@ -98,6 +98,33 @@ Three repository secrets, at
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password chosen above |
 | `CURSED_UPDATE_PUBLIC_KEY` | the single line in `cursed.key.pub` |
 
+**The password secret must match the key.** An empty value only works for a key
+generated *without* a password. Give a password-protected key an empty secret
+and the signer fails with:
+
+```
+incorrect updater private key password: Wrong password for that key
+```
+
+Which is what happened on the first attempt at v1.21.0, and cost a
+twenty-five-minute build to find out, because signing is the last step. It no
+longer does: `node scripts/sign-release.mjs --selftest` signs eight bytes and
+exits, and the release workflow runs it immediately after checking the secrets
+exist — existing and being correct being different things.
+
+Run it yourself before tagging, on a machine with the key:
+
+```bash
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.cursed/cursed.key)" \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD="…" \
+  node scripts/sign-release.mjs --selftest
+```
+
+If the password is lost, the key is not recoverable — generate a new pair and
+update both `TAURI_SIGNING_PRIVATE_KEY` and `CURSED_UPDATE_PUBLIC_KEY`. That is
+free while no release has shipped signed with the old one, and expensive
+afterwards: see **Rotation**.
+
 The public one is a secret only in the sense that GitHub Actions calls every
 variable a secret. It is not sensitive and is published inside every binary.
 
