@@ -680,6 +680,21 @@ pub fn verified_installer(tag: &str, asset: &str) -> AppResult<PathBuf> {
     Ok(file)
 }
 
+/// Builds the exact command that [`launch`] runs.
+///
+/// Split out from the spawn so a test can look at what would be run. Asserting
+/// the *constant* contains `/UPDATE` proves nothing on its own — the bug this
+/// fixes was a correct constant that no call site passed — so what the test
+/// reads is this `Command`'s own argument list, one step from
+/// `CreateProcess`.
+fn installer_command(file: &std::path::Path) -> std::process::Command {
+    let mut command = std::process::Command::new(file);
+    command
+        .args(INSTALLER_ARGUMENTS)
+        .current_dir(file.parent().unwrap_or(file));
+    command
+}
+
 /// Runs an installer that [`verified_installer`] has already vouched for.
 pub fn launch(file: &std::path::Path) -> AppResult<()> {
     // `CreateProcess`, not `ShellExecuteW`.
@@ -692,9 +707,7 @@ pub fn launch(file: &std::path::Path) -> AppResult<()> {
     // dropped with the process that asked for it. Spawning directly sidesteps
     // the question: the child exists before this returns, or we get an error to
     // show instead of quietly exiting with nothing installed.
-    let child = std::process::Command::new(file)
-        .args(INSTALLER_ARGUMENTS)
-        .current_dir(file.parent().unwrap_or(file))
+    let child = installer_command(file)
         .spawn()
         .map_err(|e| AppError::msg(format!("the installer would not start: {e}")))?;
 
@@ -819,11 +832,17 @@ pub fn record_pending_install(to: &str) -> AppResult<()> {
         started_at: crate::util::iso_now(),
         rollback,
     };
-    let json = serde_json::to_string_pretty(&record)?;
-    let file = pending_file()?;
-    let temp = file.with_extension("json.tmp");
-    std::fs::write(&temp, &json)?;
-    std::fs::rename(&temp, &file)?;
+    // Through the shared store: write, flush, sync_all, rename.
+    //
+    // This record is written in the last second before the machine is handed to
+    // an installer that replaces the binary — which is the single most likely
+    // moment in this app's life for the power to go, the machine to be closed,
+    // or the process to be killed. A rename that lands before its bytes do
+    // leaves a `pending.json` that exists and is empty, and an empty one is
+    // indistinguishable from no update having been started at all: the next
+    // launch reports nothing, the rollback copy is never cleaned up, and a
+    // failed update is silent.
+    crate::state::store::write(&pending_file()?, &serde_json::to_string_pretty(&record)?)?;
     log::info!("update: {} -> {} recorded before handover", record.from, record.to);
     Ok(())
 }
@@ -840,9 +859,15 @@ pub fn record_pending_install(to: &str) -> AppResult<()> {
 /// automatic one. Recorded here so the limit is not mistaken for coverage.
 pub fn settle_pending_install() -> Option<InstallOutcome> {
     let file = pending_file().ok()?;
-    let text = std::fs::read_to_string(&file).ok()?;
-    let record: PendingInstall = serde_json::from_str(crate::util::strip_bom(&text)).ok()?;
+    // Through the store, so a record damaged by the crash it was written to
+    // survive is recovered from its backup rather than read as "no update was
+    // ever started".
+    let (record, _) = crate::state::store::read::<Option<PendingInstall>>(&file);
+    let record = record?;
     let _ = std::fs::remove_file(&file);
+    let mut backup = file.clone().into_os_string();
+    backup.push(".bak");
+    let _ = std::fs::remove_file(std::path::PathBuf::from(backup));
 
     let running = env!("CARGO_PKG_VERSION");
     let outcome = if running == record.to {
@@ -883,13 +908,44 @@ pub fn settle_and_report() {
     }
 }
 
-/// Removes anything left in the update staging directory.
+/// Removes downloaded installers from the update staging directory.
+///
+/// **Not everything in it.** This used to be `remove_dir_all` on the whole
+/// directory, which also took `pending.json` and the `rollback\` copy of the
+/// previous binary — so a user who pressed "clear downloads" between starting an
+/// update and the next launch destroyed the record of what was being installed
+/// *and* the only local copy of the version to go back to. The button is
+/// offered as a way to reclaim a few megabytes; it should not be able to end a
+/// recovery.
+///
+/// What it removes is what it says: installers. They are re-downloadable by
+/// definition — that is what makes them the disposable thing here.
 pub fn clear_downloads() -> AppResult<()> {
     let dir = download_dir()?;
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir)?;
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    for item in std::fs::read_dir(&dir)?.flatten() {
+        let path = item.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if is_disposable(path.is_dir(), name) {
+            let _ = std::fs::remove_file(&path);
+        }
     }
     Ok(())
+}
+
+/// Whether one entry in the staging directory may be deleted to reclaim space.
+///
+/// Its own function so it can be tested: the alternative is a test that runs
+/// `clear_downloads` against the developer's real `%APPDATA%\Cursed\updates`,
+/// which is the same class of mistake as testing the update path against the
+/// machine holding the data it might destroy.
+fn is_disposable(is_dir: bool, name: &str) -> bool {
+    // `rollback\` is the only directory here, and the binary in it is the one
+    // thing in this tree that cannot be fetched again.
+    !is_dir && is_our_installer(name)
 }
 
 /// How long the background pass waits before looking again.
@@ -1328,6 +1384,54 @@ mod tests {
 
         // Not silent. An install the user asked for should show them something.
         assert!(!INSTALLER_ARGUMENTS.contains(&"/S"));
+    }
+
+    /// The constant being right is not the property that was broken.
+    ///
+    /// Through v1.20.0 there was no constant at all, but there could have been:
+    /// a correct list of flags sitting beside a `spawn()` that passed none of
+    /// them would have looked exactly as fixed as this does, and destroyed data
+    /// exactly as thoroughly. So the assertion is on the command that is one
+    /// call from `CreateProcess`, not on the list it was built from.
+    #[test]
+    fn the_flags_reach_the_command_that_is_actually_run() {
+        let installer = std::path::Path::new(r"C:\x\updates\Cursed_1.21.0_x64-setup.exe");
+        let command = installer_command(installer);
+
+        let passed: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(passed, INSTALLER_ARGUMENTS, "the spawn must carry the flags");
+
+        // And it runs the file it was handed, from beside it — a relative
+        // working directory is how an installer ends up looking for its own
+        // payload in the wrong place.
+        assert_eq!(command.get_program(), installer.as_os_str());
+        assert_eq!(
+            command.get_current_dir(),
+            Some(std::path::Path::new(r"C:\x\updates"))
+        );
+    }
+
+    /// Clearing downloads must not be able to end a recovery.
+    ///
+    /// It used to `remove_dir_all` the staging directory, which held three
+    /// different things: installers, which are re-downloadable; `pending.json`,
+    /// which is the only record that an update was started; and `rollback\`,
+    /// which is the only local copy of the version to go back to. Pressing a
+    /// button labelled "clear downloads" took all three.
+    #[test]
+    fn clearing_downloads_keeps_the_things_that_cannot_be_downloaded_again() {
+        let installer = format!("Cursed_1.20.0{INSTALLER_SUFFIX}");
+        assert!(is_disposable(false, &installer), "an installer is disposable");
+
+        assert!(!is_disposable(true, "rollback"), "the previous binary stays");
+        assert!(!is_disposable(false, "pending.json"), "the record stays");
+        assert!(!is_disposable(false, "pending.json.bak"));
+        // And nothing that is not ours, whatever it is doing there.
+        assert!(!is_disposable(false, "notes.txt"));
+        assert!(!is_disposable(false, "Cursed-1.20.0.exe"));
     }
 
     /// Only NSIS ships, and the config has to agree.

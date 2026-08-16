@@ -169,6 +169,14 @@ export const getLegalDoc = (kind: "terms" | "privacy" | "licenses") =>
   call<string>("get_legal_doc", { kind });
 /** A pasteable plain-text support report. */
 export const getDiagnostics = () => call<string>("get_diagnostics");
+
+/**
+ * What one version changed, as Markdown, read from the changelog compiled into
+ * the binary. `null` when that version has no entry — a build made between
+ * releases is an ordinary state, not an error.
+ */
+export const getReleaseNotes = (version: string) =>
+  call<string | null>("get_release_notes", { version });
 export interface BuildInfo {
   version: string;
   commit: string;

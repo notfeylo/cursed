@@ -607,6 +607,58 @@ pub fn get_legal_doc(kind: String) -> AppResult<String> {
     .to_owned())
 }
 
+/// The changelog, compiled in.
+///
+/// From the binary rather than from GitHub, and that is the point: this is read
+/// on the launch *after* an update, to tell the user what the version they are
+/// now running changed. Fetching it would make "what's new" depend on the
+/// network being up at that moment, and on the release notes not having been
+/// edited since — neither of which is true of the thing they just installed.
+const CHANGELOG: &str = include_str!("../../CHANGELOG.md");
+
+/// The changelog section for one version, without its heading.
+///
+/// Returns `Ok(None)` rather than an error when there is no entry: a build made
+/// between releases has a version no section names, and that is an ordinary
+/// state, not a failure. The panel simply shows nothing.
+#[tauri::command]
+pub fn get_release_notes(version: String) -> AppResult<Option<String>> {
+    Ok(release_notes_for(CHANGELOG, &version))
+}
+
+/// Pulls one `## <version> — <date>` section out of the changelog.
+///
+/// Matched on the version *token* rather than on the whole heading, because the
+/// heading carries a date for a released version and the word "unreleased" for
+/// the one being worked on, and both should find their section.
+fn release_notes_for(changelog: &str, version: &str) -> Option<String> {
+    let wanted = version.trim().trim_start_matches('v');
+    if wanted.is_empty() {
+        return None;
+    }
+
+    let mut lines = changelog.lines();
+    // Find the heading whose first word after `## ` is the version.
+    lines.find(|line| {
+        line.strip_prefix("## ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .is_some_and(|token| token == wanted)
+    })?;
+
+    let body: Vec<&str> = lines
+        .take_while(|line| !line.starts_with("## "))
+        // A `---` rule separates entries and is furniture, not content.
+        .filter(|line| line.trim() != "---")
+        .collect();
+
+    let text = body.join("\n").trim().to_owned();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
@@ -937,14 +989,26 @@ pub fn delete_all_imported() -> AppResult<()> {
 /// The allow-list is the point. A command that opened whatever URL it was given
 /// would be a general-purpose launcher reachable from web content, which is
 /// exactly what denying `shell:*` was meant to prevent.
+/// Every URL the app is allowed to hand to a browser.
+///
+/// Named rather than inlined so the test below can check it against every link
+/// the frontend actually offers — the two halves are in different languages and
+/// neither imports the other, so nothing but a test connects them.
+const ALLOWED_EXTERNAL: [&str; 4] = [
+    "https://github.com/notfeylo/cursed",
+    "https://github.com/notfeylo/cursed/issues",
+    "https://github.com/notfeylo/cursed/releases",
+    // The one the update panel's "download it manually" button asks for, and
+    // the one it was missing. That button is the last resort offered after an
+    // update has already failed — it opened nothing at all, silently, because
+    // the frontend asked for `/releases/latest` and this list stopped at
+    // `/releases`.
+    "https://github.com/notfeylo/cursed/releases/latest",
+];
+
 #[tauri::command]
 pub fn open_external(url: String) -> AppResult<()> {
-    const ALLOWED: [&str; 3] = [
-        "https://github.com/notfeylo/cursed",
-        "https://github.com/notfeylo/cursed/issues",
-        "https://github.com/notfeylo/cursed/releases",
-    ];
-    if !ALLOWED.contains(&url.as_str()) {
+    if !ALLOWED_EXTERNAL.contains(&url.as_str()) {
         return Err(AppError::invalid("that link is not one Cursed opens"));
     }
     crate::shell::open_url(&url)
@@ -981,6 +1045,121 @@ pub fn quit_app(app: AppHandle) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every link the UI offers must be one the backend will open.
+    ///
+    /// `open_external` refuses anything not on its list, and the frontend
+    /// swallows the refusal — `.catch(() => undefined)` — because a link that
+    /// will not open is not worth an error banner. The combination is a button
+    /// that does nothing, silently, with nothing in any log. That is what
+    /// "download it manually" did: the panel asked for `/releases/latest` and
+    /// the list stopped at `/releases`, so the last resort offered after a
+    /// failed update was itself dead.
+    ///
+    /// The two halves live in different languages and neither imports the
+    /// other, so this reads the frontend and checks.
+    #[test]
+    fn every_link_the_frontend_offers_is_one_the_backend_will_open() {
+        let frontend = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(|repo| repo.join("src"));
+        let Some(frontend) = frontend.filter(|dir| dir.is_dir()) else {
+            // Only reachable outside a checkout; there is nothing to read.
+            return;
+        };
+
+        let mut asked = Vec::new();
+        let mut stack = vec![frontend];
+        while let Some(dir) = stack.pop() {
+            let Ok(listing) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for item in listing.flatten() {
+                let path = item.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if !path.extension().is_some_and(|e| e == "tsx" || e == "ts") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                // Only literal URLs. A variable is `Markdown`'s link handler,
+                // which passes whatever a document contains and is expected to
+                // be refused for anything not on the list.
+                for piece in text.split("openExternal(\"").skip(1) {
+                    if let Some(url) = piece.split('"').next() {
+                        asked.push((path.clone(), url.to_owned()));
+                    }
+                }
+            }
+        }
+
+        assert!(!asked.is_empty(), "no openExternal call sites found; the scan is broken");
+        for (file, url) in asked {
+            assert!(
+                ALLOWED_EXTERNAL.contains(&url.as_str()),
+                "{} opens {url}, which open_external refuses",
+                file.display()
+            );
+        }
+    }
+
+    /// The version that ships must have something to say for itself, or the
+    /// "what's new" panel is a blank box shown after every update.
+    #[test]
+    fn the_running_version_has_a_changelog_entry() {
+        let running = env!("CARGO_PKG_VERSION");
+        assert!(
+            release_notes_for(CHANGELOG, running).is_some(),
+            "CHANGELOG.md has no section for {running}; add one before releasing"
+        );
+    }
+
+    #[test]
+    fn a_section_stops_at_the_next_version() {
+        let changelog = "\
+# Changelog
+
+## 1.21.0 — unreleased
+
+Something changed.
+
+---
+
+## 1.20.0 — 2026-08-11
+
+Something else did.
+";
+        let notes = release_notes_for(changelog, "1.21.0").expect("1.21.0");
+        assert_eq!(notes, "Something changed.");
+        assert!(!notes.contains("Something else"), "it ran into the next entry");
+
+        // A leading v is how a git tag spells the same version.
+        assert_eq!(release_notes_for(changelog, "v1.21.0"), Some("Something changed.".into()));
+        assert_eq!(release_notes_for(changelog, "1.20.0"), Some("Something else did.".into()));
+    }
+
+    /// A build between releases is an ordinary state, not an error.
+    #[test]
+    fn a_version_with_no_entry_is_not_a_failure() {
+        assert_eq!(release_notes_for("## 1.0.0 — x\n\nnotes\n", "9.9.9"), None);
+        assert_eq!(release_notes_for("", "1.0.0"), None);
+        assert_eq!(release_notes_for("## 1.0.0 — x\n", "1.0.0"), None);
+        assert_eq!(release_notes_for("## 1.0.0 — x\n\nnotes\n", ""), None);
+    }
+
+    /// `1.2.0` must not match the `1.2.0-rc1` heading, nor `1.20.0` the `1.2.0`
+    /// one. Matching on a prefix would do both.
+    #[test]
+    fn versions_are_matched_whole() {
+        let changelog = "## 1.2.0 — x\n\nthe real one\n\n## 1.20.0 — y\n\nthe other one\n";
+        assert_eq!(release_notes_for(changelog, "1.2.0"), Some("the real one".into()));
+        assert_eq!(release_notes_for(changelog, "1.20.0"), Some("the other one".into()));
+        assert_eq!(release_notes_for(changelog, "1."), None);
+    }
 
     #[test]
     fn apply_modes_cover_the_roles_they_advertise() {

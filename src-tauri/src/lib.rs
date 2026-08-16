@@ -80,24 +80,46 @@ pub fn begin_shutdown() {
 /// put down here, and the kill becomes the fallback it should be rather than the
 /// mechanism.
 ///
-/// Ordered deliberately: the watchdog stops defending *first*, because it is the
-/// one thing that would otherwise write registry values naming files the
-/// installer is deleting.
+/// Ordered deliberately, and the order is the point. Each step either releases
+/// something the replacement copy will want, or stops something that would still
+/// be writing while the installer replaces what it writes to.
+///
+///  1. **The watchdog stops, and is waited for.** It is the one thing that would
+///     otherwise write registry values naming files the installer is deleting.
+///     Told to stand down *and* confirmed gone — a thread parked in a thirty-
+///     second wait has not stood down yet.
+///  2. **Hotkeys are unregistered.** Global shortcuts are first-come-first-
+///     served, and the copy that comes back wants them.
+///  3. **The tray icon goes.** It is the one piece of UI that visibly outlives a
+///     killed process: a stale icon sits in the notification area until
+///     something makes Windows re-scan.
+///  4. **The window position is saved, then the window is hidden.**
+///  5. **The single-instance mutex is released**, or the relaunched copy sees a
+///     previous instance that no longer exists and raises a window belonging to
+///     nothing.
+///  6. **The log is flushed**, because a rotating file writer in a process that
+///     is about to be replaced is the last chance the record has.
+///  7. **Any other copy in this session is waited for**, briefly, so the
+///     installer is not handed a directory something else still has open.
+///
+/// What is deliberately *not* here: this process exiting. The caller has not
+/// launched the installer yet, and a shutdown thorough enough to end the event
+/// loop would exit before the thing it is exiting for had started.
 pub fn prepare_for_shutdown(app: &tauri::AppHandle) {
     begin_shutdown();
 
-    cursor::watchdog::disable();
+    // Two seconds is generous: the thread is woken by a posted message rather
+    // than left to time out, so the usual answer arrives in single-digit
+    // milliseconds. A `false` here is worth a line and nothing more — the
+    // installer runs passively and will terminate a straggler itself.
+    if !cursor::watchdog::stop_and_wait(std::time::Duration::from_secs(2)) {
+        log::warn!("shutdown: the watchdog did not stop in time; the installer will end it");
+    }
 
-    // Global shortcuts belong to a process, and the replacement copy will want
-    // them back. Left registered, they are released by process death anyway —
-    // but only once Windows notices, which is not instant.
     if let Err(e) = hotkeys::unregister_all(app) {
         log::warn!("shutdown: hotkeys could not be released: {e}");
     }
 
-    // The tray icon is the one piece of UI that outlives a killed process
-    // visibly: a stale icon sits in the notification area until something makes
-    // Windows re-scan it.
     if let Err(e) = tray::set_visible(app, false) {
         log::warn!("shutdown: the tray icon could not be removed: {e}");
     }
@@ -115,9 +137,116 @@ pub fn prepare_for_shutdown(app: &tauri::AppHandle) {
         let _ = window.hide();
     }
 
-    // The log is a rotating file writer and the process is about to end, so this
-    // is the last chance for the record of what happened to reach disk.
+    // Released explicitly rather than left to process death.
+    //
+    // `/R` relaunches the app the moment the installer finishes, which can be
+    // before Windows has finished tearing this process down. The relaunched copy
+    // would then find the mutex still held, decide it is the second instance,
+    // and try to raise the window of a process that is exiting — so the update
+    // completes and the app never appears.
+    tauri_plugin_single_instance::destroy(app);
+
     log::logger().flush();
+
+    // Last, because everything above releases something and this measures the
+    // result. Only *other* processes are counted: this one is still here, and
+    // still has an installer to launch.
+    let stragglers = wait_for_other_instances(std::time::Duration::from_secs(3));
+    if stragglers > 0 {
+        log::warn!(
+            "shutdown: {stragglers} other copy/copies of this app are still running in this \
+             session; the installer will terminate them"
+        );
+    }
+}
+
+/// Waits for any other copy of this executable in this Windows session to exit,
+/// and returns how many were still there when the wait ran out.
+///
+/// A second copy is not supposed to exist — the single-instance plugin sees to
+/// that — but "not supposed to" is not the same as "does not", and the case that
+/// matters is a previous instance that was killed rather than closed and whose
+/// process object has not been reaped. Anything still holding the install
+/// directory when the installer starts is what produces the "failed to kill,
+/// close it first" abort the diagnosis records.
+///
+/// Session-scoped on purpose, matching the installer: it is built `currentUser`
+/// and uses `FindProcessCurrentUser`, so a second signed-in Windows user running
+/// Cursed is neither seen nor terminated by it, and must not be waited for here
+/// either.
+fn wait_for_other_instances(timeout: std::time::Duration) -> usize {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let others = session_siblings();
+        if others == 0 {
+            return 0;
+        }
+        if std::time::Instant::now() >= deadline {
+            return others;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// How many other processes of this executable are running in this session.
+fn session_siblings() -> usize {
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+
+    let Ok(exe) = std::env::current_exe() else {
+        return 0;
+    };
+    let Some(name) = exe.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()) else {
+        return 0;
+    };
+
+    let us = std::process::id();
+    let mut our_session = 0u32;
+    // SAFETY: writing a `u32` we own. A failure leaves it zero, which the
+    // comparison below treats as "sessions are unknown", counting nothing.
+    if unsafe { ProcessIdToSessionId(us, &mut our_session) }.is_err() {
+        return 0;
+    }
+
+    // SAFETY: the snapshot handle is closed by `Owned` when this scope ends, and
+    // every entry is a stack local sized by `dwSize` as the API requires.
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return 0;
+        };
+        let snapshot = windows::core::Owned::new(snapshot);
+
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        if Process32FirstW(*snapshot, &mut entry).is_err() {
+            return 0;
+        }
+
+        let mut found = 0;
+        loop {
+            let pid = entry.th32ProcessID;
+            if pid != us && pid != 0 {
+                let theirs = String::from_utf16_lossy(&entry.szExeFile)
+                    .trim_end_matches('\0')
+                    .to_ascii_lowercase();
+                if theirs == name {
+                    let mut session = u32::MAX;
+                    if ProcessIdToSessionId(pid, &mut session).is_ok() && session == our_session {
+                        found += 1;
+                    }
+                }
+            }
+            if Process32NextW(*snapshot, &mut entry).is_err() {
+                break;
+            }
+        }
+        found
+    }
 }
 
 pub fn is_shutting_down() -> bool {
@@ -276,6 +405,7 @@ pub fn run() {
             commands::get_cache_size,
             commands::clear_cache,
             commands::get_legal_doc,
+            commands::get_release_notes,
             commands::get_build_info,
             commands::get_diagnostics,
             commands::check_for_updates,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Card } from "./ui";
+import { Markdown } from "./Markdown";
 import * as ipc from "../lib/ipc";
 
 type Phase = "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "failed";
@@ -18,6 +19,9 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
 
   const [progress, setProgress] = useState<{ got: number; total: number } | null>(null);
   const [installed, setInstalled] = useState<ipc.InstallOutcome | null>(null);
+  /** What the version they are now running changed. Read from the binary. */
+  const [whatsNew, setWhatsNew] = useState<string | null>(null);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   // How the *last* update went, read once whether or not this panel polls.
   //
@@ -29,8 +33,15 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
     let cancelled = false;
     void ipc
       .getUpdateState()
-      .then((s) => {
-        if (!cancelled) setInstalled(s.installed);
+      .then(async (s) => {
+        if (cancelled) return;
+        setInstalled(s.installed);
+
+        // Only after an update that took. Nobody wants a changelog for a
+        // version they have been running for a fortnight.
+        if (s.installed?.outcome !== "succeeded") return;
+        const notes = await ipc.getReleaseNotes(s.installed.to).catch(() => null);
+        if (!cancelled && notes) setWhatsNew(notes);
       })
       .catch(() => undefined);
     return () => {
@@ -150,9 +161,26 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
           that was never started, and leaving the user to notice the version
           never changed is how an updater loses their trust for good. */}
       {installed?.outcome === "succeeded" && (
-        <p className="mb-2 text-center text-[11px] text-success">
-          Updated to v{installed.to}.
-        </p>
+        <div className="mb-2">
+          <p className="text-center text-[11px] text-success">Updated to v{installed.to}.</p>
+          {/* Offered rather than unfolded. An update landing on someone who
+              only opened Settings to change a hotkey should not push the thing
+              they came for off the screen. */}
+          {whatsNew && (
+            <button
+              type="button"
+              onClick={() => setShowWhatsNew((open) => !open)}
+              className="mx-auto mt-1 block text-[11px] text-text-dim hover:text-text hover:underline"
+            >
+              {showWhatsNew ? "Hide what changed" : "See what changed"}
+            </button>
+          )}
+          {whatsNew && showWhatsNew && (
+            <div className="mt-2 max-h-56 overflow-y-auto rounded-xs border border-border bg-bg p-2">
+              <Markdown source={whatsNew} />
+            </div>
+          )}
+        </div>
       )}
       {installed?.outcome === "didNotTake" && (
         <p className="mb-2 text-center text-[11px] break-words text-danger">
