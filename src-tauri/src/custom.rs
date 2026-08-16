@@ -42,6 +42,15 @@ pub struct ImportedImage {
     pub frame_count: usize,
     pub data_uri: String,
     pub suggested_hotspot: (f32, f32),
+    /// Fraction of the image the background removal took, 0.0–1.0.
+    pub background_removed: f32,
+    /// Present when removal was **declined**, with the sentence to show. What
+    /// is in `data_uri` is then exactly what was imported.
+    pub refusal: Option<String>,
+    /// Whether an automatic attempt is worth offering at all. `false` means the
+    /// UI should lead with "use it as it is" rather than with a retry that will
+    /// produce the same refusal for the same reason.
+    pub keyable: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -72,12 +81,36 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
 
     // Normalise every frame the same way, or an animation's frames drift
     // relative to each other and the hotspot means something different per frame.
-    let normalised = match source {
-        Source::Static(bitmap) => Source::Static(pipeline::prepare_master_with(&bitmap, cut)?),
+    let (normalised, report) = match source {
+        Source::Static(bitmap) => {
+            let (master, report) = pipeline::prepare_master_reported(&bitmap, cut)?;
+            (Source::Static(master), report)
+        }
         // Animations go through the same background removal as stills. They
         // used to skip it entirely, so a GIF with a white card behind it became
         // a cursor with a white card behind it.
-        Source::Animated(frames) => Source::Animated(pipeline::prepare_animation_with(&frames, cut)?),
+        //
+        // The report comes from the first frame, which is the frame the whole
+        // sequence's decision is made on — see `prepare_animation_with`. A
+        // per-frame report would be a per-frame decision, which is the thing
+        // that makes an animated matte shimmer.
+        Source::Animated(frames) => {
+            let report = frames
+                .first()
+                .map(|(bitmap, _)| crate::build::matte::assess(bitmap))
+                .map(|keyability| crate::build::matte::MatteReport {
+                    removed: 0.0,
+                    already_had_alpha: false,
+                    refused: (!keyability.confident && cut == pipeline::Cut::Auto)
+                        .then_some(crate::build::matte::Refusal::LooksLikeAPhotograph),
+                    keyability,
+                })
+                .unwrap_or_else(crate::build::matte::MatteReport::not_attempted);
+            (
+                Source::Animated(pipeline::prepare_animation_with(&frames, cut)?),
+                report,
+            )
+        }
     };
 
     let first = normalised.first()?.clone();
@@ -92,6 +125,16 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
         frame_count: normalised.frame_count(),
         data_uri: first.to_png_data_uri()?,
         suggested_hotspot: suggested,
+        background_removed: report.removed,
+        // `BarelyMoved` is not worth a banner: "there was no background to
+        // find" on art that never had one is noise, and the user can see the
+        // preview. The two that change what they should do next are shown.
+        refusal: match report.refused {
+            Some(crate::build::matte::Refusal::BarelyMoved) => None,
+            Some(reason) => Some(reason.message().to_owned()),
+            None => None,
+        },
+        keyable: report.keyability.confident,
     };
 
     if let Ok(mut staged) = staging().lock() {

@@ -141,4 +141,16 @@ export interface ImportedImage {
   /** data: URI of the trimmed source, for the hotspot picker. */
   dataUri: string;
   suggestedHotspot: [number, number];
+  /** Fraction of the image the background removal took, 0-1. */
+  backgroundRemoved: number;
+  /**
+   * Present when removal was declined, with the sentence to show. The preview
+   * is then exactly what was imported -- nothing was changed.
+   */
+  refusal: string | null;
+  /**
+   * Whether an automatic attempt is worth offering. `false` means leading with
+   * a retry just produces the same refusal for the same reason.
+   */
+  keyable: boolean;
 }

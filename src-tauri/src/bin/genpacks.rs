@@ -289,6 +289,23 @@ fn matte_sheet(args: &[String]) {
         }
     }
 
+    // The four signals, printed for every case. Thresholds picked without this
+    // table are guesses, and a guess that passes a photograph is the bug.
+    println!("{:<28} {:>7} {:>7} {:>7} {:>7}  KEYABLE", "CASE", "CORNER", "VAR", "COL/1K", "EDGE%");
+    for (name, _, original) in &cases {
+        let k = matte::assess(original);
+        println!(
+            "{name:<28} {:>7} {:>7} {:>7.1} {:>6.0}%  {}",
+            k.corner_disagreement,
+            k.border_variance,
+            k.border_colour_density,
+            k.border_edge_density * 100.0,
+            if k.confident { "yes" } else { "NO" }
+        );
+    }
+    println!();
+
+    let mut failures = 0usize;
     println!("{:<28} {:>9}  NOTE", "CASE", "REMOVED");
     for (index, (name, expectation, original)) in cases.iter().enumerate() {
         let mut cut = original.clone();
@@ -300,24 +317,71 @@ fn matte_sheet(args: &[String]) {
 
         let removed = report.removed * 100.0;
         let verdict = match expectation {
-            Expect::Removes if report.removed > 0.20 => "ok".to_owned(),
-            Expect::Removes => "TOO LITTLE REMOVED".to_owned(),
-            Expect::LeavesAlone if report.removed < 0.02 => "ok, left alone".to_owned(),
-            Expect::LeavesAlone => "TOOK SOMETHING IT SHOULD NOT HAVE".to_owned(),
-            Expect::KeepsSubject => {
-                // The centre of the frame is where a photograph's subject is.
-                // Whether the sky went is a matter of taste; whether the subject
-                // went is not.
-                let survived = subject_survived(original, &cut);
-                if survived {
-                    "ok, the subject survived".to_owned()
-                } else {
-                    "SUBJECT WAS DESTROYED".to_owned()
-                }
+            Expect::Removes if report.refused.is_some() => {
+                failures += 1;
+                format!("REFUSED, BUT SHOULD HAVE KEYED ({:?})", report.refused)
             }
+            Expect::Removes if report.removed > 0.20 => "ok".to_owned(),
+            Expect::Removes => {
+                failures += 1;
+                "TOO LITTLE REMOVED".to_owned()
+            }
+            Expect::LeavesAlone if report.removed < 0.02 => "ok, left alone".to_owned(),
+            Expect::LeavesAlone => {
+                failures += 1;
+                "TOOK SOMETHING IT SHOULD NOT HAVE".to_owned()
+            }
+            Expect::Refuses => match report.refused {
+                // Untouched is not enough on its own: the bitmap has to be
+                // byte-identical, because "reverted" and "never attempted" are
+                // the same thing to the user and only one of them is safe.
+                Some(reason) if cut.pixels == original.pixels => {
+                    format!("ok, refused ({reason:?})")
+                }
+                Some(reason) => {
+                    failures += 1;
+                    format!("refused ({reason:?}) BUT THE IMAGE CHANGED")
+                }
+                None => {
+                    failures += 1;
+                    "ATTEMPTED A KEY IT CANNOT DO".to_owned()
+                }
+            },
         };
         println!("{name:<28} {removed:>8.1}%  {verdict}");
     }
+
+    // The animation, checked across frames rather than on the sheet.
+    //
+    // A per-frame decision is invisible in a still: every frame looks fine on
+    // its own and the artefact only exists in motion, as the edge crawls. So it
+    // is measured instead — the coverage of every frame against the first.
+    let frames = animation_frames(S, 8);
+    let mut coverages = Vec::new();
+    for frame in &frames {
+        let mut cut = frame.clone();
+        coverages.push(matte::remove_background(&mut cut).removed);
+    }
+    let spread = coverages
+        .iter()
+        .fold(0.0f32, |worst, c| worst.max((c - coverages[0]).abs()));
+    // The subject moves between frames, so coverage moves with it. What must not
+    // move is the *decision*: a 2% band is the subject travelling, a 20% one is
+    // a different tolerance being chosen.
+    let consistent = spread < 0.02;
+    if !consistent {
+        failures += 1;
+    }
+    println!(
+        "{:<28} {:>8.1}%  {}",
+        "8b animation, all 8 frames",
+        coverages[0] * 100.0,
+        if consistent {
+            format!("ok, consistent to {:.2}%", spread * 100.0)
+        } else {
+            format!("MATTE SHIMMERS: {:.1}% spread across frames", spread * 100.0)
+        }
+    );
 
     match write_png(&sheet, &out) {
         Ok(()) => {
@@ -327,6 +391,13 @@ fn matte_sheet(args: &[String]) {
         }
         Err(e) => eprintln!("could not write {}: {e}", out.display()),
     }
+
+    if failures == 0 {
+        println!("\nAll {} cases behave.", cases.len() + 1);
+    } else {
+        println!("\n{failures} case(s) FAILED.");
+        std::process::exit(1);
+    }
 }
 
 enum Expect {
@@ -334,42 +405,13 @@ enum Expect {
     Removes,
     /// There is nothing to remove; the image must come out untouched.
     LeavesAlone,
-    /// There may or may not be something to remove, and the only thing that
-    /// matters is that the subject survives. "Fail gracefully" means the user
-    /// gets their picture back, not that nothing happened.
-    KeepsSubject,
+    /// **The image must be refused, with a reason.** Not "cut carefully" and not
+    /// "cut a bit" — refused, untouched, and explained. Any cutout at all is a
+    /// failure.
+    Refuses,
 }
 
-/// Whether the middle of the image is still opaque after a cut.
-///
-/// A blunt measure, and the right one for "did this fail gracefully": the
-/// subject of a photograph is in the middle of the frame, and a cut that
-/// hollowed it out has done the unrecoverable thing. What happened to the sky is
-/// a judgement call; what happened to the subject is not.
-fn subject_survived(
-    before: &cursorforge_lib::build::bitmap::Bitmap,
-    after: &cursorforge_lib::build::bitmap::Bitmap,
-) -> bool {
-    let (w, h) = (before.width, before.height);
-    let (x0, x1) = (w * 4 / 10, w * 6 / 10);
-    let (y0, y1) = (h * 4 / 10, h * 7 / 10);
-
-    let mut was = 0usize;
-    let mut still = 0usize;
-    for y in y0..y1 {
-        for x in x0..x1 {
-            if before.alpha(x, y) > 200 {
-                was += 1;
-                if after.alpha(x, y) > 200 {
-                    still += 1;
-                }
-            }
-        }
-    }
-    was == 0 || (still as f32 / was as f32) > 0.9
-}
-
-/// The seven test images, generated.
+/// The eight test images, generated.
 fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap::Bitmap)> {
     use cursorforge_lib::build::bitmap::Bitmap;
 
@@ -442,7 +484,20 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
     cases.push(("2 checkerboard screenshot".to_owned(), Expect::Removes, two));
 
     // 3. JPEG-style ringing around the edge, on an off-white card.
+    //
+    // The card carries sensor and compression noise, deliberately. A perfectly
+    // flat synthetic card measures zero on every keyability signal, which makes
+    // it useless as the lower bound those thresholds have to clear: tuned
+    // against it, any threshold above zero looks safe, and the first real
+    // photographed logo gets refused.
     let mut three = flat([250, 249, 247]);
+    for y in 0..size {
+        for x in 0..size {
+            let n = ((x.wrapping_mul(2_654_435_761) ^ y.wrapping_mul(2_246_822_519)) % 7) as u8;
+            let p = three.pixel(x, y);
+            three.set_pixel(x, y, [p[0] - n, p[1] - n, p[2] - n / 2, 255]);
+        }
+    }
     disc(&mut three, [30, 30, 30, 255], true);
     for y in 1..size - 1 {
         for x in 1..size - 1 {
@@ -475,54 +530,161 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
     disc(&mut six, [150, 150, 150, 255], false);
     cases.push(("6 grey on grey".to_owned(), Expect::Removes, six));
 
-    // 7. A photograph: a scene, not a swatch.
+    // 7. The football on grass. **The acceptance test for the whole fix.**
     //
-    // A gradient alone is not this test. A smooth ramp with no structure *is*
-    // background by every definition in `matte`, and removing it is arguably
-    // correct — so a case made of one only proves the flood fill follows
-    // gradients, which is a thing it is supposed to do.
+    // This is the image a real user imported in a clean VM and got an
+    // unrecognisable dark blob back from. Every property that made it
+    // unkeyable is reproduced here, because each one defeats a different part
+    // of the pipeline:
     //
-    // A photograph has a subject. Here: a graded sky, a textured foreground with
-    // high-frequency detail, and a solid object standing on it. Failing
-    // gracefully means the object and the texture are still there afterwards,
-    // whatever happens to the sky.
+    //   - a **vignette**, so the four corners are not even the same colour as
+    //     each other and corner sampling has nothing to agree on;
+    //   - a **gradient**, dark at the top and lit toward the middle, so no
+    //     single tolerance covers the background;
+    //   - **grass**, which is thousands of distinct greens, many closer to each
+    //     other than to any sampled corner — texture cannot be flood-filled;
+    //   - a **shadow** blending continuously into the grass, so there is no
+    //     edge for the flood to stop at.
+    //
+    // The pass condition is that nothing is attempted. Any cutout at all means
+    // the fix is not done.
     let mut seven = Bitmap::new(size, size);
+    let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0);
     for y in 0..size {
         for x in 0..size {
-            let horizon = size * 6 / 10;
-            let pixel = if y < horizon {
-                // Sky: a smooth vertical grade with a little sensor noise.
-                let t = y as f32 / horizon as f32;
-                let noise = ((x * 7919 + y * 104_729) % 9) as u8;
-                [
-                    (90.0 + 90.0 * t) as u8,
-                    (130.0 + 80.0 * t) as u8,
-                    (200.0 + 40.0 * t) as u8,
-                ]
-                .map(|c: u8| c.saturating_add(noise))
-            } else {
-                // Ground: high-frequency texture, which is what the smoothness
-                // gate exists to stop the flood walking into.
-                let grain = ((x * 31 + y * 17) % 61) as u8;
-                let speck = if (x * 13 + y * 29) % 7 == 0 { 40 } else { 0 };
-                [
-                    70u8.saturating_add(grain).saturating_add(speck),
-                    58u8.saturating_add(grain / 2),
-                    44u8.saturating_add(grain / 3),
-                ]
+            // Grass: high-frequency, many distinct values, and — the property
+            // that matters — **no two neighbours alike**. A low-frequency
+            // pattern like `(x*7 + y*13) % 37` steps by 7 between adjacent
+            // pixels, which is smooth enough for the flood to walk straight
+            // through and reads as a flat background to every signal in
+            // `assess`. Real grass steps by tens of levels per pixel, and that
+            // is exactly why it cannot be flood-filled.
+            let hash = |a: u32, b: u32| {
+                let mut n = a.wrapping_mul(374_761_393).wrapping_add(b.wrapping_mul(668_265_263));
+                n = (n ^ (n >> 13)).wrapping_mul(1_274_126_177);
+                (n ^ (n >> 16)) % 256
             };
+            let blade = hash(x, y) as i32; // per-pixel: the blades themselves
+            let clump = hash(x / 7, y / 5) as i32; // per-tuft: the larger structure
+            let base = [
+                30 + blade / 6 + clump / 8,
+                70 + blade / 3 + clump / 4,
+                24 + blade / 8 + clump / 10,
+            ];
+
+            // Lighting: lit toward the middle, falling off to the corners.
+            //
+            // The floor matters. A vignette deep enough to crush the border to
+            // near-black makes the frame edge *uniform*, which is the one thing
+            // this case is not supposed to be — the grass has to still be
+            // visible at the edges, the way it is in the photograph this
+            // reproduces. Cranking it to darkness produced a synthetic image
+            // that scored as flat and keyable, which said more about the
+            // generator than about the matte.
+            let dx = (x as f32 - cx) / cx;
+            let dy = (y as f32 - cy) / cy;
+            let radius = (dx * dx + dy * dy).sqrt();
+            let vignette = (1.0 - 0.42 * radius.min(1.4)).max(0.45);
+            // Plus an overall top-to-bottom grade, which is what a studio light
+            // above the subject does.
+            let grade = 0.72 + 0.42 * (y as f32 / size as f32);
+            let light = vignette * grade;
+
+            let pixel = base.map(|c| ((c as f32) * light).clamp(0.0, 255.0) as u8);
             seven.set_pixel(x, y, [pixel[0], pixel[1], pixel[2], 255]);
         }
     }
-    // The subject: a solid shape standing on the ground, well inside the frame.
-    for y in (size * 3 / 10)..(size * 8 / 10) {
-        for x in (size * 4 / 10)..(size * 6 / 10) {
-            seven.set_pixel(x, y, [190, 40, 40, 255]);
+    // The shadow: no edge, blending continuously into the grass.
+    for y in 0..size {
+        for x in 0..size {
+            let dx = (x as f32 - cx) / (size as f32 * 0.26);
+            let dy = (y as f32 - cy - size as f32 * 0.13) / (size as f32 * 0.10);
+            let d = (dx * dx + dy * dy).sqrt();
+            if d >= 1.6 {
+                continue;
+            }
+            let strength = ((1.6 - d) / 1.6).powf(1.4) * 0.72;
+            let p = seven.pixel(x, y);
+            let dim = |c: u8| ((c as f32) * (1.0 - strength)) as u8;
+            seven.set_pixel(x, y, [dim(p[0]), dim(p[1]), dim(p[2]), 255]);
         }
     }
-    cases.push(("7 photograph".to_owned(), Expect::KeepsSubject, seven));
+    // The ball: an ellipse with laces, lit from above.
+    for y in 0..size {
+        for x in 0..size {
+            let dx = (x as f32 - cx) / (size as f32 * 0.27);
+            let dy = (y as f32 - cy) / (size as f32 * 0.17);
+            if dx * dx + dy * dy > 1.0 {
+                continue;
+            }
+            let lit = (1.0 - (y as f32 - cy) / (size as f32 * 0.34)).clamp(0.45, 1.25);
+            let leather = ((x * 3 + y * 5) % 11) as f32;
+            let mut rgb = [
+                (96.0 * lit + leather) as u8,
+                (52.0 * lit + leather * 0.6) as u8,
+                (30.0 * lit + leather * 0.4) as u8,
+            ];
+            // Laces.
+            let on_lace = (x as f32 - cx).abs() < size as f32 * 0.09
+                && ((y as f32 - cy).abs() < size as f32 * 0.012
+                    || ((x as f32 - cx) / (size as f32 * 0.022)).round() as i32 % 2 == 0
+                        && (y as f32 - cy).abs() < size as f32 * 0.05);
+            if on_lace {
+                rgb = [224, 218, 206];
+            }
+            seven.set_pixel(x, y, [rgb[0], rgb[1], rgb[2], 255]);
+        }
+    }
+    cases.push(("7 football on grass".to_owned(), Expect::Refuses, seven));
+
+    // 8. An animated GIF: every frame must key the same way, or the cursor
+    // shimmers as the matte moves under it. Represented on the sheet by its
+    // first frame; the consistency check runs across all of them.
+    let mut eight = flat([250, 250, 250]);
+    disc(&mut eight, [70, 90, 220, 255], true);
+    cases.push(("8 animation, frame 1".to_owned(), Expect::Removes, eight));
 
     cases
+}
+
+/// The frames of the animated case, as their own sequence.
+///
+/// A moving subject on a fixed background: exactly the shape where a per-frame
+/// decision drifts. If frame 3 picks a different tolerance from frame 2, the
+/// cursor's edge crawls, and the artefact is only visible in motion — which is
+/// to say, never in a still contact sheet.
+fn animation_frames(size: u32, count: u32) -> Vec<cursorforge_lib::build::bitmap::Bitmap> {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    (0..count)
+        .map(|frame| {
+            let mut b = Bitmap::new(size, size);
+            for y in 0..size {
+                for x in 0..size {
+                    b.set_pixel(x, y, [250, 250, 250, 255]);
+                }
+            }
+            // The subject moves; the background does not.
+            let offset = (frame as f32 / count as f32 * size as f32 * 0.18) as u32;
+            let r = (size as f32) * 0.30;
+            let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0 - r * 0.3 + offset as f32);
+            for y in 0..size {
+                for x in 0..size {
+                    let d = (((x as f32 + 0.5) - cx).powi(2) + ((y as f32 + 0.5) - cy).powi(2))
+                        .sqrt();
+                    let coverage = (r + 0.5 - d).clamp(0.0, 1.0);
+                    if coverage <= 0.0 {
+                        continue;
+                    }
+                    let under = b.pixel(x, y);
+                    let blend = |a: u8, c: u8| {
+                        ((c as f32 * coverage) + (a as f32 * (1.0 - coverage))) as u8
+                    };
+                    b.set_pixel(x, y, [blend(under[0], 70), blend(under[1], 90), blend(under[2], 220), 255]);
+                }
+            }
+            b
+        })
+        .collect()
 }
 
 /// Draws a bitmap onto the sheet over a small checkerboard, so transparency is

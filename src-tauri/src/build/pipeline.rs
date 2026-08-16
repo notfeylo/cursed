@@ -276,6 +276,20 @@ pub fn prepare_master(bitmap: &Bitmap) -> AppResult<Bitmap> {
 }
 
 pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
+    prepare_master_reported(bitmap, cut).map(|(master, _)| master)
+}
+
+/// The same, and hands back what the matte decided.
+///
+/// Split out because a refusal is information the user is owed. Discarding it —
+/// which is what every caller did until the background remover learned to
+/// refuse — means the app quietly returns the original image with no background
+/// removed and nothing on screen explaining why, which from the outside is
+/// indistinguishable from the feature being broken.
+pub fn prepare_master_reported(
+    bitmap: &Bitmap,
+    cut: Cut,
+) -> AppResult<(Bitmap, crate::build::matte::MatteReport)> {
     // The cut-out has to come first, because everything after it depends on
     // alpha. A JPEG off a search page, or a screenshot, is fully opaque — so
     // `trimmed()` finds nothing to trim and the whole rectangle, card and
@@ -288,7 +302,7 @@ pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
     let report = match cut {
         Cut::Auto => crate::build::matte::remove_background(&mut source),
         Cut::Force => crate::build::matte::remove_background_forced(&mut source),
-        Cut::Keep => crate::build::matte::MatteReport { removed: 0.0, already_had_alpha: false },
+        Cut::Keep => crate::build::matte::MatteReport::not_attempted(),
     };
     if report.removed > 0.0 {
         log::debug!(
@@ -315,13 +329,20 @@ pub fn prepare_master_with(bitmap: &Bitmap, cut: Cut) -> AppResult<Bitmap> {
         None => source,
     };
 
+    // Trimming is safe here **only because a failed key never reaches this
+    // point**. `matte::attempt` reverts a cut that ate the subject, so an image
+    // that arrives here is either correctly keyed or fully opaque — and
+    // `trimmed()` on a fully opaque image finds nothing to trim and returns it
+    // whole. Run against a bad matte, this step is what turns a poor cutout into
+    // a crop of garbage: most of the frame is transparent, so it crops to
+    // whatever specks survived.
     let trimmed = source.trimmed();
     if trimmed.is_empty() {
         return Err(AppError::invalid(
             "the image is completely transparent, so there is nothing to make a cursor from",
         ));
     }
-    Ok(trimmed.squared().padded(1))
+    Ok((trimmed.squared().padded(1), report))
 }
 
 /// How much of the frame the subject must leave unused before it is worth
@@ -378,7 +399,7 @@ fn recut_at_full_resolution(
     match cut {
         Cut::Auto => crate::build::matte::remove_background(&mut region),
         Cut::Force => crate::build::matte::remove_background_forced(&mut region),
-        Cut::Keep => crate::build::matte::MatteReport { removed: 0.0, already_had_alpha: false },
+        Cut::Keep => crate::build::matte::MatteReport::not_attempted(),
     };
 
     // If the second cut found nothing at all, the first one is still good.

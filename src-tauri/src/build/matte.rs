@@ -90,6 +90,374 @@ pub struct MatteReport {
     pub removed: f32,
     /// True when the image arrived with transparency and was left untouched.
     pub already_had_alpha: bool,
+    /// Set when nothing was removed **on purpose**. The bitmap is untouched.
+    pub refused: Option<Refusal>,
+    /// What the image looked like before anything was attempted.
+    pub keyability: Keyability,
+}
+
+impl MatteReport {
+    /// Nothing was attempted because nothing was asked for — `Cut::Keep`.
+    pub fn not_attempted() -> Self {
+        Self::untouched(Keyability {
+            confident: true,
+            ..Keyability::default()
+        })
+    }
+
+    fn untouched(keyability: Keyability) -> Self {
+        Self {
+            removed: 0.0,
+            already_had_alpha: false,
+            refused: None,
+            keyability,
+        }
+    }
+
+    fn refusing(reason: Refusal, keyability: Keyability) -> Self {
+        Self {
+            removed: 0.0,
+            already_had_alpha: false,
+            refused: Some(reason),
+            keyability,
+        }
+    }
+}
+
+/// Why a removal did not happen.
+///
+/// **A refusal is a result, not a failure.** The alternative — attempting a key
+/// that cannot work and returning whatever came out — is how a user gets an
+/// unrecognisable dark blob back from a photograph of a football on grass, with
+/// nothing anywhere saying why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Refusal {
+    /// The background is not a background: a gradient, a vignette, a texture, or
+    /// all three. No tolerance value produces a correct result on this image, so
+    /// none is tried.
+    LooksLikeAPhotograph,
+    /// A key was attempted and what came back was not a subject. Reverted.
+    WouldHaveEatenTheSubject,
+    /// The key found almost nothing to remove, so the image is returned as it
+    /// arrived rather than with a few hundred pixels nibbled off its corners.
+    BarelyMoved,
+}
+
+impl Refusal {
+    /// What to tell the user. Plain, specific, and never blaming them.
+    pub fn message(self) -> &'static str {
+        match self {
+            Refusal::LooksLikeAPhotograph => {
+                "This looks like a photo. Automatic background removal works on flat \
+                 backgrounds — logos, icons, screenshots — and it will not do a good job \
+                 here. Use the image as it is, or cut it out yourself in the editor."
+            }
+            Refusal::WouldHaveEatenTheSubject => {
+                "Removing the background would have taken the subject with it, so the \
+                 image was left as it is. Try the editor if you want to cut it by hand."
+            }
+            Refusal::BarelyMoved => {
+                "There was no background to find, so the image was left as it is."
+            }
+        }
+    }
+}
+
+/// How well an image will key, measured before anything is attempted.
+///
+/// Four independent signals, because each one alone has a hole. A flat card with
+/// heavy grain passes the corner test and fails the variance one; a two-tone
+/// gradient passes the variance test and fails the corner one.
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Keyability {
+    /// The largest colour distance between any two of the four corner patches.
+    ///
+    /// A vignette is exactly this: the corners are darker than the middle, and
+    /// darker by different amounts. A flat card's corners agree to within noise.
+    pub corner_disagreement: i32,
+    /// How much the perimeter band varies from its own median.
+    ///
+    /// Grass, fabric, foliage and carpet all read here. Texture cannot be
+    /// flood-filled at any tolerance: the values that make it up are further
+    /// from each other than they are from the subject.
+    pub border_variance: i32,
+    /// Distinct colours per thousand border pixels, quantised to 32 levels per
+    /// channel.
+    ///
+    /// A rate rather than a count. A count is a function of the image's size as
+    /// much as its content — the same photograph measures three times as many
+    /// colours at 4K as at 720p — so a threshold on one is a threshold that
+    /// means something different for every import.
+    pub border_colour_density: f32,
+    /// Fraction of the border band sitting on a strong local edge, 0.0–1.0.
+    pub border_edge_density: f32,
+    /// True when all four signals say this is a flat background.
+    pub confident: bool,
+}
+
+// The four thresholds.
+//
+// Chosen against measurements, not intuition — the first set was guessed and
+// let the football photograph through on three signals out of four. The numbers
+// each case actually produces are in `docs/verification/background-removal.md`;
+// what matters here is that every threshold sits in a gap with room on both
+// sides, and that no single one is load-bearing on its own.
+
+/// Corner patches disagreeing by more than this is a vignette or a gradient.
+///
+/// Flat cards measure 0–1. The football photograph measures 42. A logo on a
+/// deliberately graded card — a real and legitimate thing to import — lands in
+/// the twenties, so the line goes above that and below the photograph.
+const MAX_CORNER_DISAGREEMENT: i32 = 40;
+
+/// Perimeter variation above this is texture rather than sensor noise.
+///
+/// The weakest of the four, and kept because it is the only one that fires on a
+/// *bright* textured background. A vignette compresses the border's values
+/// toward black, which drags this figure down precisely when the background is
+/// least keyable — the football photograph measures only 14 here.
+const MAX_BORDER_VARIANCE: i32 = 20;
+
+/// Distinct colours per thousand border pixels.
+///
+/// Flat cards measure under 2 even with noise on them; the photograph measures
+/// 14.
+const MAX_BORDER_COLOUR_DENSITY: f32 = 8.0;
+
+/// Fraction of the border band sitting on a strong local edge.
+///
+/// **The decisive one for texture.** Grass, fabric, foliage and carpet are
+/// defined by pixel-to-pixel contrast, which is exactly what this counts: the
+/// photograph measures 50% against 0% for every flat case. It is also the only
+/// signal that cannot be fooled by a dark background, because it measures
+/// differences rather than values.
+const MAX_BORDER_EDGE_DENSITY: f32 = 0.22;
+
+/// A key that claimed more than this, and left nothing coherent behind, ate the
+/// subject.
+const MAX_PLAUSIBLE_COVERAGE: f32 = 0.85;
+/// Below this, the key achieved nothing worth keeping.
+const MIN_USEFUL_COVERAGE: f32 = 0.05;
+
+/// How wide a band around the perimeter counts as "the border".
+const BORDER_BAND: u32 = 4;
+
+/// Scores an image for whether its background can be keyed at all.
+///
+/// **This is the check that was missing.** The pipeline is a flood fill with a
+/// tolerance, which is correct for a flat background and has no correct answer
+/// on a photograph: too tight and it stops at the first blade of grass, too
+/// loose and it walks through the subject. There is no value in between. So the
+/// question to ask first is not "what tolerance" but "is this keyable at all".
+pub fn assess(bitmap: &Bitmap) -> Keyability {
+    // A transparency checkerboard is two colours by construction, so measuring
+    // one unflattened reports a textured, disagreeing, multi-coloured border and
+    // refuses the single case this file most recently learned to handle.
+    //
+    // Flattened here rather than only in `attempt`, so that `assess` describes
+    // the image *as the pipeline will see it* wherever it is called from — the
+    // contact sheet, the UI's preview, a diagnostic. An assessment that only
+    // tells the truth on one call path is worse than none.
+    if let Some(board) = detect_checkerboard(bitmap) {
+        let mut flattened = bitmap.clone();
+        flatten_checkerboard(&mut flattened, &board);
+        return assess_flattened(&flattened);
+    }
+    assess_flattened(bitmap)
+}
+
+fn assess_flattened(bitmap: &Bitmap) -> Keyability {
+    let (w, h) = (bitmap.width, bitmap.height);
+    if w < 16 || h < 16 {
+        // Too small to measure. Treated as keyable: this is icon-sized art, and
+        // refusing to key a 16x16 icon because there is no room to sample a
+        // border band would be the wrong failure.
+        return Keyability {
+            confident: true,
+            ..Keyability::default()
+        };
+    }
+
+    let corner_disagreement = corner_disagreement(bitmap);
+
+    // The perimeter band, sampled once and reused by three of the four signals.
+    let mut band: Vec<[u8; 4]> = Vec::new();
+    let mut on_edge = 0usize;
+    let mut seen: Vec<u32> = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            let edge = x < BORDER_BAND
+                || y < BORDER_BAND
+                || x >= w.saturating_sub(BORDER_BAND)
+                || y >= h.saturating_sub(BORDER_BAND);
+            if !edge {
+                continue;
+            }
+            let pixel = bitmap.pixel(x, y);
+            // Transparency is not a colour.
+            //
+            // A PNG with a transparent margin carries `[0, 0, 0, 0]` around its
+            // edge, and measuring that as black makes a perfectly ordinary logo
+            // on a white card look like a high-contrast, many-coloured,
+            // disagreeing border — which is to say, like a photograph. It was
+            // refused for having done the thing this app asks people to do.
+            if pixel[3] < 16 {
+                continue;
+            }
+            band.push(pixel);
+            if local_contrast(bitmap, x, y) > SMOOTH_ENOUGH {
+                on_edge += 1;
+            }
+            // 5 bits per channel: fine enough to tell two shades of grass apart,
+            // coarse enough that JPEG noise on a flat card does not read as
+            // three hundred colours.
+            let key = ((pixel[0] as u32 >> 3) << 10)
+                | ((pixel[1] as u32 >> 3) << 5)
+                | (pixel[2] as u32 >> 3);
+            if !seen.contains(&key) {
+                seen.push(key);
+            }
+        }
+    }
+
+    if band.is_empty() {
+        return Keyability {
+            confident: true,
+            ..Keyability::default()
+        };
+    }
+
+    let median = median_colour(&band);
+    let mut deviations: Vec<i32> = band.iter().map(|p| distance(*p, median)).collect();
+    deviations.sort_unstable();
+    let border_variance = deviations[deviations.len() / 2];
+
+    let border_colour_density = seen.len() as f32 * 1000.0 / band.len() as f32;
+    let border_edge_density = on_edge as f32 / band.len() as f32;
+
+    // Any one signal is enough. They measure different failures — a vignette, a
+    // texture, a gradient, a busy backdrop — and an image only has to have one
+    // of them to be unkeyable.
+    let confident = corner_disagreement <= MAX_CORNER_DISAGREEMENT
+        && border_variance <= MAX_BORDER_VARIANCE
+        && border_colour_density <= MAX_BORDER_COLOUR_DENSITY
+        && border_edge_density <= MAX_BORDER_EDGE_DENSITY;
+
+    Keyability {
+        corner_disagreement,
+        border_variance,
+        border_colour_density,
+        border_edge_density,
+        confident,
+    }
+}
+
+/// The largest colour distance between any two corner patches.
+fn corner_disagreement(bitmap: &Bitmap) -> i32 {
+    const PATCH: u32 = 8;
+    let (w, h) = (bitmap.width, bitmap.height);
+    let corner = |x0: u32, y0: u32| -> [u8; 4] {
+        let mut samples = Vec::with_capacity((PATCH * PATCH) as usize);
+        for y in y0..(y0 + PATCH).min(h) {
+            for x in x0..(x0 + PATCH).min(w) {
+                let pixel = bitmap.pixel(x, y);
+                // Same rule as the band: transparency is absence, not black.
+                if pixel[3] >= 16 {
+                    samples.push(pixel);
+                }
+            }
+        }
+        median_colour(&samples)
+    };
+
+    let corners = [
+        corner(0, 0),
+        corner(w.saturating_sub(PATCH), 0),
+        corner(0, h.saturating_sub(PATCH)),
+        corner(w.saturating_sub(PATCH), h.saturating_sub(PATCH)),
+    ];
+
+    let mut worst = 0;
+    for i in 0..corners.len() {
+        for j in (i + 1)..corners.len() {
+            worst = worst.max(distance(corners[i], corners[j]));
+        }
+    }
+    worst
+}
+
+/// Per-channel median of a set of pixels.
+fn median_colour(samples: &[[u8; 4]]) -> [u8; 4] {
+    if samples.is_empty() {
+        return [0, 0, 0, 255];
+    }
+    let channel = |index: usize| -> u8 {
+        let mut values: Vec<u8> = samples.iter().map(|p| p[index]).collect();
+        values.sort_unstable();
+        values[values.len() / 2]
+    };
+    [channel(0), channel(1), channel(2), 255]
+}
+
+/// Whether what survived a cut is a subject rather than debris.
+///
+/// The coverage figure alone cannot tell those apart. A small logo on a large
+/// canvas legitimately keys away 96% of the image; a photograph destroyed by an
+/// over-eager flood also keys away 96%. The difference is what is left: one
+/// coherent shape, or a scatter of specks.
+///
+/// Measured as the largest 4-connected run of surviving opacity as a fraction of
+/// all surviving opacity. A logo is one blob and scores near 1.0. Shredded grass
+/// is a thousand blobs and scores near 0.
+fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let opaque = |x: u32, y: u32| bitmap.alpha(x, y) > 128;
+
+    let mut seen = vec![false; (w * h) as usize];
+    let mut total = 0usize;
+    let mut largest = 0usize;
+
+    for y in 0..h {
+        for x in 0..w {
+            if !opaque(x, y) {
+                continue;
+            }
+            total += 1;
+            let start = (y * w + x) as usize;
+            if seen[start] {
+                continue;
+            }
+            // Iterative, not recursive: a full-frame region on a 1024px image is
+            // a million-deep recursion and a stack overflow is not a diagnostic.
+            let mut size = 0usize;
+            let mut stack = vec![(x, y)];
+            seen[start] = true;
+            while let Some((cx, cy)) = stack.pop() {
+                size += 1;
+                for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (cx as i32 + dx, cy as i32 + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let (nx, ny) = (nx as u32, ny as u32);
+                    let i = (ny * w + nx) as usize;
+                    if seen[i] || !opaque(nx, ny) {
+                        continue;
+                    }
+                    seen[i] = true;
+                    stack.push((nx, ny));
+                }
+            }
+            largest = largest.max(size);
+        }
+    }
+
+    if total == 0 {
+        return false; // nothing survived at all
+    }
+    (largest as f32 / total as f32) >= 0.5
 }
 
 /// True when the image already has its background removed.
@@ -132,19 +500,120 @@ pub fn already_cut_out(bitmap: &Bitmap) -> bool {
 }
 
 /// Removes a flat or near-flat background, in place, returning what it did.
+///
+/// Refuses rather than guesses. See [`attempt`].
 pub fn remove_background(bitmap: &mut Bitmap) -> MatteReport {
-    cut(bitmap, false)
+    attempt(bitmap, false)
 }
 
-/// The same, but ignoring the "this already has transparency" shortcut.
+/// The same, but ignoring the "this already has transparency" shortcut **and**
+/// the this-looks-like-a-photograph refusal.
 ///
 /// An image can carry an alpha channel and still have a background — a PNG
 /// exported with a white card behind it, a GIF whose transparency only covers
 /// the corners. The automatic path leaves those alone on purpose, because
 /// re-cutting art that somebody already cut is how you lose a soft edge. When
 /// the user asks for it explicitly, that caution is the wrong default.
+///
+/// What `force` does **not** override is the sanity check on the result. "Try
+/// anyway" is a reasonable thing for a user to mean; "hand me back an
+/// unrecognisable blob" is not, and no button in this app means that.
 pub fn remove_background_forced(bitmap: &mut Bitmap) -> MatteReport {
-    cut(bitmap, true)
+    attempt(bitmap, true)
+}
+
+/// Decides whether to key, keys on a copy, checks the result, and only then
+/// commits it.
+///
+/// The order is the fix. Every step of it exists because the previous shape of
+/// this function did the opposite:
+///
+///  1. **Flatten a transparency checkerboard first**, so the measurements below
+///     see one background rather than two.
+///  2. **Assess before attempting.** A photograph has no correct tolerance, so
+///     it gets none tried on it.
+///  3. **Work on a copy.** The caller's bitmap is not touched until there is a
+///     result worth having.
+///  4. **Check what came back.** A key that claimed almost everything and left
+///     scattered debris is a destroyed image, whatever its coverage figure says.
+///  5. **Commit, or revert and say why.**
+fn attempt(bitmap: &mut Bitmap, force: bool) -> MatteReport {
+    let (w, h) = (bitmap.width, bitmap.height);
+    if w < 3 || h < 3 {
+        return MatteReport::untouched(Keyability {
+            confident: true,
+            ..Keyability::default()
+        });
+    }
+
+    // 1. Before anything measures anything: if this is a screenshot of an
+    // editor's transparency grid, make it one colour. Every signal below assumes
+    // a single background and produces a confidently wrong answer on two.
+    //
+    // Done on the caller's bitmap because it is not destructive — it replaces
+    // two greys that are both background with one of them — and because the
+    // assessment has to run on the flattened version to be meaningful.
+    if let Some(board) = detect_checkerboard(bitmap) {
+        log::debug!(
+            "matte: transparency checkerboard detected, {}px cells; flattening before the cut",
+            board.cell
+        );
+        flatten_checkerboard(bitmap, &board);
+    }
+
+    let keyability = assess(bitmap);
+
+    if !force && already_cut_out(bitmap) {
+        return MatteReport {
+            removed: 0.0,
+            already_had_alpha: true,
+            refused: None,
+            keyability,
+        };
+    }
+
+    // 2. The refusal that is the whole point of this pass.
+    //
+    // Not applied under `force`: a user who has looked at the preview and asked
+    // for it anyway has overruled the guess, and they are allowed to. The
+    // result is still checked at step 4.
+    if !force && !keyability.confident {
+        log::info!(
+            "matte: refusing to key — corners disagree by {}, border varies by {}, \
+             {:.1} border colours per 1000, {:.0}% of the border on an edge",
+            keyability.corner_disagreement,
+            keyability.border_variance,
+            keyability.border_colour_density,
+            keyability.border_edge_density * 100.0
+        );
+        return MatteReport::refusing(Refusal::LooksLikeAPhotograph, keyability);
+    }
+
+    // 3. On a copy. The original is what the user gets back if any of this goes
+    // wrong, and it cannot be reconstructed from a bad matte.
+    let mut candidate = bitmap.clone();
+    let report = cut(&mut candidate, force);
+
+    // 4. What came back.
+    if report.removed < MIN_USEFUL_COVERAGE {
+        return MatteReport::refusing(Refusal::BarelyMoved, keyability);
+    }
+    if report.removed > MAX_PLAUSIBLE_COVERAGE && !survivor_is_coherent(&candidate) {
+        log::warn!(
+            "matte: a key claiming {:.0}% left no coherent subject; reverting",
+            report.removed * 100.0
+        );
+        return MatteReport::refusing(Refusal::WouldHaveEatenTheSubject, keyability);
+    }
+
+    // 5. Only now.
+    *bitmap = candidate;
+    MatteReport {
+        removed: report.removed,
+        already_had_alpha: false,
+        refused: None,
+        keyability,
+    }
 }
 
 /// The alternating grey grid an image editor draws behind transparency.
@@ -362,28 +831,19 @@ fn luma(rgb: [u8; 3]) -> i32 {
     (rgb[0] as i32 * 30 + rgb[1] as i32 * 59 + rgb[2] as i32 * 11) / 100
 }
 
-fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
+/// The key itself.
+///
+/// Assumes its caller has already decided this image is worth keying and is
+/// working on a copy — see [`attempt`], which is the only caller.
+fn cut(bitmap: &mut Bitmap, _force: bool) -> MatteReport {
     let (w, h) = (bitmap.width, bitmap.height);
+    let empty = MatteReport::untouched(Keyability::default());
     if w < 3 || h < 3 {
-        return MatteReport { removed: 0.0, already_had_alpha: false };
-    }
-    if !force && already_cut_out(bitmap) {
-        return MatteReport { removed: 0.0, already_had_alpha: true };
-    }
-
-    // Before anything samples the border: if this is a screenshot of an editor's
-    // transparency grid, make it one colour. Every measurement below assumes a
-    // single background and produces a confidently wrong answer on two.
-    if let Some(board) = detect_checkerboard(bitmap) {
-        log::debug!(
-            "matte: transparency checkerboard detected, {}px cells; flattening before the cut",
-            board.cell
-        );
-        flatten_checkerboard(bitmap, &board);
+        return empty;
     }
 
     let Some(background) = sample_border(bitmap) else {
-        return MatteReport { removed: 0.0, already_had_alpha: false };
+        return empty;
     };
 
     // How much slack this particular image gets, from how uniform its border is.
@@ -500,10 +960,20 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     // Refusing to gut the image is part of the job. If almost everything
     // matched the border, the "subject" was the background and clearing it
     // would leave nothing.
+    // No coverage guard here any more, and its removal is a fix rather than a
+    // relaxation.
+    //
+    // This used to bail out at 97%, on the reasoning that clearing almost
+    // everything means the "subject" was the background. The reasoning is right
+    // and the measure is wrong: **a small logo on a large canvas legitimately
+    // keys away 99% of the image**, and every one of those was silently
+    // returned with no background removed at all — the most common shape of
+    // cursor source art there is.
+    //
+    // Coverage cannot tell a sparse logo from a destroyed photograph. What can
+    // is whether anything coherent survived, and that is checked by `attempt`,
+    // which owns the decision to keep or revert this result.
     let fraction = removed as f32 / (w * h) as f32;
-    if fraction > 0.97 {
-        return MatteReport { removed: 0.0, already_had_alpha: false };
-    }
 
     // Second pass: grade the boundary instead of cutting it.
     //
@@ -577,10 +1047,141 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     }
     log::debug!("{softened} pixels graded rather than cut");
 
+    // The background's colour taken back out of the fringe it contaminated.
+    despill(bitmap, &cleared, background);
+
     sweep_dust(bitmap);
 
-    MatteReport { removed: fraction, already_had_alpha: false }
+    MatteReport {
+        removed: fraction,
+        already_had_alpha: false,
+        refused: None,
+        keyability: Keyability::default(),
+    }
 }
+
+/// Removes background colour left in the pixels along the subject's edge.
+///
+/// **This is what the halo on a JPEG was.** Compression puts a bright overshoot
+/// just outside a hard edge — ringing — and those pixels sit too far from the
+/// background to be keyed and too close to the edge to be subject. Everything
+/// upstream is deliberately edge-*preserving*, so they survive, and what the
+/// user sees is a pale outline tracing their artwork.
+///
+/// The correction is local and conservative. For each kept pixel that touches
+/// the flood, look at the kept pixels a little further in — ones that do *not*
+/// touch it, and are therefore uncontaminated — and take their median as what
+/// this pixel should look like. If the pixel leans toward the background
+/// relative to that median, replace its colour with the median and keep its
+/// alpha.
+///
+/// Colour only, never alpha. The alpha is the shape, and the shape was decided
+/// by the flood; a despill that moved it would be re-keying under another name.
+///
+/// Conservative in the one direction that matters: a pixel with too few clean
+/// neighbours to judge is left exactly as it is. On a one-pixel-wide feature —
+/// a whisker, the point of an arrow — there is no interior to sample, and
+/// guessing there would eat the feature.
+fn despill(bitmap: &mut Bitmap, cleared: &[bool], background: [u8; 4]) {
+    let (w, h) = (bitmap.width, bitmap.height);
+    let index = |x: u32, y: u32| (y * w + x) as usize;
+
+    /// How far from the flood a pixel can be and still be contaminated.
+    ///
+    /// Two, not one. A compression fringe is not one pixel wide — ringing puts
+    /// an overshoot two or three pixels deep around a hard edge — and a
+    /// despill that only reached pixels touching the flood left the inner half
+    /// of the ring behind, which on a square subject is a visible bright line
+    /// one pixel in from the edge.
+    const FRINGE: i32 = 2;
+    /// How far in to look for something clean to compare against. Must be
+    /// beyond the fringe, or the samples are contaminated too.
+    const CLEAN: i32 = 4;
+
+    let within = |x: u32, y: u32, radius: i32, of: &dyn Fn(usize) -> bool| {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                    continue;
+                }
+                if of(index(nx as u32, ny as u32)) {
+                    return true;
+                }
+            }
+        }
+        false
+    };
+
+    let touches_flood = |x: u32, y: u32| within(x, y, FRINGE, &|i| cleared[i]);
+
+    // Collected before anything is written, so a corrected pixel is never used
+    // as a clean sample for the next one along.
+    let mut corrections: Vec<(u32, u32, [u8; 4])> = Vec::new();
+
+    for y in 0..h {
+        for x in 0..w {
+            if cleared[index(x, y)] || !touches_flood(x, y) {
+                continue;
+            }
+            let pixel = bitmap.pixel(x, y);
+            if pixel[3] == 0 {
+                continue;
+            }
+
+            // Clean neighbours: kept, opaque, and far enough in that they are
+            // not part of the fringe themselves.
+            let mut clean: Vec<[u8; 4]> = Vec::new();
+            for dy in -CLEAN..=CLEAN {
+                for dx in -CLEAN..=CLEAN {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let (nx, ny) = (nx as u32, ny as u32);
+                    if cleared[index(nx, ny)] || touches_flood(nx, ny) {
+                        continue;
+                    }
+                    let sample = bitmap.pixel(nx, ny);
+                    if sample[3] > 200 {
+                        clean.push(sample);
+                    }
+                }
+            }
+            if clean.len() < 4 {
+                continue; // nothing trustworthy to compare against
+            }
+
+            let interior = median_colour(&clean);
+            let pixel_to_background = distance(pixel, background);
+            let interior_to_background = distance(interior, background);
+
+            // Contaminated means "closer to the background than the artwork
+            // behind it is, by enough to see". The margin keeps ordinary
+            // antialiasing — which is *supposed* to sit between the two — from
+            // being flattened into the subject's colour.
+            if interior_to_background - pixel_to_background > SPILL_MARGIN {
+                corrections.push((x, y, [interior[0], interior[1], interior[2], pixel[3]]));
+            }
+        }
+    }
+
+    let count = corrections.len();
+    for (x, y, colour) in corrections {
+        bitmap.set_pixel(x, y, colour);
+    }
+    if count > 0 {
+        log::debug!("{count} fringe pixels despilled");
+    }
+}
+
+/// How much closer to the background a fringe pixel must be than the artwork
+/// behind it before it counts as contaminated.
+///
+/// Generous. A tight margin flattens every genuinely soft edge into a hard one,
+/// which is a worse artefact than the halo it was fixing and shows up on every
+/// image rather than on compressed ones.
+const SPILL_MARGIN: i32 = 40;
 
 /// The alpha below which a pixel standing entirely on its own is dust.
 ///
@@ -1029,6 +1630,192 @@ mod tests {
             }
         }
         b
+    }
+
+    /// A photograph: textured background, vignette, and a subject in the middle.
+    ///
+    /// Every property that makes the real thing unkeyable, in miniature —
+    /// per-pixel texture so no two neighbours match, and a radial falloff so the
+    /// corners do not agree with each other.
+    fn photograph(size: u32) -> Bitmap {
+        let mut b = Bitmap::new(size, size);
+        let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0);
+        let hash = |a: u32, c: u32| {
+            let mut n = a.wrapping_mul(374_761_393).wrapping_add(c.wrapping_mul(668_265_263));
+            n = (n ^ (n >> 13)).wrapping_mul(1_274_126_177);
+            (n ^ (n >> 16)) % 256
+        };
+        for y in 0..size {
+            for x in 0..size {
+                let grain = hash(x, y) as i32;
+                let tuft = hash(x / 7, y / 5) as i32;
+                let dx = (x as f32 - cx) / cx;
+                let dy = (y as f32 - cy) / cy;
+                let light = (1.0 - 0.42 * (dx * dx + dy * dy).sqrt().min(1.4)).max(0.45);
+                let base = [
+                    30 + grain / 6 + tuft / 8,
+                    70 + grain / 3 + tuft / 4,
+                    24 + grain / 8 + tuft / 10,
+                ];
+                let p = base.map(|c| ((c as f32) * light).clamp(0.0, 255.0) as u8);
+                b.set_pixel(x, y, [p[0], p[1], p[2], 255]);
+            }
+        }
+        // The subject.
+        for y in (size * 2 / 5)..(size * 3 / 5) {
+            for x in (size * 3 / 10)..(size * 7 / 10) {
+                b.set_pixel(x, y, [140, 70, 40, 255]);
+            }
+        }
+        b
+    }
+
+    /// **The regression for the reported bug.**
+    ///
+    /// A real user imported a photograph of a football on grass, in a clean VM,
+    /// and got an unrecognisable dark blob back. The flood fill did not
+    /// malfunction — it was handed an input no tolerance can key, and returned
+    /// whatever came out.
+    ///
+    /// The fix is that nothing is attempted. Two assertions, and the second is
+    /// the one that matters: refusing while still having modified the image
+    /// would be the same bug with a message attached.
+    #[test]
+    fn a_photograph_is_refused_rather_than_destroyed() {
+        let original = photograph(96);
+        let mut subject = original.clone();
+
+        let report = remove_background(&mut subject);
+
+        assert_eq!(report.refused, Some(Refusal::LooksLikeAPhotograph));
+        assert_eq!(report.removed, 0.0);
+        assert!(!report.keyability.confident);
+        assert_eq!(
+            subject.pixels, original.pixels,
+            "a refusal must leave the image byte-identical, not nearly so"
+        );
+    }
+
+    /// The signals have to separate the two kinds of image with room to spare.
+    /// A threshold that only just catches a photograph is a threshold that will
+    /// let the next one through.
+    #[test]
+    fn a_flat_card_and_a_photograph_are_not_close() {
+        let card = assess(&solid(96, 96, [250, 249, 247, 255]));
+        let photo = assess(&photograph(96));
+
+        assert!(card.confident, "a flat card must key: {card:?}");
+        assert!(!photo.confident, "a photograph must not: {photo:?}");
+
+        // Texture is the decisive signal and it is not marginal.
+        assert!(
+            photo.border_edge_density > card.border_edge_density + 0.2,
+            "edge density should separate these clearly: {} vs {}",
+            photo.border_edge_density,
+            card.border_edge_density
+        );
+    }
+
+    /// A user who looks at the refusal and asks for it anyway is allowed to.
+    /// "Try it and let me look" is a reasonable thing to mean.
+    #[test]
+    fn force_overrules_the_refusal() {
+        let mut subject = photograph(96);
+        let report = remove_background_forced(&mut subject);
+        assert_ne!(
+            report.refused,
+            Some(Refusal::LooksLikeAPhotograph),
+            "force means the guess has been overruled"
+        );
+    }
+
+    /// What `force` must **not** overrule.
+    ///
+    /// No button in this app means "hand me back something unrecognisable". An
+    /// image with nothing but background in it keys to nothing, and nothing is
+    /// not a result.
+    #[test]
+    fn nothing_overrules_handing_back_a_destroyed_image() {
+        let original = solid(64, 64, [200, 200, 200, 255]);
+        let mut subject = original.clone();
+
+        let report = remove_background_forced(&mut subject);
+
+        assert!(report.refused.is_some(), "an image of nothing has nothing to key");
+        assert_eq!(report.removed, 0.0);
+        assert_eq!(subject.pixels, original.pixels);
+    }
+
+    /// A small logo on a big canvas legitimately keys away almost everything.
+    /// The coverage figure alone cannot tell that from a destroyed photograph,
+    /// which is why coherence is measured rather than coverage alone.
+    #[test]
+    fn a_sparse_logo_is_not_mistaken_for_a_destroyed_image() {
+        let mut b = solid(128, 128, [255, 255, 255, 255]);
+        for y in 60..70 {
+            for x in 60..70 {
+                b.set_pixel(x, y, [10, 10, 200, 255]);
+            }
+        }
+        let report = remove_background(&mut b);
+
+        assert_eq!(report.refused, None, "a small logo is a normal import");
+        assert!(report.removed > 0.9, "almost all of it is card: {}", report.removed);
+        assert_eq!(b.alpha(64, 64), 255, "the logo survives");
+    }
+
+    /// One blob is a subject. A thousand specks is debris.
+    #[test]
+    fn coherence_tells_a_subject_from_confetti() {
+        let mut blob = Bitmap::new(64, 64);
+        for y in 20..44 {
+            for x in 20..44 {
+                blob.set_pixel(x, y, [200, 100, 50, 255]);
+            }
+        }
+        assert!(survivor_is_coherent(&blob));
+
+        let mut confetti = Bitmap::new(64, 64);
+        for y in (0..64).step_by(2) {
+            for x in (0..64).step_by(2) {
+                confetti.set_pixel(x, y, [200, 100, 50, 255]);
+            }
+        }
+        assert!(!survivor_is_coherent(&confetti), "scattered pixels are not a subject");
+
+        assert!(!survivor_is_coherent(&Bitmap::new(32, 32)), "nothing survived");
+    }
+
+    /// The halo. Compression ringing puts a bright overshoot just outside a
+    /// hard edge; it survives the key because it is neither background nor
+    /// subject, and it reads as a pale outline traced around the artwork.
+    #[test]
+    fn a_bright_fringe_left_by_compression_is_despilled() {
+        let mut b = solid(48, 48, [250, 250, 250, 255]);
+        // A dark square with a ring of near-white overshoot around it.
+        for y in 14..34 {
+            for x in 14..34 {
+                let edge = !(16..32).contains(&x) || !(16..32).contains(&y);
+                b.set_pixel(x, y, if edge { [235, 235, 235, 255] } else { [20, 20, 20, 255] });
+            }
+        }
+
+        remove_background(&mut b);
+
+        // Anything still opaque must belong to the subject rather than to the
+        // card it was photographed on.
+        for y in 0..48 {
+            for x in 0..48 {
+                let p = b.pixel(x, y);
+                if p[3] < 200 {
+                    continue;
+                }
+                assert!(
+                    p[0] < 200,
+                    "a near-white pixel survived at ({x},{y}): {p:?} — that is the halo"
+                );
+            }
+        }
     }
 
     #[test]

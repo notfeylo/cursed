@@ -241,6 +241,22 @@ export function CustomImport() {
               maxLength={48}
             />
 
+            {/* Said before the toggle, because it changes what the toggle
+                means. A refusal is not an error and is not styled as one: the
+                import worked, the image is fine, and what did not happen is
+                the background removal. */}
+            {image?.refusal && (
+              <div className="mt-2 rounded-xs border border-border-hi bg-elevated p-3">
+                <p className="text-[11px] text-text">{image.refusal}</p>
+                {!image.keyable && (
+                  <p className="mt-1 text-[11px] text-text-dim">
+                    You can still turn this on to try anyway — it will not be stopped, it
+                    just probably will not look good.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="mt-2">
               <Toggle
                 checked={forceCut}
@@ -249,7 +265,9 @@ export function CustomImport() {
                 hint={
                   forceCut
                     ? "Cutting it out, whatever the file already claims"
-                    : "Cut automatically, unless the image is already transparent"
+                    : image && !image.keyable
+                      ? "Not attempted — this image is not a flat background"
+                      : "Cut automatically, unless the image is already transparent"
                 }
               />
 
