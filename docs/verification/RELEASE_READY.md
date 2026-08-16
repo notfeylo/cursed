@@ -28,8 +28,8 @@ Everything here runs on this machine or in CI, on every push.
 
 | | |
 | --- | --- |
-| `cargo test` | 290 passed |
-| `cargo test --features dev-channel` | 290 passed |
+| `cargo test` | 297 passed |
+| `cargo test --features dev-channel` | 297 passed |
 | `cargo clippy --all-targets -- -D warnings` | clean |
 | `npx tsc --noEmit` | clean |
 | `npm run check:bundle` | all checks passed |
@@ -37,7 +37,8 @@ Everything here runs on this machine or in CI, on every push.
 | Fuzzing, ~24,600 damaged inputs across six parsers | 0 panics |
 | Handle harness, 20,000 load/release cycles | GDI +0, USER +0 |
 | Soak, 11h50m, 711 samples | GDI and USER never moved; handles +0; memory drift inside the noise |
-| Background-removal contact sheet, 7 cases | 7 behave; 1 known halo, recorded |
+| Background-removal contact sheet, 8 cases + animation | all behave; the halo is fixed |
+| The photograph that started the matte fix | refused, byte-identical output |
 
 The update-path specifics, all static:
 
@@ -76,12 +77,33 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1 `
 
 It prints a Markdown table. Paste it into `update-path.md`.
 
-### 2. The signing key — **BLOCKED, awaiting one command**
+### 2. The signing key — **BLOCKED. Checked 2026-08-16: no secrets exist.**
 
-`.github/workflows/release.yml` now refuses to build without three secrets, so
-**the release workflow will fail until the key exists.** That is intended: a
-release published without a signature leaves every copy that installs it unable
-to verify the next one.
+```
+$ gh api repos/notfeylo/cursed/actions/secrets
+{"total_count":0,"secrets":[]}
+```
+
+Not one of the three is set. Checked as `notfeylo` with `repo` scope — the API
+answered 200 with an empty list rather than refusing, so this is an absence and
+not a permissions artefact. Environment secrets are empty too, and the
+repository is user-owned, so there are no organisation secrets to inherit.
+
+| Secret | Present |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | **no** |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **no** |
+| `CURSED_UPDATE_PUBLIC_KEY` | **no** |
+
+**Tagging `v1.21.0` today produces a failed workflow, not an unsigned release.**
+The first step of `release.yml` checks for the two that must be non-empty and
+exits non-zero. That is the intended behaviour and it is why this is a blocker
+rather than a risk: a release published without a signature leaves every copy
+that installs it unable to verify the *next* one, including the release that
+would fix it.
+
+The password is deliberately not checked, because a key generated without one
+has an empty password and an empty value is a legitimate answer.
 
 [`SIGNING.md`](../SIGNING.md) has the procedure. It is one command on a trusted
 machine and three secrets pasted into the repository settings. Nothing in this

@@ -69,6 +69,37 @@ Settings, that this happened. Restore still works and still gives you a normal
 Windows pointer; it just cannot promise to give you back a customisation you had
 before Cursed, because that information is gone.
 
+### Background removal says no when it means no
+
+Importing a photograph used to produce a cutout. Not a good one — an
+unrecognisable blob, most of the image eaten, the subject destroyed — but the
+app returned it as though it had worked.
+
+Automatic background removal is a flood fill with a tolerance. That is right for
+a flat background and has no correct answer on a photograph: a gradient, grass,
+a shadow with no edge to stop at, and a vignette that leaves the corners
+disagreeing with each other. Too tight and it stops at the first blade of grass;
+too loose and it walks straight through the subject. There is no value in
+between.
+
+So it no longer tries. The image is scored first, and one that cannot be keyed
+is left exactly as it arrived — byte for byte — with a sentence saying why and a
+button offering to open the editor. You can still overrule it and have it try
+anyway.
+
+**And there is now an editor**: a checkerboard preview, erase and restore
+brushes, undo, a tolerance slider that re-cuts live, and reset to the original.
+
+Two more things fixed on the way:
+
+- A small logo on a large canvas came back with **no background removed at
+  all**. The old code refused to key anything that cleared more than 97% of the
+  image, on the reasoning that clearing almost everything means the subject was
+  the background — which is true of a destroyed photograph and false of the most
+  common shape of cursor art there is.
+- A compressed image came back with a **pale halo** traced around the artwork.
+  That is JPEG ringing surviving the cut; it is now taken back out.
+
 ### Everything else
 
 - Every state file — settings, presets, the applied-cursor descriptor, the
