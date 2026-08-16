@@ -36,32 +36,46 @@ in the ⬜ column, and they need a VM.
 | The published release contains no MSI | `gh release view v1.20.0 --json assets` | ✅ |
 | Verification happens before teardown | `install_update` calls `verified_installer` first; a checksum failure returns before `prepare_for_shutdown` | ✅ read, not run |
 | State survives a crash mid-write | `state::store` tests: atomic write, `.bak` fallback, corrupt file preserved, primary healed | ✅ |
+| The flags reach the spawned process | `the_flags_reach_the_command_that_is_actually_run` reads the `Command`'s own argument list, not the constant | ✅ |
+| An update cannot reach the uninstall hooks' destructive lines | `an_update_cannot_reach_anything_the_uninstaller_destroys` traces the guard's `Goto` and its landing label | ✅ |
+| Nothing is torn down before the checksum passes | `nothing_is_torn_down_before_the_installer_is_verified` pins the order in `install_update` | ✅ |
+| The generated NSIS script skips the reinstall page in update mode | `npm run check:bundle`, against the script the installer is compiled from | ✅ |
+| `/UPDATE` survives `strip` and LTO into the release binary | `npm run check:bundle` | ✅ |
+| Nothing but NSIS is bundled, and nothing staged is an MSI | `npm run check:bundle` | ✅ |
+| The fingerprint notices a changed byte, a deletion and an addition | `dataprint` tests | ✅ |
 
 ## What has not
 
 Every row below needs a Windows VM snapshotted clean and rolled back between
-runs. **None have been run.**
+runs. **None have been run. All are BLOCKED — awaiting VM.**
 
-| Row | Why it matters | Status |
-| --- | --- | --- |
-| **N → N+1, presets and applied cursor intact** | The headline. This is the one that proves the data loss is gone | ⬜ |
-| One click, one progress bar, no uninstall step, no prompts | The reported symptom | ⬜ |
-| App relaunches itself on the new version | `/R`, never observed | ⬜ |
-| `%APPDATA%\Cursed` byte-identical across an update | The brief's §2.3 assertion; cannot be a unit test | ⬜ |
-| All 17 registry paths still resolve after updating | Cursor survives the swap | ⬜ |
-| Network dropped mid-download | | ⬜ |
-| Disk full | | ⬜ |
-| Antivirus quarantines the installer | | ⬜ |
-| User cancels SmartScreen | Unsigned build, so this is the common path today | ⬜ |
-| Machine sleeps mid-download | | ⬜ |
-| Power loss mid-install | The one `state::store` was written for; still needs proving end to end | ⬜ |
-| Update triggered twice | | ⬜ |
-| Update while a cursor is applied | | ⬜ |
-| Update while the catalog is rendering | | ⬜ |
-| `%APPDATA%` read-only or OneDrive-redirected | | ⬜ |
-| Two Windows users signed in simultaneously | Ruled out by reading `FindProcessCurrentUser`; unproven | ⬜ |
-| Remote Desktop session | | ⬜ |
-| App in tray vs window open | | ⬜ |
+The status is written as `BLOCKED` rather than as an empty box on purpose. An
+empty box reads like a queue; blocked names the reason, and the reason is the
+thing that has to change before any of them can move.
+
+| Row | Why it matters | Status | Covered by |
+| --- | --- | --- | --- |
+| **N → N+1, presets and applied cursor intact** | The headline. This is the one that proves the data loss is gone | BLOCKED | `verify-release.ps1` §5 |
+| One click, one progress bar, no uninstall step, no prompts | The reported symptom | BLOCKED | `verify-release.ps1` §4, by eye |
+| App relaunches itself on the new version | `/R`, never observed | BLOCKED | `verify-release.ps1` §4 |
+| `%APPDATA%\Cursed` byte-identical across an update | Cannot be a unit test — the process that would assert it is the one being replaced | BLOCKED | `verify-release.ps1` §5, on `--data-print` |
+| All 17 registry paths still resolve after updating | Cursor survives the swap | BLOCKED | `verify-release.ps1` §6 |
+| First install leaves a working app on a machine that never had one | The other half of the installer | BLOCKED | `verify-release.ps1` §2 |
+| Uninstall leaves nothing | Already scripted; never run against an *updated* install | BLOCKED | `verify-release.ps1` §7 → `verify-uninstall.ps1` |
+| No duplicate desktop shortcut after updating | What `/NS` is for | BLOCKED | `verify-release.ps1` §4 |
+| Network dropped mid-download | | BLOCKED | by hand |
+| Disk full | | BLOCKED | by hand |
+| Antivirus quarantines the installer | | BLOCKED | by hand |
+| User cancels SmartScreen | Unsigned build, so this is the common path today | BLOCKED | by hand |
+| Machine sleeps mid-download | | BLOCKED | by hand |
+| Power loss mid-install | The one `state::store` was written for; still needs proving end to end | BLOCKED | by hand |
+| Update triggered twice | | BLOCKED | by hand |
+| Update while a cursor is applied | | BLOCKED | `verify-release.ps1` seeds this |
+| Update while the catalog is rendering | | BLOCKED | by hand |
+| `%APPDATA%` read-only or OneDrive-redirected | | BLOCKED | by hand |
+| Two Windows users signed in simultaneously | Ruled out by reading `FindProcessCurrentUser`; unproven | BLOCKED | by hand |
+| Remote Desktop session | | BLOCKED | by hand |
+| App in tray vs window open | | BLOCKED | by hand |
 
 ### Why they have not been run here
 
@@ -72,38 +86,31 @@ directory* against that machine is not a test, it is a coin toss with the thing
 being protected. Windows Sandbox is unavailable — this is Windows 11 Home, and
 Sandbox needs Pro, the same wall `v1.7.0.md` hit.
 
-So the matrix needs a VirtualBox VM with a Windows 11 evaluation image, as the
-brief's §9 specifies.
+`verify-release.ps1` refuses to run against a data directory holding more than
+20 MB without `-Force`, for exactly that reason.
 
 ## How to run it when there is a VM
 
-Two releases are needed, because an update needs something to update *from*.
+[`VM_SETUP.md`](VM_SETUP.md) is the setup — VirtualBox plus the free Windows 11
+Enterprise evaluation image, snapshotted pristine. Then one command inside the
+guest:
 
 ```powershell
-# On the clean snapshot, install the older build first.
-.\Cursed_1.20.0_x64-setup.exe
-
-# Make it worth losing: apply a cursor, import an image, save a preset.
-# Then record what should survive.
-powershell -File scripts\verify-uninstall.ps1 -Snapshot
-Get-ChildItem -Recurse "$env:APPDATA\Cursed" | Get-FileHash | Export-Csv before.csv
-
-# Update in-app: Settings -> CHECK FOR UPDATES -> DOWNLOAD -> INSTALL & RESTART.
-# Watch for: an uninstall step, any prompt, any question about keeping data.
-
-# Afterwards
-Get-ChildItem -Recurse "$env:APPDATA\Cursed" | Get-FileHash | Export-Csv after.csv
-Compare-Object (Import-Csv before.csv) (Import-Csv after.csv) -Property Hash,Path
+powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1 `
+  -From C:\builds\Cursed_1.20.0_x64-setup.exe -To 1.21.0
 ```
 
-`settings.json`, `presets.json`, `applied.json` and `backup\original_scheme.json`
-must all be unchanged. `cache\` and `logs\` are expected to differ and do not
-count.
+It walks the sequence — baseline, first install, seed the data, fingerprint,
+update, compare, roles, uninstall — pausing where a person has to click
+something, and prints a Markdown table at the end to paste into this file.
 
-The pass condition for the headline row is the brief's own wording: **one click,
-one progress bar, no uninstall, no repetition, no not-responding, and the app
-relaunches itself on the new version with presets, custom cursors and the applied
-cursor all intact.**
+A **skip is not a pass** and the table counts them separately. That distinction
+is the entire reason this document exists.
+
+The pass condition for the headline row is unchanged: **one click, one progress
+bar, no uninstall, no repetition, no not-responding, and the app relaunches
+itself on the new version with presets, custom cursors and the applied cursor
+all intact.**
 
 ## A note on what the fix cannot do
 

@@ -24,6 +24,7 @@ pub mod packs;
 pub mod paths;
 pub mod session;
 pub mod shell;
+pub mod signing;
 pub mod state;
 pub mod stress;
 pub mod tray;
@@ -561,6 +562,12 @@ fn log_startup_record() {
         channel::NAME,
         channel::MARKER
     );
+
+    // Which of the two update guarantees this build actually carries. Recorded
+    // every launch because the weaker one is invisible from the outside — an
+    // unsigned build and a signed one behave identically right up until the
+    // moment it matters.
+    log::info!("update verification: {}", signing::describe());
 
     for (label, dir) in [
         ("data", paths::root()),

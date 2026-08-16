@@ -751,6 +751,19 @@ pub fn get_diagnostics() -> AppResult<String> {
             .unwrap_or_else(|e| e.to_string())
     );
 
+    // What this build will and will not accept as an update. An unsigned build
+    // and a signed one look identical from the outside right up until it
+    // matters, and "my update was refused" is unanswerable without this line.
+    let _ = writeln!(
+        out,
+        "updates {}",
+        if crate::signing::enforced() {
+            "signature + checksum"
+        } else {
+            "checksum only (no signing key in this build)"
+        }
+    );
+
     // Which of the two installs this is, and whether it is the one defending
     // the scheme. On almost every machine there is one channel and these are two
     // dull lines; on the machines where there are two, they are the difference

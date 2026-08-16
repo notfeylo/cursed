@@ -677,7 +677,50 @@ pub fn verified_installer(tag: &str, asset: &str) -> AppResult<PathBuf> {
             "the downloaded installer does not match the checksum published with the release, so it was deleted",
         ));
     }
+
+    // The checksum came from the same host as the file, so on its own it proves
+    // the download is intact and nothing about who produced it. The signature is
+    // the part a compromised release path cannot forge.
+    //
+    // Only enforced on a build that has a key to enforce it with. See
+    // `crate::signing` for why that fallback exists and why it is not silent.
+    if crate::signing::enforced() {
+        let signature = with_retry("signature fetch", || published_signature(tag, asset))?;
+        let bytes = std::fs::read(&file)?;
+        if let Err(e) = crate::signing::verify(&bytes, &signature) {
+            // Deleted, exactly as a checksum failure is. An executable that
+            // failed verification must not be left on disk where a user can
+            // find it in a folder called "updates" and double-click it.
+            let _ = std::fs::remove_file(&file);
+            log::error!("update: signature verification failed for {asset}: {e}");
+            return Err(AppError::msg(
+                "the downloaded installer is not signed by this project's release key, so it \
+                 was deleted",
+            ));
+        }
+        log::info!("update: {asset} matches the release signature");
+    } else {
+        log::warn!("update: {}", crate::signing::describe());
+    }
+
     Ok(file)
+}
+
+/// The minisign signature published beside an asset.
+///
+/// `<asset>.minisig`, which is what `minisign -Sm <file>` produces by default,
+/// so the release step is the tool's own default invocation and not a
+/// convention this project invented.
+fn published_signature(tag: &str, asset: &str) -> AppResult<String> {
+    let tag = sanitise_tag(tag)?;
+    if !is_our_installer(asset) {
+        return Err(AppError::invalid("that is not an installer this app publishes"));
+    }
+    let path = format!("/notfeylo/cursed/releases/download/v{tag}/{asset}.minisig");
+    let bytes = get(DOWNLOAD_HOST, &path, MAX_SUMS, true)?;
+    String::from_utf8(bytes).map_err(|_| {
+        AppError::msg("this release does not publish a readable signature for that installer")
+    })
 }
 
 /// Builds the exact command that [`launch`] runs.

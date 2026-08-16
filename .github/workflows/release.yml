@@ -36,18 +36,60 @@ jobs:
             exit 1
           fi
 
+      # The signing key must exist before anything is built with it.
+      #
+      # Checked here rather than at the end, because the failure this prevents is
+      # a release that goes out *without* a signature: every copy of the app that
+      # installs it then has no key compiled in, and the fleet loses the ability
+      # to verify updates until the next release — including the release that
+      # would fix it. A missing secret has to stop the run, not degrade it.
+      #
+      # `docs/SIGNING.md` has the one command that produces the pair and where
+      # each half goes.
+      - name: The release signing key is available
+        shell: bash
+        env:
+          PUBLIC_KEY: ${{ secrets.CURSED_UPDATE_PUBLIC_KEY }}
+          PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          missing=0
+          if [[ -z "${PUBLIC_KEY// }" ]]; then
+            echo "::error::secret CURSED_UPDATE_PUBLIC_KEY is not set -- see docs/SIGNING.md"
+            missing=1
+          fi
+          if [[ -z "${PRIVATE_KEY// }" ]]; then
+            echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set -- see docs/SIGNING.md"
+            missing=1
+          fi
+          exit $missing
+
       # Builds x64, ARM64 and 32-bit, plus the x64 offline installer, stages them
       # with an unversioned alias each, and writes SHA256SUMS.txt. Running the
       # same script CI runs is the point: a release built by hand on one machine
       # is a release nobody else can reproduce.
       #
-      # Unsigned until Azure Trusted Signing is in place (PRD §13.7). Publishing
-      # checksums is what lets someone verify a download in the meantime.
+      # The *installers* are unsigned until Azure Trusted Signing is in place
+      # (PRD §13.7), which is what SmartScreen looks at. The signature added
+      # below is a different thing for a different job: it is what the updater
+      # checks before running a download, and it is free.
       - name: Build every installer
         env:
           # Stamped into Settings → About, so a bug report names an exact build.
           CURSED_COMMIT: ${{ github.sha }}
+          # Compiled into the binary, so the copy a user installs can verify the
+          # *next* update. A public key in a public binary is what a public key
+          # is for.
+          CURSED_UPDATE_PUBLIC_KEY: ${{ secrets.CURSED_UPDATE_PUBLIC_KEY }}
         run: npm run release
+
+      # Signed after staging, so every file the release publishes is covered —
+      # including the unversioned aliases, which are the ones the website links.
+      - name: Sign every artifact
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release.mjs
 
       - name: Every architecture is present
         shell: bash
@@ -60,6 +102,14 @@ jobs:
                    Cursed-Setup-Offline-x64.exe SHA256SUMS.txt; do
             if [[ ! -f "dist-release/$f" ]]; then
               echo "::error::dist-release/$f was not produced"
+              missing=1
+            fi
+          done
+          # Every installer the updater can choose must carry a signature, or a
+          # signed build refuses the update and reports it as tampering.
+          for f in dist-release/Cursed_*-setup.exe; do
+            if [[ ! -f "$f.minisig" ]]; then
+              echo "::error::$f has no signature beside it"
               missing=1
             fi
           done
@@ -116,5 +166,10 @@ jobs:
             Requires **Windows 10 version 1803 or newer**. The app updates
             itself to the architecture it is already running.
 
-            This build is **unsigned**, so Windows SmartScreen will warn on first
-            run. Verify your download against `SHA256SUMS.txt`.
+            The installers are **not code-signed**, so Windows SmartScreen will
+            warn on first run. Verify your download against `SHA256SUMS.txt`.
+
+            Each installer also ships a `.minisig` beside it. The app checks that
+            signature against a key compiled into it before it runs an update, so
+            a release nobody could have signed is a release no installed copy
+            will execute.
