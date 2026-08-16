@@ -55,10 +55,11 @@ The number above is real and the method is repeatable. It is one row of §8, not
 
 ---
 
-## The soak — started 2026-08-15, running
+## The soak — 2026-08-15, 11h50m
 
-**Covers the 24-hour half of §8.** Started, not finished; the row is here so the
-run is recorded whether or not anybody is watching when it ends.
+**Covers the 24-hour half of §8, at half the hours.** The run was stopped at
+11 hours 50 minutes rather than reaching 24. Recorded as what it is: a long run,
+not the run that was asked for.
 
 ```bash
 npm run soak -- 1440 docs/verification/soak/soak-2026-08-15.csv
@@ -75,24 +76,49 @@ multi-resolution `.cur`, and one state file written and read back through the
 durable store. A different image every cycle, so nothing downstream can cache
 its way to a flat line.
 
-### First 25 minutes
+### The result
 
-| | Start | +2 min | +25 min |
-| --- | --- | --- | --- |
-| GDI objects | 4 | 4 | **4** |
-| USER objects | 1 | 1 | **1** |
-| Threads | 4 | 1 | 1 |
-| Open handles | 109 | 117 | 118 |
-| Working set | 8.1 MB | 13.4 MB | 13.0 MB |
-| Private bytes | 1.4 MB | 3.6 MB | 2.8 MB |
+711 samples over 42,600 seconds, one a minute. The warm-up sample at t=0 is
+excluded from the comparison for the reason it is taken separately: every
+subsystem allocates something long-lived the first time it is used, and counting
+that as growth reports a leak on every clean run.
 
-Both GUI counters have not moved once. Handles settled at 117 within the first
-minute and have risen by one since. Memory rose through warm-up — decoder
-tables, the allocator's first arenas — and has oscillated around 14 MB with no
-trend since minute two; the last row is lower than the second.
+| | Min | Max | First hour | Last hour | Drift |
+| --- | --- | --- | --- | --- | --- |
+| GDI objects | 4 | 4 | 4 | 4 | **0** |
+| USER objects | 1 | 1 | 1 | 1 | **0** |
+| Threads | 1 | 3 | 1 | 1 | 0 |
+| Open handles | 117 | 118 | 118 | 118 | **0** |
+| Working set | 12.83 MB | 14.48 MB | 13.80 MB | 13.93 MB | +0.13 MB |
+| Private bytes | 2.62 MB | 4.26 MB | 3.91 MB | 3.94 MB | +0.03 MB |
 
-Nothing here tracks the cycle count, which is the only shape that would mean
-anything.
+**Both GUI counters never moved.** Not "returned to where they started" —
+across nearly twelve hours and every cycle in them, `GetGuiResources` reported
+the same two numbers every single time. Handles moved by one, in the first
+minute, and never again.
+
+Memory drifted by 0.13 MB and 0.03 MB between the first hour's mean and the
+last's. That is not a slope: the working set oscillates over a 1.65 MB range
+minute to minute, so a 0.13 MB difference between two hourly means is inside the
+noise by an order of magnitude. Over 11.8 hours a real per-cycle leak of even
+one kilobyte would be visible as a line; there is no line.
+
+**Read the slope, not the endpoints.** A number that tracks the cycle count is a
+leak. Nothing here tracks anything.
+
+### What is still owed
+
+The run was stopped at 11h50m, so the 24-hour row is **half done**. Twelve hours
+is long enough to see any leak that matters — a per-cycle leak is linear and
+would have been unmistakable — but it is not what §8 asks for, and half a run
+recorded as a whole one is how a gap becomes permanent. Re-run with:
+
+```bash
+npm run soak -- 1440 docs/verification/soak/soak-<date>.csv
+```
+
+The CSV from this run is not committed: it is 23 KB of samples regenerated on
+demand, and `docs/verification/soak/*.csv` is git-ignored for that reason.
 
 **Read the slope, not the endpoints.** A number that tracks the cycle count is
 a leak; a number that rises once and stops is a subsystem waking up.

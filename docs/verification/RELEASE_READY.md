@@ -36,7 +36,7 @@ Everything here runs on this machine or in CI, on every push.
 | `npm run check:roles` | 17 of 17, 0 faults |
 | Fuzzing, ~24,600 damaged inputs across six parsers | 0 panics |
 | Handle harness, 20,000 load/release cycles | GDI +0, USER +0 |
-| Soak, 25 minutes and continuing | GDI, USER flat; no memory trend |
+| Soak, 11h50m, 711 samples | GDI and USER never moved; handles +0; memory drift inside the noise |
 | Background-removal contact sheet, 7 cases | 7 behave; 1 known halo, recorded |
 
 The update-path specifics, all static:
