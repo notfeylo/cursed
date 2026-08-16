@@ -231,6 +231,339 @@ fn soak(args: &[String]) -> ! {
     }
 }
 
+/// `genpacks --matte-sheet [out.png]` renders the background-removal test set
+/// before and after, on one sheet.
+///
+/// The acceptance criteria for a cut-out are visual. There is no assertion that
+/// distinguishes "clean edge" from "chewed edge" — a pixel count passes both —
+/// so the deliverable is a picture, and this makes it.
+///
+/// The seven cases are the ones that break different things:
+///
+///  1. **logo on white** — the ordinary case, and the one a naive global colour
+///     match also passes, which is why it cannot be the only case.
+///  2. **checkerboard screenshot** — an editor's transparency grid,
+///     photographed. Two background colours instead of one; defeats border
+///     sampling, spread measurement and tolerance selection all at once.
+///  3. **JPEG fringing** — ringing around a hard edge. The reason tolerance is
+///     derived from border noise rather than fixed.
+///  4. **anti-aliased dark art on black** — subject and background share a
+///     value range. The case where too much slack eats the artwork.
+///  5. **already clean alpha** — must be left completely alone. Re-cutting art
+///     somebody already cut is how a soft edge is lost.
+///  6. **grey subject on a flat grey card** — a subject a few levels from its
+///     own background. The case a loose tolerance destroys.
+///  7. **a photograph** — no background to remove. Must fail *gracefully*:
+///     leave the image alone rather than punch a hole in it.
+///
+/// Each is generated rather than shipped, so the sheet can be reproduced on any
+/// machine without carrying test artwork in the repository.
+fn matte_sheet(args: &[String]) {
+    use cursorforge_lib::build::bitmap::Bitmap;
+    use cursorforge_lib::build::matte;
+
+    let out = PathBuf::from(
+        args.get(2)
+            .cloned()
+            .unwrap_or_else(|| "docs/verification/matte-sheet.png".into()),
+    );
+    if let Some(parent) = out.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    const S: u32 = 128;
+    let cases = matte_cases(S);
+
+    // Two rows: before on top, after underneath, one column per case.
+    const PAD: u32 = 8;
+    let cols = cases.len() as u32;
+    let sheet_w = cols * (S + PAD) + PAD;
+    let sheet_h = 2 * (S + PAD) + PAD;
+    let mut sheet = Bitmap::new(sheet_w, sheet_h);
+
+    // A mid grey ground, so both a white cut-out and a black one are visible
+    // against it. On white, case 1's result is invisible; on black, case 4's is.
+    for y in 0..sheet_h {
+        for x in 0..sheet_w {
+            sheet.set_pixel(x, y, [24, 24, 28, 255]);
+        }
+    }
+
+    println!("{:<28} {:>9}  NOTE", "CASE", "REMOVED");
+    for (index, (name, expectation, original)) in cases.iter().enumerate() {
+        let mut cut = original.clone();
+        let report = matte::remove_background(&mut cut);
+
+        let x0 = PAD + index as u32 * (S + PAD);
+        blit_over_checker(&mut sheet, original, x0, PAD);
+        blit_over_checker(&mut sheet, &cut, x0, PAD + S + PAD);
+
+        let removed = report.removed * 100.0;
+        let verdict = match expectation {
+            Expect::Removes if report.removed > 0.20 => "ok".to_owned(),
+            Expect::Removes => "TOO LITTLE REMOVED".to_owned(),
+            Expect::LeavesAlone if report.removed < 0.02 => "ok, left alone".to_owned(),
+            Expect::LeavesAlone => "TOOK SOMETHING IT SHOULD NOT HAVE".to_owned(),
+            Expect::KeepsSubject => {
+                // The centre of the frame is where a photograph's subject is.
+                // Whether the sky went is a matter of taste; whether the subject
+                // went is not.
+                let survived = subject_survived(original, &cut);
+                if survived {
+                    "ok, the subject survived".to_owned()
+                } else {
+                    "SUBJECT WAS DESTROYED".to_owned()
+                }
+            }
+        };
+        println!("{name:<28} {removed:>8.1}%  {verdict}");
+    }
+
+    match write_png(&sheet, &out) {
+        Ok(()) => {
+            println!("\nsheet -> {}", out.display());
+            println!("Top row: as imported. Bottom row: after removal, over a checkerboard.");
+            println!("Judge the edges. A percentage cannot tell a clean cut from a chewed one.");
+        }
+        Err(e) => eprintln!("could not write {}: {e}", out.display()),
+    }
+}
+
+enum Expect {
+    /// There is a background and it should go.
+    Removes,
+    /// There is nothing to remove; the image must come out untouched.
+    LeavesAlone,
+    /// There may or may not be something to remove, and the only thing that
+    /// matters is that the subject survives. "Fail gracefully" means the user
+    /// gets their picture back, not that nothing happened.
+    KeepsSubject,
+}
+
+/// Whether the middle of the image is still opaque after a cut.
+///
+/// A blunt measure, and the right one for "did this fail gracefully": the
+/// subject of a photograph is in the middle of the frame, and a cut that
+/// hollowed it out has done the unrecoverable thing. What happened to the sky is
+/// a judgement call; what happened to the subject is not.
+fn subject_survived(
+    before: &cursorforge_lib::build::bitmap::Bitmap,
+    after: &cursorforge_lib::build::bitmap::Bitmap,
+) -> bool {
+    let (w, h) = (before.width, before.height);
+    let (x0, x1) = (w * 4 / 10, w * 6 / 10);
+    let (y0, y1) = (h * 4 / 10, h * 7 / 10);
+
+    let mut was = 0usize;
+    let mut still = 0usize;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            if before.alpha(x, y) > 200 {
+                was += 1;
+                if after.alpha(x, y) > 200 {
+                    still += 1;
+                }
+            }
+        }
+    }
+    was == 0 || (still as f32 / was as f32) > 0.9
+}
+
+/// The seven test images, generated.
+fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap::Bitmap)> {
+    use cursorforge_lib::build::bitmap::Bitmap;
+
+    // A filled circle, which is the shape most likely to show a bad edge: every
+    // pixel of its boundary is a different subpixel coverage.
+    let disc = |b: &mut Bitmap, colour: [u8; 4], soft: bool| {
+        let r = (size as f32) * 0.34;
+        let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0);
+        for y in 0..size {
+            for x in 0..size {
+                let d = (((x as f32 + 0.5) - cx).powi(2) + ((y as f32 + 0.5) - cy).powi(2)).sqrt();
+                let coverage = if soft {
+                    (r + 0.5 - d).clamp(0.0, 1.0)
+                } else if d <= r {
+                    1.0
+                } else {
+                    0.0
+                };
+                if coverage <= 0.0 {
+                    continue;
+                }
+                let under = b.pixel(x, y);
+                let blend = |a: u8, c: u8| ((c as f32 * coverage) + (a as f32 * (1.0 - coverage))) as u8;
+                b.set_pixel(
+                    x,
+                    y,
+                    [
+                        blend(under[0], colour[0]),
+                        blend(under[1], colour[1]),
+                        blend(under[2], colour[2]),
+                        // Anywhere the disc has any coverage becomes opaque:
+                        // these are the *inputs*, and an input with a soft
+                        // alpha edge would be testing the resampler rather than
+                        // the matte. Case 5 gets its transparency from the
+                        // pixels the disc never reached.
+                        255,
+                    ],
+                );
+            }
+        }
+    };
+
+    let flat = |rgb: [u8; 3]| {
+        let mut b = Bitmap::new(size, size);
+        for y in 0..size {
+            for x in 0..size {
+                b.set_pixel(x, y, [rgb[0], rgb[1], rgb[2], 255]);
+            }
+        }
+        b
+    };
+
+    let mut cases = Vec::new();
+
+    // 1. A logo on white.
+    let mut one = flat([255, 255, 255]);
+    disc(&mut one, [220, 40, 60, 255], true);
+    cases.push(("1 logo on white".to_owned(), Expect::Removes, one));
+
+    // 2. A screenshot of an editor's transparency grid.
+    let mut two = Bitmap::new(size, size);
+    for y in 0..size {
+        for x in 0..size {
+            let light = ((x / 8) + (y / 8)) % 2 == 0;
+            let v = if light { 255 } else { 204 };
+            two.set_pixel(x, y, [v, v, v, 255]);
+        }
+    }
+    disc(&mut two, [40, 120, 220, 255], true);
+    cases.push(("2 checkerboard screenshot".to_owned(), Expect::Removes, two));
+
+    // 3. JPEG-style ringing around the edge, on an off-white card.
+    let mut three = flat([250, 249, 247]);
+    disc(&mut three, [30, 30, 30, 255], true);
+    for y in 1..size - 1 {
+        for x in 1..size - 1 {
+            // A cheap ringing model: push each pixel away from its neighbours'
+            // mean, which is what a lossy edge looks like.
+            let here = three.pixel(x, y);
+            let left = three.pixel(x - 1, y);
+            let right = three.pixel(x + 1, y);
+            let ring = |c: usize| {
+                let mean = (left[c] as i32 + right[c] as i32) / 2;
+                (here[c] as i32 + (here[c] as i32 - mean) / 3).clamp(0, 255) as u8
+            };
+            three.set_pixel(x, y, [ring(0), ring(1), ring(2), 255]);
+        }
+    }
+    cases.push(("3 jpeg fringing".to_owned(), Expect::Removes, three));
+
+    // 4. Dark, anti-aliased art on black.
+    let mut four = flat([8, 8, 10]);
+    disc(&mut four, [56, 56, 64, 255], true);
+    cases.push(("4 dark art on black".to_owned(), Expect::Removes, four));
+
+    // 5. Already clean: a transparent surround.
+    let mut five = Bitmap::new(size, size);
+    disc(&mut five, [90, 200, 140, 255], true);
+    cases.push(("5 already clean alpha".to_owned(), Expect::LeavesAlone, five));
+
+    // 6. A grey subject on a flat grey card, a few levels apart.
+    let mut six = flat([180, 180, 180]);
+    disc(&mut six, [150, 150, 150, 255], false);
+    cases.push(("6 grey on grey".to_owned(), Expect::Removes, six));
+
+    // 7. A photograph: a scene, not a swatch.
+    //
+    // A gradient alone is not this test. A smooth ramp with no structure *is*
+    // background by every definition in `matte`, and removing it is arguably
+    // correct — so a case made of one only proves the flood fill follows
+    // gradients, which is a thing it is supposed to do.
+    //
+    // A photograph has a subject. Here: a graded sky, a textured foreground with
+    // high-frequency detail, and a solid object standing on it. Failing
+    // gracefully means the object and the texture are still there afterwards,
+    // whatever happens to the sky.
+    let mut seven = Bitmap::new(size, size);
+    for y in 0..size {
+        for x in 0..size {
+            let horizon = size * 6 / 10;
+            let pixel = if y < horizon {
+                // Sky: a smooth vertical grade with a little sensor noise.
+                let t = y as f32 / horizon as f32;
+                let noise = ((x * 7919 + y * 104_729) % 9) as u8;
+                [
+                    (90.0 + 90.0 * t) as u8,
+                    (130.0 + 80.0 * t) as u8,
+                    (200.0 + 40.0 * t) as u8,
+                ]
+                .map(|c: u8| c.saturating_add(noise))
+            } else {
+                // Ground: high-frequency texture, which is what the smoothness
+                // gate exists to stop the flood walking into.
+                let grain = ((x * 31 + y * 17) % 61) as u8;
+                let speck = if (x * 13 + y * 29) % 7 == 0 { 40 } else { 0 };
+                [
+                    70u8.saturating_add(grain).saturating_add(speck),
+                    58u8.saturating_add(grain / 2),
+                    44u8.saturating_add(grain / 3),
+                ]
+            };
+            seven.set_pixel(x, y, [pixel[0], pixel[1], pixel[2], 255]);
+        }
+    }
+    // The subject: a solid shape standing on the ground, well inside the frame.
+    for y in (size * 3 / 10)..(size * 8 / 10) {
+        for x in (size * 4 / 10)..(size * 6 / 10) {
+            seven.set_pixel(x, y, [190, 40, 40, 255]);
+        }
+    }
+    cases.push(("7 photograph".to_owned(), Expect::KeepsSubject, seven));
+
+    cases
+}
+
+/// Draws a bitmap onto the sheet over a small checkerboard, so transparency is
+/// visible rather than reading as the sheet's own background.
+fn blit_over_checker(
+    sheet: &mut cursorforge_lib::build::bitmap::Bitmap,
+    source: &cursorforge_lib::build::bitmap::Bitmap,
+    x0: u32,
+    y0: u32,
+) {
+    for y in 0..source.height {
+        for x in 0..source.width {
+            let (tx, ty) = (x0 + x, y0 + y);
+            if tx >= sheet.width || ty >= sheet.height {
+                continue;
+            }
+            let under = if ((x / 8) + (y / 8)) % 2 == 0 {
+                [64u8, 64, 68]
+            } else {
+                [48u8, 48, 52]
+            };
+            let pixel = source.pixel(x, y);
+            let a = pixel[3] as f32 / 255.0;
+            let mix = |c: usize| ((pixel[c] as f32 * a) + (under[c] as f32 * (1.0 - a))) as u8;
+            sheet.set_pixel(tx, ty, [mix(0), mix(1), mix(2), 255]);
+        }
+    }
+}
+
+fn write_png(
+    bitmap: &cursorforge_lib::build::bitmap::Bitmap,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    let buffer =
+        image::RgbaImage::from_raw(bitmap.width, bitmap.height, bitmap.pixels.clone())
+            .ok_or_else(|| "the sheet could not be wrapped as an image".to_owned())?;
+    image::DynamicImage::ImageRgba8(buffer)
+        .save(path)
+        .map_err(|e| e.to_string())
+}
+
 /// `genpacks --check-roles` reads all seventeen pointer roles and checks each.
 ///
 /// This is the answer to "the cursor does not change in Firefox". A role that
@@ -1271,6 +1604,10 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--check-roles") {
         check_roles();
+    }
+    if args.get(1).map(String::as_str) == Some("--matte-sheet") {
+        matte_sheet(&args);
+        return;
     }
     if args.get(1).map(String::as_str) == Some("--import") {
         run_import(&args);

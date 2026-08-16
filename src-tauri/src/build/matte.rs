@@ -147,6 +147,221 @@ pub fn remove_background_forced(bitmap: &mut Bitmap) -> MatteReport {
     cut(bitmap, true)
 }
 
+/// The alternating grey grid an image editor draws behind transparency.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Checkerboard {
+    pub light: [u8; 3],
+    pub dark: [u8; 3],
+    /// Side of one square, in pixels.
+    pub cell: u32,
+}
+
+/// How close a pixel must be to one of the two greys to count as the board.
+///
+/// Tight. The board is drawn by software, not photographed, so its two colours
+/// are exact everywhere except where the subject's antialiased edge sits on top
+/// of them. Anything looser starts taking grey parts of the subject.
+const BOARD_TOLERANCE: i32 = 10;
+
+/// The largest fraction of the border that may be something other than the two
+/// board colours before this stops being a checkerboard.
+const BOARD_COVERAGE: f32 = 0.85;
+
+/// Finds the transparency checkerboard, if the image is a screenshot of one.
+///
+/// **This is the case that defeats everything else in this file.** Somebody
+/// opens a transparent PNG in an editor, screenshots it, and imports the
+/// screenshot. What arrives is fully opaque and its background is not one colour
+/// but two, alternating on a grid.
+///
+/// Every step downstream then does the wrong thing, and does it confidently:
+/// `sample_border` takes the median of two greys and returns a colour that is in
+/// neither square, `border_spread` measures the distance between the two squares
+/// and calls the image a noisy photographic backdrop, and `tolerance_for` hands
+/// out enough slack to swallow anything grey in the subject. The result is a cut
+/// that removes half the artwork and leaves a chequered fringe.
+///
+/// Detected from the **border** for the same reason `already_cut_out` is: the
+/// subject sits in the middle, and a board that has been drawn behind it is
+/// unobstructed at the edges.
+///
+/// Three things have to hold, and each rules out a different false positive:
+///
+/// 1. **Two colours cover the border.** A photograph of anything does not.
+/// 2. **Both are near-neutral, and one is lighter than the other.** Editors draw
+///    the board in greys — white and light grey, or two mid greys. A red and
+///    blue chequered *shirt* is not a transparency board.
+/// 3. **They alternate on a regular grid.** This is what separates a board from
+///    a two-tone logo, and it is why run lengths are measured rather than just
+///    counted.
+pub fn detect_checkerboard(bitmap: &Bitmap) -> Option<Checkerboard> {
+    let (w, h) = (bitmap.width, bitmap.height);
+    if w < 16 || h < 16 {
+        return None;
+    }
+
+    // The two most common border colours.
+    let mut counts: Vec<([u8; 3], usize)> = Vec::new();
+    let mut total = 0usize;
+    let tally = |pixel: [u8; 4], counts: &mut Vec<([u8; 3], usize)>, total: &mut usize| {
+        if pixel[3] < 250 {
+            // Already transparent: this is not a screenshot of a board, it is
+            // the real thing.
+            return;
+        }
+        *total += 1;
+        let rgb = [pixel[0], pixel[1], pixel[2]];
+        match counts.iter_mut().find(|(c, _)| grey_distance(*c, rgb) <= BOARD_TOLERANCE) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((rgb, 1)),
+        }
+    };
+    for x in 0..w {
+        tally(bitmap.pixel(x, 0), &mut counts, &mut total);
+        tally(bitmap.pixel(x, h - 1), &mut counts, &mut total);
+    }
+    for y in 0..h {
+        tally(bitmap.pixel(0, y), &mut counts, &mut total);
+        tally(bitmap.pixel(w - 1, y), &mut counts, &mut total);
+    }
+    if total == 0 {
+        return None;
+    }
+
+    // Most common first.
+    counts.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    if counts.len() < 2 {
+        return None; // one colour: an ordinary flat background, handled elsewhere
+    }
+    let (first, first_n) = counts[0];
+    let (second, second_n) = counts[1];
+
+    if ((first_n + second_n) as f32 / total as f32) < BOARD_COVERAGE {
+        return None;
+    }
+    // Both squares have to be visible. A board whose second colour appears four
+    // times is not a board.
+    if second_n * 6 < first_n {
+        return None;
+    }
+    if !near_neutral(first) || !near_neutral(second) {
+        return None;
+    }
+    if grey_distance(first, second) < 12 {
+        return None; // two shades too close to be a board anyone drew on purpose
+    }
+
+    let (light, dark) = if luma(first) >= luma(second) {
+        (first, second)
+    } else {
+        (second, first)
+    };
+
+    let cell = board_cell(bitmap, light, dark)?;
+    Some(Checkerboard { light, dark, cell })
+}
+
+/// The square size, from run lengths along the top and left borders.
+///
+/// Measured rather than assumed. Editors use 8, 10, 16 and 32 depending on the
+/// tool and the zoom the screenshot was taken at, and a screenshot scaled on the
+/// way in can produce anything. What matters is that the runs are *consistent* —
+/// that is the property a two-tone logo does not have.
+fn board_cell(bitmap: &Bitmap, light: [u8; 3], dark: [u8; 3]) -> Option<u32> {
+    let mut runs: Vec<u32> = Vec::new();
+
+    let mut walk = |length: u32, at: &dyn Fn(u32) -> [u8; 4]| {
+        let mut run = 0u32;
+        let mut current: Option<bool> = None;
+        for i in 0..length {
+            let pixel = at(i);
+            let rgb = [pixel[0], pixel[1], pixel[2]];
+            let is_light = grey_distance(rgb, light) <= BOARD_TOLERANCE;
+            let is_dark = grey_distance(rgb, dark) <= BOARD_TOLERANCE;
+            if !is_light && !is_dark {
+                current = None;
+                run = 0;
+                continue;
+            }
+            match current {
+                Some(was) if was == is_light => run += 1,
+                _ => {
+                    // Interior runs only: the first and last are cut off by the
+                    // edge of the image and would drag the answer down.
+                    if run > 0 && i > run + 1 {
+                        runs.push(run);
+                    }
+                    current = Some(is_light);
+                    run = 1;
+                }
+            }
+        }
+    };
+
+    walk(bitmap.width, &|x| bitmap.pixel(x, 0));
+    walk(bitmap.height, &|y| bitmap.pixel(0, y));
+
+    if runs.len() < 3 {
+        return None;
+    }
+    runs.sort_unstable();
+    let median = runs[runs.len() / 2];
+    if !(2..=64).contains(&median) {
+        return None;
+    }
+    // Consistency: most runs must be the median length. A logo made of two
+    // colours produces runs of every length; a drawn grid produces one.
+    let consistent = runs.iter().filter(|r| r.abs_diff(median) <= 1).count();
+    if consistent * 4 < runs.len() * 3 {
+        return None;
+    }
+    Some(median)
+}
+
+/// Replaces both board colours with one, so the rest of the cut sees a flat
+/// background and behaves the way it already knows how to.
+///
+/// Deliberately not "clear both colours to transparent". That would key out
+/// every grey pixel in the subject that happens to match a square, wherever it
+/// is — the exact failure the flood fill exists to avoid. Flattening keeps the
+/// connectivity rule: a grey patch in the middle of the subject survives,
+/// because it is not joined to the edge.
+fn flatten_checkerboard(bitmap: &mut Bitmap, board: &Checkerboard) {
+    for y in 0..bitmap.height {
+        for x in 0..bitmap.width {
+            let pixel = bitmap.pixel(x, y);
+            if pixel[3] < 250 {
+                continue;
+            }
+            let rgb = [pixel[0], pixel[1], pixel[2]];
+            if grey_distance(rgb, board.light) <= BOARD_TOLERANCE
+                || grey_distance(rgb, board.dark) <= BOARD_TOLERANCE
+            {
+                bitmap.set_pixel(x, y, [board.light[0], board.light[1], board.light[2], 255]);
+            }
+        }
+    }
+}
+
+/// Largest per-channel difference between two RGB triples.
+fn grey_distance(a: [u8; 3], b: [u8; 3]) -> i32 {
+    (0..3)
+        .map(|i| (a[i] as i32 - b[i] as i32).abs())
+        .max()
+        .unwrap_or(0)
+}
+
+/// Whether a colour is close enough to grey to be part of a drawn board.
+fn near_neutral(rgb: [u8; 3]) -> bool {
+    let max = rgb.iter().copied().max().unwrap_or(0) as i32;
+    let min = rgb.iter().copied().min().unwrap_or(0) as i32;
+    max - min <= 12
+}
+
+fn luma(rgb: [u8; 3]) -> i32 {
+    (rgb[0] as i32 * 30 + rgb[1] as i32 * 59 + rgb[2] as i32 * 11) / 100
+}
+
 fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     let (w, h) = (bitmap.width, bitmap.height);
     if w < 3 || h < 3 {
@@ -154,6 +369,17 @@ fn cut(bitmap: &mut Bitmap, force: bool) -> MatteReport {
     }
     if !force && already_cut_out(bitmap) {
         return MatteReport { removed: 0.0, already_had_alpha: true };
+    }
+
+    // Before anything samples the border: if this is a screenshot of an editor's
+    // transparency grid, make it one colour. Every measurement below assumes a
+    // single background and produces a confidently wrong answer on two.
+    if let Some(board) = detect_checkerboard(bitmap) {
+        log::debug!(
+            "matte: transparency checkerboard detected, {}px cells; flattening before the cut",
+            board.cell
+        );
+        flatten_checkerboard(bitmap, &board);
     }
 
     let Some(background) = sample_border(bitmap) else {
