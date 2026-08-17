@@ -1478,14 +1478,34 @@ fn despeckle(cleared: &mut [bool], w: u32, h: u32) {
 fn sample_border(bitmap: &Bitmap) -> Option<[u8; 4]> {
     let (w, h) = (bitmap.width, bitmap.height);
     let mut samples: Vec<[u8; 4]> = Vec::new();
+
+    // Transparent pixels are skipped, and this is not a refinement.
+    //
+    // A transparent pixel's colour channels hold whatever the encoder left
+    // there, which for almost every PNG is `[0, 0, 0]`. Including them took the
+    // median of a transparent margin and returned **black** — so the background
+    // to key against became black, and every dark pixel of the subject
+    // connected to the edge was removed as background. On dark artwork that is
+    // most of it.
+    //
+    // Reached whenever a PNG that already carries transparency is keyed anyway,
+    // which is exactly what the "Remove the background" toggle is for.
+    let take = |pixel: [u8; 4], samples: &mut Vec<[u8; 4]>| {
+        if pixel[3] >= 16 {
+            samples.push(pixel);
+        }
+    };
     for x in 0..w {
-        samples.push(bitmap.pixel(x, 0));
-        samples.push(bitmap.pixel(x, h - 1));
+        take(bitmap.pixel(x, 0), &mut samples);
+        take(bitmap.pixel(x, h - 1), &mut samples);
     }
     for y in 0..h {
-        samples.push(bitmap.pixel(0, y));
-        samples.push(bitmap.pixel(w - 1, y));
+        take(bitmap.pixel(0, y), &mut samples);
+        take(bitmap.pixel(w - 1, y), &mut samples);
     }
+
+    // A border with nothing opaque in it has no background colour, because it
+    // *is* background already. `None` stops the key rather than inventing one.
     if samples.is_empty() {
         return None;
     }
@@ -1562,13 +1582,22 @@ fn near(pixel: [u8; 4], background: [u8; 4], tolerance: i32) -> bool {
 fn border_spread(bitmap: &Bitmap, background: [u8; 4]) -> i32 {
     let (w, h) = (bitmap.width, bitmap.height);
     let mut deviations: Vec<i32> = Vec::new();
+    // Same rule as `sample_border`: a transparent pixel has no colour to
+    // deviate. Counting them makes a clean transparent margin look like an
+    // extremely noisy background, which buys the key a much looser tolerance
+    // than the image deserves — and a loose tolerance on light artwork eats it.
+    let take = |pixel: [u8; 4], deviations: &mut Vec<i32>| {
+        if pixel[3] >= 16 {
+            deviations.push(distance(pixel, background));
+        }
+    };
     for x in 0..w {
-        deviations.push(distance(bitmap.pixel(x, 0), background));
-        deviations.push(distance(bitmap.pixel(x, h - 1), background));
+        take(bitmap.pixel(x, 0), &mut deviations);
+        take(bitmap.pixel(x, h - 1), &mut deviations);
     }
     for y in 0..h {
-        deviations.push(distance(bitmap.pixel(0, y), background));
-        deviations.push(distance(bitmap.pixel(w - 1, y), background));
+        take(bitmap.pixel(0, y), &mut deviations);
+        take(bitmap.pixel(w - 1, y), &mut deviations);
     }
     if deviations.is_empty() {
         return 0;
@@ -1698,6 +1727,45 @@ mod tests {
             }
         }
         b
+    }
+
+    /// **A PNG's transparent margin is not black.**
+    ///
+    /// `sample_border` took the median of the border pixels including fully
+    /// transparent ones. A transparent pixel's colour channels are whatever the
+    /// encoder happened to leave there, which for almost every PNG is
+    /// `[0, 0, 0]` — so the background was sampled as **black**, and every dark
+    /// pixel of the subject connected to the edge was keyed away with it.
+    ///
+    /// Reached whenever a PNG that already carries transparency is keyed
+    /// anyway: the "Remove the background" toggle, which exists precisely for
+    /// art that has an alpha channel and a card behind it.
+    #[test]
+    fn a_transparent_margin_is_not_sampled_as_black() {
+        let mut b = Bitmap::new(64, 64);
+        // A dark subject filling most of the frame, on transparency.
+        for y in 8..56 {
+            for x in 8..56 {
+                b.set_pixel(x, y, [18, 18, 22, 255]);
+            }
+        }
+
+        let background = sample_border(&b);
+        assert!(
+            background.is_none()
+                || distance(background.unwrap(), [0, 0, 0, 255]) > 40,
+            "a transparent margin was sampled as {background:?}, which is black — every \
+             dark pixel of the subject would be keyed away as background"
+        );
+
+        // And the whole path: forcing a key must not eat the subject.
+        let report = remove_background_forced(&mut b);
+        assert!(
+            b.alpha(32, 32) > 200,
+            "the middle of the subject was removed (removed {:.0}%, refused {:?})",
+            report.removed * 100.0,
+            report.refused
+        );
     }
 
     /// **The regression for the reported bug.**

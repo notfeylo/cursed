@@ -60,6 +60,10 @@ cases actually produce:
 | 5 already clean alpha | 0 | 0 | 0.0 | 0% | yes |
 | 6 grey on grey | 0 | 0 | 0.5 | 0% | yes |
 | **7 football on grass** | **42** | 14 | **14.6** | **50%** | **NO** |
+| 9 pastel logo on white | 0 | 0 | 0.5 | 0% | yes |
+| 10 shaded subject on white | 0 | 0 | 0.5 | 0% | yes |
+| 11 subject with drop shadow | 0 | 0 | 0.5 | 0% | yes |
+| 12 dark art on alpha, forced | 0 | 0 | 0.5 | 0% | yes |
 | 8 animation | 0 | 0 | 0.5 | 0% | yes |
 
 Three signals catch case 7 independently, and every flat case sits far below
@@ -156,6 +160,35 @@ exists in motion, as the edge crawls.
 
 Eight frames of a moving subject on a fixed background, coverage compared
 against the first: **consistent to 0.00%.**
+
+## A PNG's transparent margin is not black
+
+Reported as "it removes the image as well", and it did.
+
+`sample_border` took the median of the border pixels **including fully
+transparent ones**. A transparent pixel's colour channels hold whatever the
+encoder left there, which for almost every PNG is `[0, 0, 0]` — so on a PNG with
+a transparent margin the background was sampled as **black**, and every dark
+pixel of the subject connected to the edge was keyed away as background. On dark
+artwork that is most of it.
+
+The path there is the "Remove the background" toggle, which exists precisely for
+art that already has an alpha channel and a card behind it. In automatic mode
+`already_cut_out` usually catches these first; forced, nothing did.
+
+Both border samplers now skip transparent pixels, and a border with nothing
+opaque in it returns `None` rather than a colour — an image whose edge is
+entirely transparent has no background to find, because it is background
+already.
+
+`border_spread` had the same flaw with a subtler effect: counting transparent
+pixels as enormous deviations made a clean margin look like a very noisy
+background, which bought the key a much looser tolerance than the image
+deserved. A loose tolerance on light artwork eats it.
+
+Case 12 on the sheet is this exact path — dark art on transparency, forced — and
+it is the reason the sheet now runs some cases in forced mode. It only ever
+exercised the automatic path, which is not the path that was broken.
 
 ## Two more bugs the tests found
 

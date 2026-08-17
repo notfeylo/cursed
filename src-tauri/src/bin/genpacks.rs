@@ -292,7 +292,7 @@ fn matte_sheet(args: &[String]) {
     // The four signals, printed for every case. Thresholds picked without this
     // table are guesses, and a guess that passes a photograph is the bug.
     println!("{:<28} {:>7} {:>7} {:>7} {:>7}  KEYABLE", "CASE", "CORNER", "VAR", "COL/1K", "EDGE%");
-    for (name, _, original) in &cases {
+    for (name, _, original, _) in &cases {
         let k = matte::assess(original);
         println!(
             "{name:<28} {:>7} {:>7} {:>7.1} {:>6.0}%  {}",
@@ -307,9 +307,13 @@ fn matte_sheet(args: &[String]) {
 
     let mut failures = 0usize;
     println!("{:<28} {:>9}  NOTE", "CASE", "REMOVED");
-    for (index, (name, expectation, original)) in cases.iter().enumerate() {
+    for (index, (name, expectation, original, force)) in cases.iter().enumerate() {
         let mut cut = original.clone();
-        let report = matte::remove_background(&mut cut);
+        let report = if *force {
+            matte::remove_background_forced(&mut cut)
+        } else {
+            matte::remove_background(&mut cut)
+        };
 
         let x0 = PAD + index as u32 * (S + PAD);
         blit_over_checker(&mut sheet, original, x0, PAD);
@@ -412,7 +416,7 @@ enum Expect {
 }
 
 /// The eight test images, generated.
-fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap::Bitmap)> {
+fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap::Bitmap, bool)> {
     use cursorforge_lib::build::bitmap::Bitmap;
 
     // A filled circle, which is the shape most likely to show a bad edge: every
@@ -469,7 +473,7 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
     // 1. A logo on white.
     let mut one = flat([255, 255, 255]);
     disc(&mut one, [220, 40, 60, 255], true);
-    cases.push(("1 logo on white".to_owned(), Expect::Removes, one));
+    cases.push(("1 logo on white".to_owned(), Expect::Removes, one, false));
 
     // 2. A screenshot of an editor's transparency grid.
     let mut two = Bitmap::new(size, size);
@@ -481,7 +485,7 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
         }
     }
     disc(&mut two, [40, 120, 220, 255], true);
-    cases.push(("2 checkerboard screenshot".to_owned(), Expect::Removes, two));
+    cases.push(("2 checkerboard screenshot".to_owned(), Expect::Removes, two, false));
 
     // 3. JPEG-style ringing around the edge, on an off-white card.
     //
@@ -513,22 +517,22 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
             three.set_pixel(x, y, [ring(0), ring(1), ring(2), 255]);
         }
     }
-    cases.push(("3 jpeg fringing".to_owned(), Expect::Removes, three));
+    cases.push(("3 jpeg fringing".to_owned(), Expect::Removes, three, false));
 
     // 4. Dark, anti-aliased art on black.
     let mut four = flat([8, 8, 10]);
     disc(&mut four, [56, 56, 64, 255], true);
-    cases.push(("4 dark art on black".to_owned(), Expect::Removes, four));
+    cases.push(("4 dark art on black".to_owned(), Expect::Removes, four, false));
 
     // 5. Already clean: a transparent surround.
     let mut five = Bitmap::new(size, size);
     disc(&mut five, [90, 200, 140, 255], true);
-    cases.push(("5 already clean alpha".to_owned(), Expect::LeavesAlone, five));
+    cases.push(("5 already clean alpha".to_owned(), Expect::LeavesAlone, five, false));
 
     // 6. A grey subject on a flat grey card, a few levels apart.
     let mut six = flat([180, 180, 180]);
     disc(&mut six, [150, 150, 150, 255], false);
-    cases.push(("6 grey on grey".to_owned(), Expect::Removes, six));
+    cases.push(("6 grey on grey".to_owned(), Expect::Removes, six, false));
 
     // 7. The football on grass. **The acceptance test for the whole fix.**
     //
@@ -635,14 +639,95 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
             seven.set_pixel(x, y, [rgb[0], rgb[1], rgb[2], 255]);
         }
     }
-    cases.push(("7 football on grass".to_owned(), Expect::Refuses, seven));
+    cases.push(("7 football on grass".to_owned(), Expect::Refuses, seven, false));
 
     // 8. An animated GIF: every frame must key the same way, or the cursor
     // shimmers as the matte moves under it. Represented on the sheet by its
     // first frame; the consistency check runs across all of them.
     let mut eight = flat([250, 250, 250]);
     disc(&mut eight, [70, 90, 220, 255], true);
-    cases.push(("8 animation, frame 1".to_owned(), Expect::Removes, eight));
+    cases.push(("8 animation, frame 1".to_owned(), Expect::Removes, eight, false));
+
+    // 9. A pastel subject on white. **The shape a logo actually is.**
+    //
+    // Light artwork on a light card: every pixel of the subject is well within
+    // MAX_DRIFT of the background, and a smoothly filled shape has almost no
+    // local contrast, so local growing can walk straight through it.
+    let mut nine = flat([255, 255, 255]);
+    disc(&mut nine, [214, 226, 244, 255], true);
+    cases.push(("9 pastel logo on white".to_owned(), Expect::Removes, nine, false));
+
+    // 10. A subject with smooth shading, on white.
+    //
+    // A render, a gradient fill, a soft airbrushed edge. Dark at one side and
+    // near-white at the other, which gives the flood a continuous ramp from the
+    // background into the middle of the artwork.
+    let mut ten = flat([255, 255, 255]);
+    {
+        let r = (size as f32) * 0.34;
+        let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0);
+        for y in 0..size {
+            for x in 0..size {
+                let d = (((x as f32 + 0.5) - cx).powi(2) + ((y as f32 + 0.5) - cy).powi(2)).sqrt();
+                let coverage = (r + 0.5 - d).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
+                }
+                // Vertical ramp across the subject: 40 at the top, 245 at the
+                // bottom, so its lower half is nearly the background colour.
+                let t = (y as f32 / size as f32).clamp(0.0, 1.0);
+                let v = (40.0 + 205.0 * t) as u8;
+                let under = ten.pixel(x, y);
+                let blend = |a: u8, c: u8| ((c as f32 * coverage) + (a as f32 * (1.0 - coverage))) as u8;
+                ten.set_pixel(x, y, [blend(under[0], v), blend(under[1], v), blend(under[2], v), 255]);
+            }
+        }
+    }
+    cases.push(("10 shaded subject on white".to_owned(), Expect::Removes, ten, false));
+
+    // 11. A subject with a soft drop shadow.
+    //
+    // The shadow is a continuous ramp from the subject out to the background
+    // with no edge anywhere along it -- exactly what local growing follows.
+    let mut eleven = flat([252, 252, 252]);
+    {
+        let (cx, cy) = (size as f32 / 2.0, size as f32 / 2.0);
+        for y in 0..size {
+            for x in 0..size {
+                let dx = (x as f32 - cx) / (size as f32 * 0.30);
+                let dy = (y as f32 - cy - size as f32 * 0.06) / (size as f32 * 0.30);
+                let d = (dx * dx + dy * dy).sqrt();
+                if d >= 1.0 {
+                    continue;
+                }
+                let shade = ((1.0 - d).powf(1.5) * 0.35).min(1.0);
+                let p = eleven.pixel(x, y);
+                let dim = |c: u8| ((c as f32) * (1.0 - shade)) as u8;
+                eleven.set_pixel(x, y, [dim(p[0]), dim(p[1]), dim(p[2]), 255]);
+            }
+        }
+    }
+    disc(&mut eleven, [40, 90, 170, 255], true);
+    cases.push(("11 subject with drop shadow".to_owned(), Expect::Removes, eleven, false));
+
+    // 12. Dark art on transparency, with the background removal **forced on**.
+    //
+    // The path the sheet did not cover and the one that was broken: a PNG that
+    // already carries an alpha channel, keyed anyway because the user turned
+    // the toggle on. `sample_border` took the median of the border including
+    // its transparent pixels, whose colour channels are `[0, 0, 0]`, so the
+    // background was sampled as black and every dark pixel of the subject went
+    // with it.
+    //
+    // Dark art on purpose: on a light subject the same bug is invisible.
+    let mut twelve = Bitmap::new(size, size);
+    disc(&mut twelve, [26, 26, 32, 255], true);
+    cases.push((
+        "12 dark art on alpha, forced".to_owned(),
+        Expect::LeavesAlone,
+        twelve,
+        true,
+    ));
 
     cases
 }
