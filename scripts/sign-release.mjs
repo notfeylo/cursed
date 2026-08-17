@@ -84,10 +84,33 @@ function sign(file) {
     env: {
       ...process.env,
       TAURI_SIGNING_PRIVATE_KEY: privateKey,
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-        process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: password(),
     },
   });
+}
+
+/**
+ * The key's password, with whitespace-only treated as none.
+ *
+ * **A single space is not an empty password**, and that distinction cost this
+ * release two twenty-five minute builds. The secret held one space; the key had
+ * no password; the signer reported "Wrong password for that key", which is
+ * accurate and reads like the key is wrong rather than the secret.
+ *
+ * Nobody has ever meant a password of pure whitespace. A real one is left
+ * exactly as it is — including any spaces inside it — because trimming a
+ * genuine password is a worse failure than this one, and silent.
+ */
+function password() {
+  const raw = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "";
+  if (raw.length > 0 && raw.trim().length === 0) {
+    console.warn(
+      "  note  TAURI_SIGNING_PRIVATE_KEY_PASSWORD is whitespace only; treating it as\n" +
+        "        no password. Set it to a real password, or delete the secret.",
+    );
+    return "";
+  }
+  return raw;
 }
 
 
