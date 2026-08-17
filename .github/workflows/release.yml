@@ -70,10 +70,14 @@ jobs:
       # This signs eight bytes and exits. It is thirty seconds, and it is the
       # difference between a mistake in a secret costing a minute and costing an
       # hour — which is not hypothetical: it cost an hour.
-      - name: The signing key actually signs
+      - name: The signing key actually signs, and its public half matches
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Checked here as well as compiled in below. A public key that is not
+          # the other half of the signing key produces a release that signs,
+          # publishes, and is then refused by every installed copy for ever.
+          CURSED_UPDATE_PUBLIC_KEY: ${{ secrets.CURSED_UPDATE_PUBLIC_KEY }}
         run: node scripts/sign-release.mjs --selftest
 
       # Builds x64, ARM64 and 32-bit, plus the x64 offline installer, stages them

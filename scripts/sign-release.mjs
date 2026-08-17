@@ -39,6 +39,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -89,6 +90,93 @@ function sign(file) {
   });
 }
 
+
+/**
+ * Checks that `CURSED_UPDATE_PUBLIC_KEY` is the other half of the key that just
+ * signed something.
+ *
+ * **This is the failure that does not fail the build.** Regenerating a key pair
+ * changes both halves. Update the private one and forget the public one and the
+ * release signs perfectly, publishes perfectly, and then every installed copy
+ * refuses every update for ever — because the key compiled into them verifies
+ * nothing the new private key produces. There is no error at build time, no
+ * error at publish time, and the only symptom is on other people's machines.
+ *
+ * So the pair is checked here, against a signature actually produced moments
+ * ago, using Node's own Ed25519 rather than a dependency.
+ *
+ * Returns a reason to fail, or `null` when the pair matches.
+ */
+function publicKeyMismatch(signedFile, signaturePath) {
+  const publicKeyText = process.env.CURSED_UPDATE_PUBLIC_KEY?.trim();
+  if (!publicKeyText) {
+    return "CURSED_UPDATE_PUBLIC_KEY is not set";
+  }
+
+  // The same three shapes `signing::parse_public_key` accepts: the two-line
+  // minisign.pub file, the bare key line, and Tauri's base64 of the whole file.
+  let text = publicKeyText;
+  if (!text.startsWith("untrusted comment:") && !text.startsWith("RW")) {
+    text = Buffer.from(text, "base64").toString("utf8").trim();
+  }
+  const keyLine = text.startsWith("untrusted comment:") ? text.split("\n")[1] : text;
+  if (!keyLine) return "CURSED_UPDATE_PUBLIC_KEY is not a minisign public key";
+
+  const key = Buffer.from(keyLine.trim(), "base64");
+  // 2 bytes algorithm, 8 bytes key id, 32 bytes of Ed25519 public key.
+  if (key.length !== 42) return "CURSED_UPDATE_PUBLIC_KEY is not a minisign public key";
+
+  const lines = readMinisig(signaturePath).split("\n");
+  const sigBlob = Buffer.from(lines[1] ?? "", "base64");
+  if (sigBlob.length !== 74) return "the signature just produced is malformed";
+
+  // The key id is the cheap half of the check and gives the clearest message:
+  // a mismatch here is unambiguously the wrong key rather than corrupt bytes.
+  const keyId = key.subarray(2, 10);
+  const sigKeyId = sigBlob.subarray(2, 10);
+  if (!keyId.equals(sigKeyId)) {
+    return `the public key is for a different key pair (public key id ${keyId.toString("hex")}, signature key id ${sigKeyId.toString("hex")})`;
+  }
+
+  // And the signature itself, so a doctored key id cannot pass.
+  //
+  // Algorithm "ED" means the signature is over BLAKE2b-512 of the file rather
+  // than the file, which is minisign's prehashed mode and Tauri's default.
+  const algorithm = sigBlob.subarray(0, 2).toString("latin1");
+  const contents = readFileSync(signedFile);
+  const message =
+    algorithm === "ED" ? createHash("blake2b512").update(contents).digest() : contents;
+
+  // Ed25519 public keys reach Node as SPKI DER; the prefix is fixed.
+  const spki = Buffer.concat([
+    Buffer.from("302a300506032b6570032100", "hex"),
+    key.subarray(10),
+  ]);
+  const ok = verifySignature(
+    null,
+    message,
+    createPublicKey({ key: spki, format: "der", type: "spki" }),
+    sigBlob.subarray(10),
+  );
+  return ok ? null : "the public key does not verify a signature made by the private key";
+}
+
+/**
+ * Reads what Tauri wrote and returns plain minisign text.
+ *
+ * The CLI writes `<file>.sig` holding the minisign signature file base64'd a
+ * second time, because its own updater decodes that layer before verifying.
+ * Both callers here need the unwrapped form, and having only one of them do it
+ * is how the pair check below reported every signature as malformed, including
+ * the correct ones.
+ */
+function readMinisig(sigPath) {
+  const raw = readFileSync(sigPath, "utf8").trim();
+  return raw.startsWith("untrusted comment:")
+    ? raw
+    : Buffer.from(raw, "base64").toString("utf8");
+}
+
 /** Why a spawn failed, including whether it started at all. */
 function describe(e) {
   return [
@@ -127,7 +215,15 @@ if (process.argv.includes("--selftest")) {
   writeFileSync(probe, "selftest");
   try {
     sign(probe);
-    console.log("The signing key and password work.");
+    const mismatch = publicKeyMismatch(probe, `${probe}.sig`);
+    if (mismatch) {
+      console.error(`::error::${mismatch}`);
+      console.error("Regenerating a key changes BOTH halves. Update");
+      console.error("CURSED_UPDATE_PUBLIC_KEY as well as TAURI_SIGNING_PRIVATE_KEY,");
+      console.error("or the release will sign and then every update will be refused.");
+      process.exit(1);
+    }
+    console.log("The signing key and password work, and the public key matches it.");
     process.exit(0);
   } catch (e) {
     console.error(`::error::the signing key cannot sign: ${describe(e)}`);
@@ -176,14 +272,7 @@ for (const name of targets) {
     continue;
   }
 
-  const raw = readFileSync(produced, "utf8").trim();
-  let minisig;
-  if (raw.startsWith("untrusted comment:")) {
-    minisig = raw;
-  } else {
-    minisig = Buffer.from(raw, "base64").toString("utf8");
-  }
-
+  const minisig = readMinisig(produced);
   if (!minisig.startsWith("untrusted comment:")) {
     console.error(`  FAIL  ${name}'s signature is not in minisign format after unwrapping`);
     failures += 1;

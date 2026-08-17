@@ -117,8 +117,16 @@ Run it yourself before tagging, on a machine with the key:
 ```bash
 TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.cursed/cursed.key)" \
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="…" \
+CURSED_UPDATE_PUBLIC_KEY="$(cat ~/.cursed/cursed.key.pub)" \
   node scripts/sign-release.mjs --selftest
 ```
+
+It also checks the two halves are **a pair**, by verifying a signature it just
+made against the public key you are about to compile in. That is the one failure
+that does not fail a build: regenerating a key changes both halves, and updating
+only the private one produces a release that signs perfectly, publishes
+perfectly, and is then **refused by every installed copy for ever** — with no
+error anywhere except on other people's machines.
 
 If the password is lost, the key is not recoverable — generate a new pair and
 update both `TAURI_SIGNING_PRIVATE_KEY` and `CURSED_UPDATE_PUBLIC_KEY`. That is
