@@ -36,8 +36,19 @@ fn staging() -> &'static Mutex<HashMap<String, Staged>> {
 /// which is not an undo.
 #[derive(Debug, Clone)]
 struct Staged {
-    /// Decoded, normalised for size, **not** keyed.
-    original: Source,
+    /// The **decoded** first frame, exactly as it arrived — not normalised, not
+    /// keyed, not prepared.
+    ///
+    /// One frame and no preparation, both deliberate. The first version of this
+    /// stored a fully prepared, unkeyed copy of the whole source, which meant
+    /// every import ran the resize-trim-square-pad pipeline *twice* and held
+    /// two copies of everything. On a 240-frame animation that is 240 redundant
+    /// resamples and double the memory, for a copy that is only ever read if
+    /// somebody opens the editor.
+    ///
+    /// The preparation now happens in `staged_original`, when the editor is
+    /// actually opened, on the one frame it edits.
+    original_frame: crate::build::bitmap::Bitmap,
     /// What the user is currently working with.
     current: Source,
 }
@@ -93,20 +104,9 @@ pub fn stage(bytes: Vec<u8>) -> AppResult<ImportedImage> {
 pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage> {
     let source = pipeline::decode(bytes)?;
 
-    // The image as it arrived, normalised for size and never keyed.
-    //
-    // Kept so the editor has something to reset to and something to re-key from
-    // at a different tolerance. It costs one extra resize per import, which is
-    // the price of "reset to original" meaning anything at all — the alternative
-    // is asking the user to drop the file in again, which is not an undo.
-    let untouched = match &source {
-        Source::Static(bitmap) => {
-            Source::Static(pipeline::prepare_master_with(bitmap, pipeline::Cut::Keep)?)
-        }
-        Source::Animated(frames) => {
-            Source::Animated(pipeline::prepare_animation_with(frames, pipeline::Cut::Keep)?)
-        }
-    };
+    // The image as it arrived, kept for the editor to reset to and re-key from.
+    // One frame, unprepared: see `Staged::original_frame`.
+    let original_frame = source.first()?.clone();
 
     // Normalise every frame the same way, or an animation's frames drift
     // relative to each other and the hotspot means something different per frame.
@@ -177,7 +177,7 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
         staged.insert(
             token,
             Staged {
-                original: untouched,
+                original_frame,
                 current: normalised,
             },
         );
@@ -201,13 +201,16 @@ fn take_staged(token: &str) -> AppResult<Source> {
 /// works on one frame: an animation's matte is decided from its first frame and
 /// applied to the sequence, so that is the frame worth editing.
 pub fn staged_original(token: &str) -> AppResult<crate::build::bitmap::Bitmap> {
-    staging()
+    let frame = staging()
         .lock()
         .ok()
-        .and_then(|staged| staged.get(token).and_then(|s| s.original.first().ok().cloned()))
-        .ok_or_else(|| {
-            AppError::invalid("that image is no longer staged — drop it in again")
-        })
+        .and_then(|staged| staged.get(token).map(|s| s.original_frame.clone()))
+        .ok_or_else(|| AppError::invalid("that image is no longer staged — drop it in again"))?;
+
+    // Prepared here rather than at import: normalised for size, trimmed,
+    // squared and padded exactly as the keyed copy was, so the editor's canvas
+    // lines up with what the app will build. Done once, when the editor opens.
+    pipeline::prepare_master_with(&frame, pipeline::Cut::Keep)
 }
 
 /// Renders the preview ladder for a staged image without writing anything.

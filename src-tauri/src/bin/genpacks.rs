@@ -811,6 +811,116 @@ fn write_png(
         .map_err(|e| e.to_string())
 }
 
+/// `genpacks --assess <image>...` scores real images for keyability.
+///
+/// The thresholds in `matte::assess` were calibrated against generated test
+/// cases, which are far cleaner than anything a person actually imports. This
+/// points the same measurements at real files so the numbers can be compared
+/// against images that exist rather than images that were drawn to be measured.
+fn assess_images(args: &[String]) {
+    use cursorforge_lib::build::{matte, pipeline};
+
+    if args.len() < 3 {
+        eprintln!("usage: genpacks --assess <image>...");
+        std::process::exit(2);
+    }
+
+    println!(
+        "{:<38} {:>7} {:>7} {:>7} {:>7}  {:>8}  VERDICT",
+        "FILE", "CORNER", "VAR", "COL/1K", "EDGE%", "REMOVED"
+    );
+    for path in &args[2..] {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                println!("{:<38} unreadable: {e}", short(path));
+                continue;
+            }
+        };
+        let source = match pipeline::decode(bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("{:<38} undecodable: {e}", short(path));
+                continue;
+            }
+        };
+        let Ok(first) = source.first() else { continue };
+        let k = matte::assess(first);
+
+        let mut cut = first.clone();
+        let report = matte::remove_background(&mut cut);
+        let verdict = match report.refused {
+            Some(r) => format!("REFUSED {r:?}"),
+            None if report.already_had_alpha => "already cut out".to_owned(),
+            None => "keyed".to_owned(),
+        };
+
+        println!(
+            "{:<38} {:>7} {:>7} {:>7.1} {:>6.0}%  {:>7.1}%  {}",
+            short(path),
+            k.corner_disagreement,
+            k.border_variance,
+            k.border_colour_density,
+            k.border_edge_density * 100.0,
+            report.removed * 100.0,
+            verdict
+        );
+    }
+
+    assess_sheet(
+        &args[2..],
+        std::path::Path::new("docs/verification/real-images-forced.png"),
+    );
+}
+
+/// Writes a before/after sheet for real images, keying them **forced** so the
+/// refusal is bypassed and the result can be judged rather than argued about.
+fn assess_sheet(paths: &[String], out: &std::path::Path) {
+    use cursorforge_lib::build::{bitmap::Bitmap, matte, pipeline};
+
+    const S: u32 = 160;
+    let mut shots: Vec<(Bitmap, Bitmap)> = Vec::new();
+    for path in paths {
+        let Ok(bytes) = std::fs::read(path) else { continue };
+        let Ok(source) = pipeline::decode(bytes) else { continue };
+        let Ok(first) = source.first() else { continue };
+        let Ok(small) = first.resized(S, S) else { continue };
+        let mut cut = small.clone();
+        matte::remove_background_forced(&mut cut);
+        shots.push((small, cut));
+    }
+    if shots.is_empty() {
+        return;
+    }
+
+    const PAD: u32 = 8;
+    let w = shots.len() as u32 * (S + PAD) + PAD;
+    let h = 2 * (S + PAD) + PAD;
+    let mut sheet = Bitmap::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            sheet.set_pixel(x, y, [24, 24, 28, 255]);
+        }
+    }
+    for (i, (before, after)) in shots.iter().enumerate() {
+        let x0 = PAD + i as u32 * (S + PAD);
+        blit_over_checker(&mut sheet, before, x0, PAD);
+        blit_over_checker(&mut sheet, after, x0, PAD + S + PAD);
+    }
+    match write_png(&sheet, out) {
+        Ok(()) => println!("
+forced-key sheet -> {}", out.display()),
+        Err(e) => eprintln!("could not write sheet: {e}"),
+    }
+}
+
+fn short(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().chars().take(36).collect())
+        .unwrap_or_else(|| path.to_owned())
+}
+
 /// `genpacks --check-roles` reads all seventeen pointer roles and checks each.
 ///
 /// This is the answer to "the cursor does not change in Firefox". A role that
@@ -1848,6 +1958,10 @@ fn main() {
     }
     if args.get(1).map(String::as_str) == Some("--soak") {
         soak(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("--assess") {
+        assess_images(&args);
+        return;
     }
     if args.get(1).map(String::as_str) == Some("--check-roles") {
         check_roles();

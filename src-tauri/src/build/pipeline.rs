@@ -483,6 +483,35 @@ pub fn prepare_animation_with(
         return Err(AppError::invalid("the animation has no frames"));
     }
 
+    // **One decision for the whole sequence, made from the first frame.**
+    //
+    // Every frame used to run `remove_background` on its own, which means every
+    // frame ran its own assessment, chose its own tolerance from its own border,
+    // and could be refused on its own. A moving subject changes what the border
+    // looks like, so frame 1 would key and frame 7 would be declined outright —
+    // and the cursor flickers between a cut-out and a full rectangle several
+    // times a second. That is what an animated cursor "glitching out" is.
+    //
+    // The decision is made once and applied to all of them: whether to key at
+    // all, and at what tolerance. `remove_background_at` takes a chosen
+    // tolerance and skips the keyability refusal, which is correct here — the
+    // refusal was already considered once, for the sequence.
+    let decision: Option<i32> = match cut {
+        Cut::Keep => None,
+        _ => {
+            let first = working_copy(&frames[0].0).unwrap_or_else(|_| frames[0].0.clone());
+            let keyability = crate::build::matte::assess(&first);
+            if cut == Cut::Auto && !keyability.confident {
+                log::info!(
+                    "matte: not keying this animation — the first frame reads as a photograph"
+                );
+                None
+            } else {
+                Some(crate::build::matte::suggested_tolerance(&first))
+            }
+        }
+    };
+
     let cut: Vec<(Bitmap, u32)> = frames
         .iter()
         .map(|(bitmap, delay)| {
@@ -490,14 +519,8 @@ pub fn prepare_animation_with(
             // in size stay identical in size and the union rectangle below still
             // means something.
             let mut copy = working_copy(bitmap).unwrap_or_else(|_| bitmap.clone());
-            match cut {
-                Cut::Auto => {
-                    crate::build::matte::remove_background(&mut copy);
-                }
-                Cut::Force => {
-                    crate::build::matte::remove_background_forced(&mut copy);
-                }
-                Cut::Keep => {}
+            if let Some(tolerance) = decision {
+                crate::build::matte::remove_background_at(&mut copy, tolerance);
             }
             (copy, *delay)
         })

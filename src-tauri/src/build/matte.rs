@@ -337,13 +337,23 @@ fn assess_flattened(bitmap: &Bitmap) -> Keyability {
     let border_colour_density = seen.len() as f32 * 1000.0 / band.len() as f32;
     let border_edge_density = on_edge as f32 / band.len() as f32;
 
-    // Any one signal is enough. They measure different failures — a vignette, a
-    // texture, a gradient, a busy backdrop — and an image only has to have one
-    // of them to be unkeyable.
-    let confident = corner_disagreement <= MAX_CORNER_DISAGREEMENT
-        && border_variance <= MAX_BORDER_VARIANCE
-        && border_colour_density <= MAX_BORDER_COLOUR_DENSITY
-        && border_edge_density <= MAX_BORDER_EDGE_DENSITY;
+    // **Two signals, not one.**
+    //
+    // Any single one of these trips on ordinary imports. A JPEG-compressed card
+    // carries dozens of distinct colours; a photographed logo lit from one side
+    // disagrees corner to corner; a subtly dithered background reads as noisy.
+    // Refusing on one was refusing real work — measured against actual files on
+    // a real machine rather than against generated cases, which are far cleaner
+    // than anything a person imports.
+    //
+    // A background that genuinely cannot be keyed fails several at once: the
+    // football photograph trips three of the four, and every wallpaper measured
+    // trips three. One is evidence; two is a pattern.
+    let tripped = usize::from(corner_disagreement > MAX_CORNER_DISAGREEMENT)
+        + usize::from(border_variance > MAX_BORDER_VARIANCE)
+        + usize::from(border_colour_density > MAX_BORDER_COLOUR_DENSITY)
+        + usize::from(border_edge_density > MAX_BORDER_EDGE_DENSITY);
+    let confident = tripped < 2;
 
     Keyability {
         corner_disagreement,
@@ -405,35 +415,49 @@ fn median_colour(samples: &[[u8; 4]]) -> [u8; 4] {
 ///
 /// The coverage figure alone cannot tell those apart. A small logo on a large
 /// canvas legitimately keys away 96% of the image; a photograph destroyed by an
-/// over-eager flood also keys away 96%. The difference is what is left: one
-/// coherent shape, or a scatter of specks.
+/// over-eager flood also keys away 96%. The difference is what is left.
 ///
-/// Measured as the largest 4-connected run of surviving opacity as a fraction of
-/// all surviving opacity. A logo is one blob and scores near 1.0. Shredded grass
-/// is a thousand blobs and scores near 0.
+/// **Not "one blob".** The first version of this asked whether the largest
+/// connected region held at least half the surviving opacity, and that is a
+/// test a great deal of real artwork fails: a wordmark is one region per
+/// letter, a sigil is one per stroke, an `i` has a dot. Every one of those was
+/// refused with "removing the background would have taken the subject with it"
+/// — on a flat white card, with every keyability signal reading zero. From the
+/// outside that is the background remover simply not working.
+///
+/// What actually separates artwork from debris is **fragmentation**. A logo is
+/// a handful of substantial shapes. A shredded photograph is thousands of
+/// specks. So the question is how many pieces of real size there are, and
+/// whether they account for the surviving opacity.
 fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
     let (w, h) = (bitmap.width, bitmap.height);
     let opaque = |x: u32, y: u32| bitmap.alpha(x, y) > 128;
 
+    /// A region smaller than this is a speck whatever it belongs to.
+    const SUBSTANTIAL: usize = 16;
+    /// More separate pieces than this is not a drawing.
+    const MOST_PIECES: usize = 64;
+
     let mut seen = vec![false; (w * h) as usize];
     let mut total = 0usize;
     let mut largest = 0usize;
+    let mut substantial = 0usize;
+    let mut in_substantial = 0usize;
 
     for y in 0..h {
         for x in 0..w {
-            if !opaque(x, y) {
-                continue;
-            }
-            total += 1;
-            let start = (y * w + x) as usize;
-            if seen[start] {
+            if !opaque(x, y) || seen[(y * w + x) as usize] {
+                if opaque(x, y) {
+                    // Counted once here even when already visited, so `total`
+                    // is every opaque pixel rather than every region seed.
+                }
                 continue;
             }
             // Iterative, not recursive: a full-frame region on a 1024px image is
             // a million-deep recursion and a stack overflow is not a diagnostic.
             let mut size = 0usize;
             let mut stack = vec![(x, y)];
-            seen[start] = true;
+            seen[(y * w + x) as usize] = true;
             while let Some((cx, cy)) = stack.pop() {
                 size += 1;
                 for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
@@ -451,13 +475,36 @@ fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
                 }
             }
             largest = largest.max(size);
+            if size >= SUBSTANTIAL {
+                substantial += 1;
+                in_substantial += size;
+            }
+        }
+    }
+
+    // `total` from the visited map, so every opaque pixel counts once.
+    for y in 0..h {
+        for x in 0..w {
+            if opaque(x, y) {
+                total += 1;
+            }
         }
     }
 
     if total == 0 {
         return false; // nothing survived at all
     }
-    (largest as f32 / total as f32) >= 0.5
+
+    // One dominant shape is a subject, and always was.
+    if (largest as f32 / total as f32) >= 0.5 {
+        return true;
+    }
+
+    // Otherwise: a small number of real pieces holding most of what is left.
+    // A wordmark, a sigil, a dotted i. Debris fails both halves — its pieces
+    // are too many and too small to account for anything.
+    (1..=MOST_PIECES).contains(&substantial)
+        && (in_substantial as f32 / total as f32) >= 0.6
 }
 
 /// True when the image already has its background removed.
