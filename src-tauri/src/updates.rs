@@ -422,6 +422,50 @@ fn is_our_installer(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
 
+/// A check whose answer is also published to the shared state.
+///
+/// **This is what the Check-for-updates button must call.** `check` on its own
+/// returns a status to whoever asked and tells the rest of the app nothing,
+/// which is how the button came to work perfectly for one and a half seconds.
+///
+/// The panel polls the shared state on a timer and takes its phase from it —
+/// deliberately, so a background download and a button press cannot show two
+/// different answers. That only holds while both paths *write* that state. The
+/// button did not, so every manual check was overwritten by whatever the
+/// background pass had recorded, which on a machine that had been open a while
+/// was "up to date" from hours earlier: the update appeared, then vanished, and
+/// the app insisted it was current while a release sat there waiting.
+///
+/// The comment in `UpdatePanel.tsx` claiming both paths write the same state
+/// was true of downloading and never of checking.
+pub fn check_and_record() -> AppResult<UpdateStatus> {
+    update_state(|s| {
+        s.checking = true;
+        s.error = None;
+    });
+    let found = check();
+    update_state(|s| s.checking = false);
+
+    match &found {
+        Ok(status) => {
+            log::info!(
+                "update: manual check — running {}, latest {}, newer={}",
+                status.current,
+                status.latest.as_deref().unwrap_or("(none)"),
+                status.newer_available
+            );
+            let status = status.clone();
+            update_state(|s| s.status = Some(status));
+        }
+        Err(e) => {
+            log::warn!("update: manual check failed: {e}");
+            let message = e.to_string();
+            update_state(|s| s.error = Some(message));
+        }
+    }
+    found
+}
+
 pub fn check() -> AppResult<UpdateStatus> {
     let current = env!("CARGO_PKG_VERSION").to_owned();
     let body = get(API_HOST, RELEASE_PATH, MAX_JSON, false)?;
@@ -1633,6 +1677,55 @@ mod tests {
                  Either the hook was emptied or `destructive` stopped recognising its lines."
             );
         }
+    }
+
+    /// **The Check-for-updates button has to write the shared state.**
+    ///
+    /// The panel reads its phase from that state on a 1.5-second timer, so a
+    /// check that only returns its answer to the caller is overwritten by
+    /// whatever was recorded before — which on a machine left open is the
+    /// background pass's result from up to six hours earlier. The symptom is an
+    /// available update that appears for a second and a half and then goes back
+    /// to "you're on the latest version", with no way to click through it.
+    ///
+    /// Asserted against the source because the alternative is a live Tauri
+    /// command doing real network I/O. What matters is not that a function
+    /// named `check` exists but that the command reaches the *recording* one.
+    #[test]
+    fn checking_for_updates_records_what_it_found() {
+        let source = include_str!("commands.rs");
+        let body = source
+            .split("pub fn check_for_updates")
+            .nth(1)
+            .expect("check_for_updates")
+            .split("\n#[tauri::command]")
+            .next()
+            .expect("the body of check_for_updates");
+
+        assert!(
+            body.contains("check_and_record"),
+            "check_for_updates must record its result, or the panel's poll reverts it \
+             within a second and a half"
+        );
+    }
+
+    /// And the recording path has to actually write the two fields the panel
+    /// reads, rather than only returning them.
+    #[test]
+    fn the_recording_check_writes_status_and_clears_the_error() {
+        let source = include_str!("updates.rs");
+        let body = source
+            .split("pub fn check_and_record")
+            .nth(1)
+            .expect("check_and_record")
+            .split("\npub fn check()")
+            .next()
+            .expect("the body of check_and_record");
+
+        assert!(body.contains("s.status = Some"), "the status must be published");
+        assert!(body.contains("s.checking = true"), "the panel shows a checking phase");
+        assert!(body.contains("s.checking = false"), "and it has to end");
+        assert!(body.contains("s.error = None"), "a retry must clear the last failure");
     }
 
     /// The order in `install_update`, asserted against the source.

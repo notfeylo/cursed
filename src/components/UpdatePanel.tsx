@@ -71,10 +71,22 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
   // worked perfectly and looked exactly like nothing happening, forever.
   //
   // Both paths now write the same state, so there is nothing left to disagree.
+  // That claim was half true for a long time: downloading wrote the shared
+  // state and *checking did not*, so a manual check was reverted by the next
+  // tick of this poll — the update appeared for a second and a half and then
+  // the app went back to insisting it was up to date. `check_for_updates` now
+  // records its answer, which is what makes reading the phase from here safe.
   useEffect(() => {
     if (!autoCheck || !ipc.isDesktop()) return;
 
     let cancelled = false;
+    // A check started because the shared state was empty, not because anyone
+    // asked. Exactly one, ever: this runs every 1.5 seconds, and a check that
+    // fires whenever there is nothing recorded is an unauthenticated request to
+    // GitHub's API forty times a minute — which reaches the hourly rate limit in
+    // under two minutes and then fails every check for the rest of the hour.
+    let openingCheck = false;
+
     const read = async () => {
       try {
         const bg = await ipc.getUpdateState();
@@ -94,7 +106,10 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
         else if (bg.downloading) setPhase("downloading");
         else if (bg.checking) setPhase("checking");
         else if (bg.status) setPhase(bg.status.newerAvailable ? "available" : "current");
-        else void check();
+        else if (!openingCheck) {
+          openingCheck = true;
+          void check();
+        }
       } catch {
         /* falls back to the manual button */
       }

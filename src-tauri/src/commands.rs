@@ -970,9 +970,16 @@ pub fn get_diagnostics() -> AppResult<String> {
     Ok(out)
 }
 
+/// Checks now, because someone asked.
+///
+/// Through `check_and_record`, never `check`. The panel takes its phase from the
+/// shared update state on a timer, so a check that does not write that state is
+/// overwritten by whatever was there before — which is how pressing this button
+/// showed an available update for one and a half seconds and then went back to
+/// claiming the app was up to date.
 #[tauri::command]
 pub fn check_for_updates() -> AppResult<updates::UpdateStatus> {
-    updates::check()
+    updates::check_and_record()
 }
 
 /// Downloads the installer for an available update.
