@@ -66,20 +66,36 @@
   ; the files are gone. `Var /GLOBAL` is how a variable gets declared from inside
   ; a section, which is where these macros are expanded.
   ;
-  ; The default is to remove everything: someone uninstalling has said they want
-  ; the app gone, and a folder of leftovers they never hear about again is not a
-  ; kindness. Keeping is a deliberate choice, so it is the one that takes a
-  ; click. MB_DEFBUTTON2 puts the focus on No, so Enter erases.
+  ; **The default is to KEEP.** It used to be to delete, on the reasoning that
+  ; somebody uninstalling wants the app gone and a folder of leftovers is not a
+  ; kindness. That reasoning is sound for an uninstall somebody chose and wrong
+  ; for every other way this code is reached — and it is reached other ways.
+  ;
+  ; Running the installer over an existing install shows an "Already Installed"
+  ; page whose *pre-selected* option is "Uninstall before installing". A user
+  ; downloading the latest version from the website and pressing Next through
+  ; the defaults therefore lands here, and used to lose every preset, every
+  ; cursor they had built, and the record of their original Windows pointers —
+  ; having asked for an upgrade.
+  ;
+  ; Deleting somebody's work must be something they chose, not something they
+  ; failed to prevent. Leftover files can be removed later by anyone who wants
+  ; them gone; a preset cannot be un-deleted.
   Var /GLOBAL CursedKeepData
-  StrCpy $CursedKeepData "0"
+  StrCpy $CursedKeepData "1"
 
   ; A silent uninstall has nobody to answer, and must never sit on a dialog
-  ; waiting. It takes the default: a complete removal.
+  ; waiting. It now takes the safe default rather than the destructive one:
+  ; every automated path — a management tool, a packaged upgrade, an installer
+  ; running its own uninstaller — is silent, and none of those is a person
+  ; asking for their data to be deleted.
   IfSilent cursed_keep_decided
-  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
-    "Keep your presets and custom cursors?$\r$\n$\r$\nChoose No to remove everything Cursed created and leave this PC exactly as it was before it was installed." \
-    IDNO cursed_keep_decided
-  StrCpy $CursedKeepData "1"
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 \
+    "Also delete your presets and custom cursors?$\r$\n$\r$\nChoose No to keep them, in case you reinstall. Choose Yes to remove everything Cursed created and leave this PC exactly as it was before it was installed." \
+    IDYES cursed_delete_data
+  Goto cursed_keep_decided
+  cursed_delete_data:
+    StrCpy $CursedKeepData "0"
   cursed_keep_decided:
 
   DetailPrint "Restoring your original Windows pointer scheme..."
@@ -130,8 +146,9 @@
   RMDir /r "$APPDATA\Cursed\logs"
 
   ; Everything else in %APPDATA%\Cursed is the user's own work — presets, the
-  ; cursors they built from their own images, their settings. $CursedKeepData is
-  ; set by the prompt in PREUNINSTALL, which defaults to removing it.
+  ; cursors they built from their own images, their settings, and the record of
+  ; what their pointers were before any of this. $CursedKeepData is set by the
+  ; prompt in PREUNINSTALL, which **defaults to keeping it**.
   StrCmp $CursedKeepData "1" cursed_keep_data 0
     RMDir /r "$APPDATA\Cursed"
     Goto cursed_data_done

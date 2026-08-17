@@ -7,7 +7,47 @@ happened to, not for the person who made it.
 
 ---
 
-## 1.21.0 — unreleased
+## 1.21.1 — unreleased
+
+### Updating happens inside the app now
+
+No installer window appears at any point. No wizard, no progress window, no
+Next button. The installer runs fully silently and Cursed reports its own
+progress; if the app was in the tray when the update started, it goes back to
+the tray rather than throwing a window at you.
+
+### Uninstalling no longer deletes your work by default
+
+**If you install Cursed over an existing copy by downloading it from the
+website, read this.** The installer shows an "Already Installed" page with
+*"Uninstall before installing"* already selected, so pressing Next through the
+defaults ran the uninstaller — and the uninstaller offered to delete your
+presets and custom cursors with **delete** as the default answer.
+
+That is now the other way round. Keeping your work is the default; deleting it
+is a question you have to answer *yes* to. A silent or automated uninstall keeps
+your data too, because none of those is a person asking for it to be removed.
+
+The in-app update path was already protected. This is the path that was not.
+
+### Check for updates stopped contradicting itself
+
+Pressing **Check for updates** found the new version, showed the download
+button, and then reverted to "You're on the latest version" about a second
+later — leaving no way to click through and update.
+
+The button was right and a cache was overwriting it. A manual check returned its
+answer to the panel without recording it anywhere, while the panel re-read the
+*background* check's result every 1.5 seconds — a result from up to six hours
+earlier, when there was nothing newer. Both now write the same place.
+
+The same poll also re-checked GitHub every 1.5 seconds whenever nothing had been
+recorded yet, which is forty requests a minute and exhausts the hourly rate
+limit in under two minutes.
+
+---
+
+## 1.21.0 — 2026-08-17
 
 ### Updating no longer deletes your data
 

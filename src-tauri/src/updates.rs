@@ -775,10 +775,28 @@ fn published_signature(tag: &str, asset: &str) -> AppResult<String> {
 /// reads is this `Command`'s own argument list, one step from
 /// `CreateProcess`.
 fn installer_command(file: &std::path::Path) -> std::process::Command {
+    installer_command_for(file, crate::autostart::launched_silently())
+}
+
+/// The same, with the tray decision passed in so a test can exercise both.
+fn installer_command_for(file: &std::path::Path, to_tray: bool) -> std::process::Command {
     let mut command = std::process::Command::new(file);
     command
         .args(INSTALLER_ARGUMENTS)
         .current_dir(file.parent().unwrap_or(file));
+
+    // Come back the way you went away.
+    //
+    // `/R` relaunches the app, and on its own it always relaunches into a
+    // window. An update that ran while the app was sitting in the tray — which
+    // is where it spends most of its life — would therefore end by throwing a
+    // window at somebody who was doing something else entirely.
+    //
+    // `/ARGS` is what the template forwards to that relaunch, and `--silent` is
+    // the flag `autostart` already uses to mean "start in the tray".
+    if to_tray {
+        command.args(["/ARGS", crate::autostart::SILENT_FLAG]);
+    }
     command
 }
 
@@ -794,16 +812,32 @@ pub fn launch(file: &std::path::Path) -> AppResult<()> {
     // dropped with the process that asked for it. Spawning directly sidesteps
     // the question: the child exists before this returns, or we get an error to
     // show instead of quietly exiting with nothing installed.
-    let child = installer_command(file)
+    let mut command = installer_command(file);
+
+    // Logged **before** the spawn, and read off the command rather than off the
+    // constant.
+    //
+    // Both halves matter. Logging afterwards means a spawn that fails leaves no
+    // record of what was attempted, which is the case you most want the line
+    // for. And logging `INSTALLER_ARGUMENTS` would print what the flags are
+    // *supposed* to be — the exact assumption that let a correct constant sit
+    // beside a call site that passed none of it, unnoticed, for three releases.
+    // This prints what the process will actually receive.
+    log::info!(
+        "update: launching {} {}",
+        command.get_program().to_string_lossy(),
+        command
+            .get_args()
+            .map(|a| a.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    let child = command
         .spawn()
         .map_err(|e| AppError::msg(format!("the installer would not start: {e}")))?;
 
-    log::info!(
-        "update: installer {} started as pid {} with {}",
-        file.display(),
-        child.id(),
-        INSTALLER_ARGUMENTS.join(" ")
-    );
+    log::info!("update: installer started as pid {}", child.id());
     Ok(())
 }
 
@@ -826,19 +860,23 @@ pub fn launch(file: &std::path::Path) -> AppResult<()> {
 /// | Flag | What it does, and where the template does it |
 /// |---|---|
 /// | `/UPDATE` | Sets `$UpdateMode`. Skips the reinstall page entirely, so the old uninstaller is never run and the hooks never fire. Also preserves the autostart entry and the shortcuts. |
-/// | `/P` | Passive: one progress bar, no pages, and — critically — suppresses the "Cursed is running, close it?" prompt, which is otherwise shown for any non-silent, non-passive run. |
-/// | `/R` | Relaunches the app afterwards. **Only honoured when `/P` or `/S` is also set**, so it is inseparable from the flag above. |
+/// | `/S` | Fully silent. **No installer window at any point** — no wizard, no progress window, no Next button. The app shows its own progress instead. |
+/// | `/R` | Relaunches the app afterwards. **Only honoured under `/S` or `/P`**, so it is inseparable from the flag above. |
 /// | `/NS` | Do not recreate shortcuts. Redundant while `/UPDATE` is passed, and kept anyway: it is the flag that directly expresses the intent, and it keeps a duplicate desktop icon from appearing if `/UPDATE` is ever dropped. |
 ///
-/// Deliberately **not** `/S`. Fully silent gives the user no sign that anything is
-/// happening during an install they explicitly asked for, and the brief asks for
-/// exactly one progress bar rather than none.
+/// **`/S` rather than `/P`.** Passive still puts a progress window on screen —
+/// a second, unexplained window that appears over the app mid-update and is
+/// indistinguishable from something having gone wrong. An update the user
+/// started from inside the app should be reported by the app. `/P` was the
+/// right first step and this is the destination: the only UI is Cursed's own.
 ///
-/// No `/ARGS` either. It would restart the app with extra arguments, and the only
-/// one worth passing is `--silent`, which sends it to the tray. An update is
-/// always started by someone clicking a button in the window, so the window is
-/// what they should get back.
-const INSTALLER_ARGUMENTS: &[&str] = &["/UPDATE", "/P", "/R", "/NS"];
+/// Silent also suppresses the "Cursed is running, close it?" prompt, which `/P`
+/// suppressed too and which a bare invocation shows.
+/// `/ARGS` is added at runtime rather than listed here — see
+/// [`installer_command`]. It carries `--silent` when the app was in the tray at
+/// the moment the update started, so a background update returns to the tray
+/// rather than throwing a window at somebody who is doing something else.
+const INSTALLER_ARGUMENTS: &[&str] = &["/UPDATE", "/S", "/R", "/NS"];
 
 /// Where a downloaded installer is staged.
 pub fn downloaded_path(installer: &str) -> AppResult<PathBuf> {
@@ -1455,8 +1493,12 @@ mod tests {
             INSTALLER_ARGUMENTS.contains(&"/UPDATE"),
             "an update that does not say it is an update is an uninstall"
         );
-        // Without this the user is asked to close a running app mid-update.
-        assert!(INSTALLER_ARGUMENTS.contains(&"/P"));
+        // Without this an installer window appears over the app, and the user
+        // is asked to close a running app mid-update.
+        assert!(
+            INSTALLER_ARGUMENTS.contains(&"/S"),
+            "an update started inside the app should be reported by the app"
+        );
         // Without this the app never comes back.
         assert!(INSTALLER_ARGUMENTS.contains(&"/R"));
         assert!(INSTALLER_ARGUMENTS.contains(&"/NS"));
@@ -1465,12 +1507,18 @@ mod tests {
         // on its own — the template checks `$PassiveMode = 1 ${OrIf} ${Silent}`
         // before even looking for it.
         assert!(
-            !INSTALLER_ARGUMENTS.contains(&"/R") || INSTALLER_ARGUMENTS.contains(&"/P"),
-            "/R does nothing without /P"
+            !INSTALLER_ARGUMENTS.contains(&"/R")
+                || INSTALLER_ARGUMENTS.contains(&"/S")
+                || INSTALLER_ARGUMENTS.contains(&"/P"),
+            "/R does nothing without /S or /P"
         );
 
-        // Not silent. An install the user asked for should show them something.
-        assert!(!INSTALLER_ARGUMENTS.contains(&"/S"));
+        // Not both: `/P` shows a progress window and `/S` shows nothing, so
+        // asking for both is asking the template which one it prefers.
+        assert!(
+            !INSTALLER_ARGUMENTS.contains(&"/P"),
+            "passive and silent are alternatives, not a pair"
+        );
     }
 
     /// The constant being right is not the property that was broken.
@@ -1483,7 +1531,9 @@ mod tests {
     #[test]
     fn the_flags_reach_the_command_that_is_actually_run() {
         let installer = std::path::Path::new(r"C:\x\updates\Cursed_1.21.0_x64-setup.exe");
-        let command = installer_command(installer);
+        // Windowed, so the argument list is exactly the constant; the tray case
+        // appends `/ARGS --silent` and is covered by its own test below.
+        let command = installer_command_for(installer, false);
 
         let passed: Vec<String> = command
             .get_args()
@@ -1498,6 +1548,90 @@ mod tests {
         assert_eq!(
             command.get_current_dir(),
             Some(std::path::Path::new(r"C:\x\updates"))
+        );
+    }
+
+    /// An update that ran from the tray comes back to the tray.
+    ///
+    /// `/R` relaunches into a window unless told otherwise, so without this an
+    /// update that happened while the app was minimised ends by throwing a
+    /// window at somebody who was doing something else.
+    #[test]
+    fn an_update_from_the_tray_returns_to_the_tray() {
+        let installer = std::path::Path::new(r"C:\x\updates\Cursed_1.21.1_x64-setup.exe");
+
+        let tray: Vec<String> = installer_command_for(installer, true)
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        assert!(tray.contains(&"/ARGS".to_owned()), "{tray:?}");
+        assert!(
+            tray.contains(&crate::autostart::SILENT_FLAG.to_owned()),
+            "the relaunch has to be told to stay in the tray: {tray:?}"
+        );
+        // `/ARGS` has to come last, or the template reads the flags after it as
+        // arguments for the app rather than for itself.
+        assert_eq!(tray[tray.len() - 2], "/ARGS", "{tray:?}");
+    }
+
+    /// **Keeping the user's work is the default; deleting it takes a click.**
+    ///
+    /// The `/UPDATE` flag protects the in-app path and nothing else. Downloading
+    /// the installer from the website and running it over an existing install is
+    /// ordinary behaviour, and the template's "Already Installed" page arrives
+    /// with **"Uninstall before installing" pre-selected** — so pressing Next
+    /// through the defaults runs the uninstaller, which runs these hooks.
+    ///
+    /// While those hooks defaulted to deleting, that path took every preset,
+    /// every cursor the user had built, and the original-scheme snapshot, from
+    /// somebody who had asked for an upgrade.
+    ///
+    /// A silent uninstall must take the safe default too: every automated path
+    /// is silent, and none of them is a person asking for their data to go.
+    #[test]
+    fn the_uninstaller_keeps_the_users_work_unless_told_otherwise() {
+        let hooks = include_str!("../installer-hooks.nsh");
+
+        assert!(
+            hooks.contains(r#"StrCpy $CursedKeepData "1""#),
+            "the default must be to keep"
+        );
+        // The prompt's default button is the safe one.
+        assert!(
+            hooks.contains("MB_DEFBUTTON1"),
+            "the focused answer must be the one that keeps the data"
+        );
+        // And the question is asked the right way round: the destructive answer
+        // has to be the one that is actively chosen.
+        assert!(
+            hooks.contains("Also delete your presets"),
+            "the prompt should ask about deleting, not about keeping"
+        );
+        assert!(
+            hooks.contains("IDYES cursed_delete_data"),
+            "only an explicit yes may reach the deletion"
+        );
+
+        // The silent branch jumps *past* the deletion, not into it.
+        let silent = hooks.find("IfSilent cursed_keep_decided").expect("silent branch");
+        let deletes = hooks.find("cursed_delete_data:").expect("delete label");
+        assert!(silent < deletes, "a silent uninstall must not fall into the deletion");
+    }
+
+    /// Tauri's own app-data deletion stays off.
+    ///
+    /// It is a separate mechanism from the hooks above — a checkbox on the
+    /// uninstall page gated on `deleteAppDataOnUninstall` — and turning it on
+    /// would delete the directory regardless of what the hooks decided.
+    #[test]
+    fn the_bundler_does_not_delete_app_data_on_uninstall() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let flag = &config["bundle"]["windows"]["nsis"]["deleteAppDataOnUninstall"];
+        assert!(
+            flag.is_null() || flag == &serde_json::Value::Bool(false),
+            "deleteAppDataOnUninstall must stay off; the hooks own this decision"
         );
     }
 
