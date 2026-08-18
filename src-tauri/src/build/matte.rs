@@ -411,50 +411,60 @@ fn median_colour(samples: &[[u8; 4]]) -> [u8; 4] {
     [channel(0), channel(1), channel(2), 255]
 }
 
-/// Whether what survived a cut is a subject rather than debris.
-///
-/// The coverage figure alone cannot tell those apart. A small logo on a large
-/// canvas legitimately keys away 96% of the image; a photograph destroyed by an
-/// over-eager flood also keys away 96%. The difference is what is left.
-///
-/// **Not "one blob".** The first version of this asked whether the largest
-/// connected region held at least half the surviving opacity, and that is a
-/// test a great deal of real artwork fails: a wordmark is one region per
-/// letter, a sigil is one per stroke, an `i` has a dot. Every one of those was
-/// refused with "removing the background would have taken the subject with it"
-/// — on a flat white card, with every keyability signal reading zero. From the
-/// outside that is the background remover simply not working.
-///
-/// What actually separates artwork from debris is **fragmentation**. A logo is
-/// a handful of substantial shapes. A shredded photograph is thousands of
-/// specks. So the question is how many pieces of real size there are, and
-/// whether they account for the surviving opacity.
-fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
+/// What a cut left behind, measured.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Survivors {
+    /// Opaque pixels remaining.
+    pub total: usize,
+    /// Connected regions of any size.
+    pub pieces: usize,
+    /// Regions big enough to be a deliberate shape rather than a speck.
+    pub substantial: usize,
+    /// The biggest region, as a fraction of everything that survived.
+    pub largest: f32,
+    /// How much of the survivors' own bounding box they fill.
+    ///
+    /// The signal that separates a wordmark from a shredded face. Both leave
+    /// many similar pieces and neither has a dominant one; the difference is
+    /// that a wordmark's pieces *are* the artwork and fill their box, while a
+    /// shredded subject is a scatter of islands around a hole where the subject
+    /// used to be.
+    pub density: f32,
+}
+
+/// A region smaller than this is a speck whatever it belongs to.
+const SUBSTANTIAL_PIECE: usize = 16;
+
+/// Measures what survived a cut.
+pub fn survivors(bitmap: &Bitmap) -> Survivors {
     let (w, h) = (bitmap.width, bitmap.height);
     let opaque = |x: u32, y: u32| bitmap.alpha(x, y) > 128;
 
-    /// A region smaller than this is a speck whatever it belongs to.
-    const SUBSTANTIAL: usize = 16;
-    /// More separate pieces than this is not a drawing.
-    const MOST_PIECES: usize = 64;
-
     let mut seen = vec![false; (w * h) as usize];
     let mut total = 0usize;
-    let mut largest = 0usize;
+    let mut pieces = 0usize;
     let mut substantial = 0usize;
-    let mut in_substantial = 0usize;
+    let mut largest = 0usize;
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
 
     for y in 0..h {
         for x in 0..w {
-            if !opaque(x, y) || seen[(y * w + x) as usize] {
-                if opaque(x, y) {
-                    // Counted once here even when already visited, so `total`
-                    // is every opaque pixel rather than every region seed.
-                }
+            if !opaque(x, y) {
                 continue;
             }
-            // Iterative, not recursive: a full-frame region on a 1024px image is
-            // a million-deep recursion and a stack overflow is not a diagnostic.
+            total += 1;
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x);
+            y1 = y1.max(y);
+
+            if seen[(y * w + x) as usize] {
+                continue;
+            }
+            // Iterative, not recursive: a full-frame region on a 1024px image
+            // is a million-deep recursion, and a stack overflow is not a
+            // diagnostic.
             let mut size = 0usize;
             let mut stack = vec![(x, y)];
             seen[(y * w + x) as usize] = true;
@@ -474,37 +484,65 @@ fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
                     stack.push((nx, ny));
                 }
             }
+            pieces += 1;
             largest = largest.max(size);
-            if size >= SUBSTANTIAL {
+            if size >= SUBSTANTIAL_PIECE {
                 substantial += 1;
-                in_substantial += size;
-            }
-        }
-    }
-
-    // `total` from the visited map, so every opaque pixel counts once.
-    for y in 0..h {
-        for x in 0..w {
-            if opaque(x, y) {
-                total += 1;
             }
         }
     }
 
     if total == 0 {
-        return false; // nothing survived at all
+        return Survivors::default();
     }
+    let box_area = ((x1 - x0 + 1) as usize) * ((y1 - y0 + 1) as usize);
+    Survivors {
+        total,
+        pieces,
+        substantial,
+        largest: largest as f32 / total as f32,
+        density: total as f32 / box_area.max(1) as f32,
+    }
+}
 
-    // One dominant shape is a subject, and always was.
-    if (largest as f32 / total as f32) >= 0.5 {
+/// A region holding this much of the survivors is the subject, whatever is left
+/// around it.
+const LARGEST_IS_A_SUBJECT: f32 = 0.5;
+/// More separate pieces than this is not a drawing.
+const MOST_PIECES: usize = 64;
+/// Below this fill of their own bounding box, the survivors are a scatter
+/// around a hole rather than a shape.
+const LEAST_DENSITY: f32 = 0.20;
+
+/// Whether what survived a cut is a subject rather than debris.
+///
+/// **Judged from the output, not predicted from the input.** Both failures this
+/// has had — a football on grass, and a portrait whose face was flooded away —
+/// came back as dozens of disconnected islands. That is visible in the result
+/// whatever caused it, which makes it the one check that does not depend on
+/// guessing right about the image beforehand.
+///
+/// Two ways to pass, because artwork legitimately takes two shapes:
+///
+///  1. **One dominant region** — a logo, a character, a photograph's subject.
+///  2. **A few real pieces filling their own box** — a wordmark is one region
+///     per letter and a sigil one per stroke; neither has a dominant component
+///     and both are correct.
+///
+/// A shredded portrait matches neither: many pieces, none dominant, scattered
+/// around a hole where the face was, so the box they occupy is mostly empty.
+/// `density` is what separates that from a wordmark, and it is why this is not
+/// simply a component count — the two have similar counts and completely
+/// different fill.
+fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
+    let s = survivors(bitmap);
+    if s.total == 0 {
+        return false;
+    }
+    if s.largest >= LARGEST_IS_A_SUBJECT {
         return true;
     }
-
-    // Otherwise: a small number of real pieces holding most of what is left.
-    // A wordmark, a sigil, a dotted i. Debris fails both halves — its pieces
-    // are too many and too small to account for anything.
-    (1..=MOST_PIECES).contains(&substantial)
-        && (in_substantial as f32 / total as f32) >= 0.6
+    (1..=MOST_PIECES).contains(&s.substantial) && s.density >= LEAST_DENSITY
 }
 
 /// True when the image already has its background removed.
@@ -1907,6 +1945,86 @@ mod tests {
         assert_eq!(report.refused, None, "a small logo is a normal import");
         assert!(report.removed > 0.9, "almost all of it is card: {}", report.removed);
         assert_eq!(b.alpha(64, 64), 255, "the logo survives");
+    }
+
+    /// **The portrait failure, as the shape it came back as.**
+    ///
+    /// A head-and-shoulders photo on flat white was keyed and the whole face
+    /// went with the background: lit skin runs a few levels off white, so the
+    /// flood crossed the boundary and, once inside, took everything until it
+    /// hit genuinely dark pixels. What survived was hair, brows, eyes, nostrils
+    /// and a lip outline — dozens of disconnected islands scattered around a
+    /// hole where the face had been.
+    ///
+    /// Constructed here as that output rather than by trying to make the matte
+    /// produce it, because the safety net's job is to judge a result whatever
+    /// produced it. Every background-side signal passed on that image: the
+    /// background genuinely was ideal, and the failure was in the relationship
+    /// between subject and background, which is only visible afterwards.
+    #[test]
+    fn a_shredded_portrait_is_not_a_subject() {
+        let mut b = Bitmap::new(200, 240);
+        let ink = [30u8, 26, 28, 255];
+        let mut blob = |cx: i32, cy: i32, rx: i32, ry: i32| {
+            for y in (cy - ry).max(0)..(cy + ry).min(240) {
+                for x in (cx - rx).max(0)..(cx + rx).min(200) {
+                    let dx = (x - cx) as f32 / rx as f32;
+                    let dy = (y - cy) as f32 / ry as f32;
+                    if dx * dx + dy * dy <= 1.0 {
+                        b.set_pixel(x as u32, y as u32, ink);
+                    }
+                }
+            }
+        };
+        // Hair, as the strands a flood leaves rather than one mass.
+        for i in 0..26 {
+            blob(40 + (i % 13) * 10, 30 + (i / 13) * 14, 4, 7);
+        }
+        // Brows, eyes, nostrils, lips.
+        blob(75, 105, 14, 3);
+        blob(125, 105, 14, 3);
+        blob(75, 120, 9, 5);
+        blob(125, 120, 9, 5);
+        blob(94, 150, 4, 3);
+        blob(106, 150, 4, 3);
+        for i in 0..7 {
+            blob(78 + i * 8, 178, 5, 3);
+        }
+
+        let s = survivors(&b);
+        // The report described about fifty islands; adjacent strands merge
+        // here into twenty. The count is incidental — what condemns it is that
+        // nothing dominates and the pieces occupy a box that is mostly empty.
+        assert!(s.pieces >= 15, "this should be many islands: {s:?}");
+        assert!(s.density < LEAST_DENSITY, "a scatter around a hole: {s:?}");
+        assert!(s.largest < 0.5, "no island dominates: {s:?}");
+        assert!(
+            !survivor_is_coherent(&b),
+            "a shredded face must never be returned as a cutout: {s:?}"
+        );
+    }
+
+    /// And the shape that must still pass: a wordmark, which also has many
+    /// pieces and no dominant one, and is correct.
+    #[test]
+    fn a_wordmark_survives_the_same_check() {
+        let mut b = Bitmap::new(200, 60);
+        // Six letter-sized blocks filling their line.
+        for letter in 0..6 {
+            let x0 = 10 + letter * 31;
+            for y in 12..48 {
+                for x in x0..x0 + 22 {
+                    b.set_pixel(x, y, [20, 20, 24, 255]);
+                }
+            }
+        }
+        let s = survivors(&b);
+        assert_eq!(s.substantial, 6, "{s:?}");
+        assert!(s.largest < 0.5, "no letter dominates: {s:?}");
+        assert!(
+            survivor_is_coherent(&b),
+            "a wordmark is artwork, not debris: {s:?}"
+        );
     }
 
     /// One blob is a subject. A thousand specks is debris.

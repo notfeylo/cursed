@@ -335,6 +335,20 @@ fn matte_sheet(args: &[String]) {
                 failures += 1;
                 "TOOK SOMETHING IT SHOULD NOT HAVE".to_owned()
             }
+            Expect::NeverShreds => {
+                let s = matte::survivors(&cut);
+                if report.refused.is_some() {
+                    "ok, refused".to_owned()
+                } else if s.largest >= 0.5 || (s.substantial <= 64 && s.density >= 0.20) {
+                    "ok, one subject".to_owned()
+                } else {
+                    failures += 1;
+                    format!(
+                        "SHREDDED: {} pieces, largest {:.0}%, density {:.0}%",
+                        s.pieces, s.largest * 100.0, s.density * 100.0
+                    )
+                }
+            }
             Expect::Refuses => match report.refused {
                 // Untouched is not enough on its own: the bitmap has to be
                 // byte-identical, because "reverted" and "never attempted" are
@@ -352,7 +366,12 @@ fn matte_sheet(args: &[String]) {
                 }
             },
         };
-        println!("{name:<28} {removed:>8.1}%  {verdict}");
+        let shape = matte::survivors(&cut);
+        println!(
+            "{name:<28} {removed:>8.1}%  {verdict}
+{:30}pieces {:>4}  subst {:>3}  largest {:>5.1}%  density {:>5.1}%",
+            "", shape.pieces, shape.substantial, shape.largest * 100.0, shape.density * 100.0
+        );
     }
 
     // The animation, checked across frames rather than on the sheet.
@@ -405,6 +424,9 @@ fn matte_sheet(args: &[String]) {
 }
 
 enum Expect {
+    /// Either a correct cutout or an honest refusal. What it must never be is a
+    /// fragmented one — the point is that nothing shredded reaches the user.
+    NeverShreds,
     /// There is a background and it should go.
     Removes,
     /// There is nothing to remove; the image must come out untouched.
@@ -729,6 +751,134 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
         true,
     ));
 
+    // 13. A portrait on flat white. **The acceptance test for this work.**
+    //
+    // Head and shoulders, studio lit. The background is flat white (255) and lit
+    // skin runs 215-240, which is inside any tolerance wide enough to key the
+    // background at all. So the flood crosses the face boundary, and once inside
+    // skin is one large contiguous region: it takes the whole face and stops
+    // only at genuinely dark pixels — hair, brows, eyes, nostrils, lips.
+    //
+    // What comes back is ~50 disconnected islands floating on transparency. The
+    // background-side keyability signals all pass, because the background really
+    // is ideal. The failure is in the *relationship* between subject and
+    // background, and it is only visible in the output.
+    let mut thirteen = flat([255, 255, 255]);
+    {
+        let (cx, cy) = (size as f32 / 2.0, size as f32 * 0.56);
+        let put = |b: &mut Bitmap, x: u32, y: u32, c: [u8; 3]| {
+            if x < size && y < size {
+                b.set_pixel(x, y, [c[0], c[1], c[2], 255]);
+            }
+        };
+        // Shoulders.
+        for y in (size * 78 / 100)..size {
+            for x in 0..size {
+                let dx = (x as f32 - cx) / (size as f32 * 0.46);
+                if dx * dx < 1.0 {
+                    put(&mut thirteen, x, y, [64, 72, 92]);
+                }
+            }
+        }
+        // Hair, as a cap over the top of the head only.
+        //
+        // Not a ring around the whole face, which is what the first version
+        // drew — and which made the case unreproducible, because dark hair
+        // completely enclosing the skin walls the flood out. In a real
+        // head-and-shoulders shot the cheeks and jaw meet the background
+        // directly, and that open boundary is the way in.
+        for y in 0..size {
+            for x in 0..size {
+                let dx = (x as f32 - cx) / (size as f32 * 0.27);
+                let dy = (y as f32 - cy + size as f32 * 0.06) / (size as f32 * 0.34);
+                if dx * dx + dy * dy <= 1.0 && (y as f32) < cy - size as f32 * 0.055 {
+                    put(&mut thirteen, x, y, [38, 28, 24]);
+                }
+            }
+        }
+        // The face: lit skin, a few levels off white, with a soft edge.
+        //
+        // The antialiasing is the mechanism, not decoration. A hard-edged face
+        // steps from 255 straight to 239, which exceeds LOCAL_STEP and stops
+        // the flood dead — the first two versions of this case were
+        // unreproducible for exactly that reason. Every real photograph has a
+        // soft boundary, and those intermediate pixels are the bridge the flood
+        // walks across into the subject.
+        for y in 0..size {
+            for x in 0..size {
+                let dx = (x as f32 - cx) / (size as f32 * 0.21);
+                let dy = (y as f32 - cy) / (size as f32 * 0.27);
+                let d = (dx * dx + dy * dy).sqrt();
+                if d > 1.06 {
+                    continue;
+                }
+                let coverage = ((1.03 - d) / 0.06).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
+                }
+                // Studio-lit skin: a handful of levels off white, which is the
+                // whole trap. 246 against a 255 background is a distance of 9,
+                // inside any tolerance wide enough to key the background at all.
+                let lit = 250.0 - 7.0 * dy.abs() - 4.0 * dx.abs();
+                let v = lit.clamp(238.0, 252.0);
+                let skin = [v, v * 0.94, v * 0.88];
+                let under = thirteen.pixel(x, y);
+                let blend = |a: u8, c: f32| ((c * coverage) + (a as f32 * (1.0 - coverage))) as u8;
+                thirteen.set_pixel(
+                    x,
+                    y,
+                    [blend(under[0], skin[0]), blend(under[1], skin[1]), blend(under[2], skin[2]), 255],
+                );
+            }
+        }
+        // Features: the only genuinely dark pixels inside the face.
+        let eye = |b: &mut Bitmap, ex: f32| {
+            for y in 0..size {
+                for x in 0..size {
+                    let dx = (x as f32 - (cx + ex * size as f32)) / (size as f32 * 0.045);
+                    let dy = (y as f32 - (cy - size as f32 * 0.06)) / (size as f32 * 0.022);
+                    if dx * dx + dy * dy <= 1.0 {
+                        b.set_pixel(x, y, [30, 26, 28, 255]);
+                    }
+                }
+            }
+        };
+        eye(&mut thirteen, -0.085);
+        eye(&mut thirteen, 0.085);
+        // Brows.
+        for i in 0..2 {
+            let ex = if i == 0 { -0.085 } else { 0.085 };
+            for y in 0..size {
+                for x in 0..size {
+                    let dx = (x as f32 - (cx + ex * size as f32)) / (size as f32 * 0.06);
+                    let dy = (y as f32 - (cy - size as f32 * 0.105)) / (size as f32 * 0.012);
+                    if dx * dx + dy * dy <= 1.0 {
+                        thirteen.set_pixel(x, y, [40, 30, 26, 255]);
+                    }
+                }
+            }
+        }
+        // Nostrils and lips.
+        for y in 0..size {
+            for x in 0..size {
+                let dx = (x as f32 - cx) / (size as f32 * 0.075);
+                let dy = (y as f32 - (cy + size as f32 * 0.085)) / (size as f32 * 0.018);
+                if dx * dx + dy * dy <= 1.0 {
+                    thirteen.set_pixel(x, y, [120, 60, 62, 255]);
+                }
+            }
+        }
+    }
+    cases.push(("13 portrait on white".to_owned(), Expect::NeverShreds, thirteen, false));
+
+    // 14. A light-grey subject on white: the deliberate near-tone trap.
+    //
+    // Nothing dark anywhere to stop the flood, so either it keys the subject
+    // cleanly or it takes the lot. What it must never do is return a fragment.
+    let mut fourteen = flat([255, 255, 255]);
+    disc(&mut fourteen, [232, 232, 232, 255], true);
+    cases.push(("14 light grey on white".to_owned(), Expect::NeverShreds, fourteen, false));
+
     cases
 }
 
@@ -849,6 +999,11 @@ fn assess_images(args: &[String]) {
 
         let mut cut = first.clone();
         let report = matte::remove_background(&mut cut);
+        // What a *forced* key would leave, so the survivor shape can be seen
+        // even when the refusal stopped it.
+        let mut forced = first.clone();
+        matte::remove_background_forced(&mut forced);
+        let surv = matte::survivors(&forced);
         let verdict = match report.refused {
             Some(r) => format!("REFUSED {r:?}"),
             None if report.already_had_alpha => "already cut out".to_owned(),
@@ -864,6 +1019,10 @@ fn assess_images(args: &[String]) {
             k.border_edge_density * 100.0,
             report.removed * 100.0,
             verdict
+        );
+        println!(
+            "{:38} pieces {:>5}  substantial {:>4}  largest {:>5.1}%  density {:>5.1}%",
+            "", surv.pieces, surv.substantial, surv.largest * 100.0, surv.density * 100.0
         );
     }
 
