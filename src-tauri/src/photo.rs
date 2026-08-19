@@ -57,7 +57,7 @@ pub struct Artifact {
 /// `docs/PHOTO_MODE.md` records the licence and provenance.
 pub const MODEL: Artifact = Artifact {
     name: "u2netp.onnx",
-    sha256: "",
+    sha256: "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
     bytes: 4_574_861,
 };
 
@@ -69,15 +69,30 @@ pub const MODEL: Artifact = Artifact {
 pub const fn runtime() -> Option<Artifact> {
     #[cfg(target_arch = "x86_64")]
     {
-        Some(Artifact { name: "onnxruntime-x64.dll", sha256: "", bytes: 16_149_344 })
+        Some(Artifact {
+            name: "onnxruntime-x64.dll",
+            sha256: "69d8e6d3879a3b4001cdc74c8ed9ccc7e7f799a5b847059738323404519ec471",
+            bytes: 16_149_344,
+        })
     }
     #[cfg(target_arch = "aarch64")]
     {
-        Some(Artifact { name: "onnxruntime-arm64.dll", sha256: "", bytes: 15_800_000 })
+        Some(Artifact {
+            name: "onnxruntime-arm64.dll",
+            sha256: "7c7df2cefd6910f50f44792e8f8f71b371bf9675f9273e70a9277eb92e4d75ed",
+            bytes: 16_261_432,
+        })
     }
     #[cfg(target_arch = "x86")]
     {
-        Some(Artifact { name: "onnxruntime-x86.dll", sha256: "", bytes: 12_600_000 })
+        // 1.22.0 rather than 1.29.0: Microsoft stopped publishing a `win-x86`
+        // build after it. ONNX is a portable graph, so the same model runs
+        // against the older runtime.
+        Some(Artifact {
+            name: "onnxruntime-x86.dll",
+            sha256: "f898b430bb6130b8c1394f98ea1c6f4134752919cf96601da27537a8b9458fdb",
+            bytes: 10_884_640,
+        })
     }
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "x86")))]
     {

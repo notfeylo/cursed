@@ -29,11 +29,22 @@ Nothing at launch. Nothing without being asked.
 | Artifact | Size | Licence |
 | --- | --- | --- |
 | `u2netp.onnx` | **4,574,861 bytes (4.36 MB)** | Apache 2.0 |
-| `onnxruntime.dll` (x64) | **16,149,344 bytes (15.40 MB)** | MIT |
-| **Total, first use, x64** | **≈ 19.76 MB** | |
+| `onnxruntime-x64.dll` | **16,149,344 bytes (15.40 MB)** | MIT |
+| `onnxruntime-arm64.dll` | **16,261,432 bytes (15.51 MB)** | MIT |
+| `onnxruntime-x86.dll` | **10,884,640 bytes (10.38 MB)** | MIT |
 
-ARM64 and x86 need their own runtime build and are roughly the same size. The
-model is architecture-independent, because ONNX is a portable graph.
+| Architecture | First-use download |
+| --- | --- |
+| x64 | **19.76 MB** |
+| ARM64 | **19.87 MB** |
+| x86 | **14.74 MB** |
+
+The model is architecture-independent, because ONNX is a portable graph.
+
+**32-bit is pinned to ONNX Runtime 1.22.0**, because Microsoft stopped
+publishing a `win-x86` build after it — 1.29.0 ships x64 and ARM64 only. The
+alternative was dropping photo mode for 32-bit users, which is a worse answer
+for a feature that works fine there.
 
 Every figure above was measured from the actual artifact, not estimated. The
 80 MB figure on the ONNX Runtime release page is the full SDK — headers, import
@@ -104,8 +115,20 @@ model's output too. A model can fail; the net is not classical-only.
 
 ## Status
 
-**The plumbing is built and tested; the artifacts are not yet published.**
-`MODEL.sha256` and the runtime hashes are empty, and `verify` refuses an
-artifact with no published checksum — so photo mode currently reports itself as
-available, and declines to install until the `photo-v1` release exists with
-signed artifacts and their hashes compiled in.
+**Published and installable.** The `photo-v1` release carries all four artifacts
+and a `.minisig` for each, and their SHA-256 hashes are compiled into the build.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `u2netp.onnx` | `309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8` |
+| `onnxruntime-x64.dll` | `69d8e6d3879a3b4001cdc74c8ed9ccc7e7f799a5b847059738323404519ec471` |
+| `onnxruntime-arm64.dll` | `7c7df2cefd6910f50f44792e8f8f71b371bf9675f9273e70a9277eb92e4d75ed` |
+| `onnxruntime-x86.dll` | `f898b430bb6130b8c1394f98ea1c6f4134752919cf96601da27537a8b9458fdb` |
+
+Every signature was verified against the public key locally before the release
+was published.
+
+**What is not yet wired: inference itself.** The download, verification,
+storage, removal and reporting are built and tested; the `ort` session that
+turns the model into an alpha matte is not. Photo mode will install correctly
+and does not yet produce a cutout.
