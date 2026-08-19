@@ -879,6 +879,25 @@ fn matte_cases(size: u32) -> Vec<(String, Expect, cursorforge_lib::build::bitmap
     disc(&mut fourteen, [232, 232, 232, 255], true);
     cases.push(("14 light grey on white".to_owned(), Expect::NeverShreds, fourteen, false));
 
+    // 15. A six-letter wordmark on white. **An acceptance test in the other
+    // direction.**
+    //
+    // Many pieces, none dominant — the same shape as a shredded subject by
+    // component count alone, and completely correct. It is here so that
+    // tightening the safety net against shredding cannot quietly start
+    // rejecting real artwork, which is a failure that looks like the background
+    // remover simply not working.
+    let mut fifteen = flat([255, 255, 255]);
+    for letter in 0..6u32 {
+        let x0 = size / 12 + letter * (size / 7);
+        for y in (size * 38 / 100)..(size * 62 / 100) {
+            for x in x0..(x0 + size / 12).min(size) {
+                fifteen.set_pixel(x, y, [24, 24, 30, 255]);
+            }
+        }
+    }
+    cases.push(("15 six-letter wordmark".to_owned(), Expect::Removes, fifteen, false));
+
     cases
 }
 
