@@ -33,7 +33,7 @@ use windows::Win32::Networking::WinHttp::{
 
 const API_HOST: &str = "api.github.com";
 const RELEASE_PATH: &str = "/repos/notfeylo/cursed/releases/latest";
-const DOWNLOAD_HOST: &str = "github.com";
+pub(crate) const DOWNLOAD_HOST: &str = "github.com";
 pub const RELEASES_URL: &str = "https://github.com/notfeylo/cursed/releases";
 
 /// GitHub requires a User-Agent and rejects requests without one.
@@ -164,7 +164,10 @@ fn get(host: &str, path: &str, cap: usize, follow_redirects: bool) -> AppResult<
 ///
 /// So: read errors propagate, and the body is checked against `Content-Length`
 /// before it is returned.
-fn get_with_progress(
+/// Shared with `crate::photo`, which downloads its runtime and model the same
+/// way an installer is downloaded: over WinHTTP, through the OS certificate
+/// store, with progress and a cap.
+pub(crate) fn get_with_progress(
     host: &str,
     path: &str,
     cap: usize,

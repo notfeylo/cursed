@@ -421,6 +421,58 @@ pub fn preview_matte(token: String, tolerance: i32) -> AppResult<String> {
     image.to_png_data_uri()
 }
 
+
+/* ── photo mode ────────────────────────────────────────────── */
+
+/// What photo mode would cost and whether it is installed.
+///
+/// Cheap and side-effect free: it reads two file sizes. Nothing here downloads,
+/// and nothing here runs at launch.
+#[tauri::command]
+pub fn get_photo_status() -> AppResult<crate::photo::PhotoStatus> {
+    Ok(crate::photo::status())
+}
+
+/// Downloads the model and runtime, after the user has been told the size.
+///
+/// Runs on its own thread and reports progress through the shared state, so the
+/// window keeps painting through a twenty-megabyte download.
+#[tauri::command]
+pub fn install_photo_mode() -> AppResult<()> {
+    if !crate::photo::available() {
+        return Err(AppError::invalid(crate::photo::UNAVAILABLE));
+    }
+    std::thread::Builder::new()
+        .name("cursed-photo-install".into())
+        .spawn(|| {
+            let result = crate::photo::install(&mut |got, total| {
+                crate::photo::report_progress(got, total);
+            });
+            crate::photo::finish(result);
+        })
+        .map_err(|e| AppError::msg(format!("the download could not be started: {e}")))?;
+    Ok(())
+}
+
+/// How the download is going. Cheap enough to poll.
+#[tauri::command]
+pub fn get_photo_progress() -> AppResult<crate::photo::Progress> {
+    Ok(crate::photo::progress())
+}
+
+/// Stops a download in flight. The partial file is discarded.
+#[tauri::command]
+pub fn cancel_photo_install() -> AppResult<()> {
+    crate::photo::cancel();
+    Ok(())
+}
+
+/// Deletes the model and runtime, and reports the space reclaimed.
+#[tauri::command]
+pub fn remove_photo_mode() -> AppResult<u64> {
+    crate::photo::remove()
+}
+
 /* ── backup and restore ────────────────────────────────────── */
 
 /// The filename to offer in the save dialog. Dated, so a second backup does not

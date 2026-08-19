@@ -25,6 +25,7 @@ pub mod idle;
 pub mod import;
 pub mod packs;
 pub mod paths;
+pub mod photo;
 pub mod session;
 pub mod shell;
 pub mod signing;
@@ -399,6 +400,11 @@ pub fn run() {
             commands::import_cfpack,
             commands::open_matte_editor,
             commands::preview_matte,
+            commands::get_photo_status,
+            commands::install_photo_mode,
+            commands::get_photo_progress,
+            commands::cancel_photo_install,
+            commands::remove_photo_mode,
             commands::suggested_backup_name,
             commands::export_all_data,
             commands::import_all_data,

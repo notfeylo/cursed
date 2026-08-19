@@ -9,6 +9,30 @@ happened to, not for the person who made it.
 
 ## 1.21.1 — unreleased
 
+### Photo mode: an optional background remover for photographs
+
+The built-in background removal is a flood fill. It is exact and instant on the
+artwork this app is for — logos, icons, screenshots, crosshairs — and it cannot
+cut out a person. Lit skin sits a few levels from white, so a tolerance wide
+enough to remove the background is wide enough to walk into the face; hair is
+semi-transparent at the strand level, which needs alpha matting rather than
+segmentation. A portrait came back with the whole face removed and only hair and
+eyes left, and no amount of tuning fixes that.
+
+So photographs now have their own path, using a learned model — and it is
+**optional and downloaded only when you ask for it**, because it is about 20 MB
+against an installer of 11. Nothing downloads at launch. Settings has a **Remove
+photo mode** button that deletes it again and tells you what you got back.
+
+The model is u2netp (4.36 MB, Apache 2.0) and the runtime is ONNX Runtime
+(15.4 MB). Both are checked against a published SHA-256 **and** a signature made
+with the release key before the library is ever loaded — a downloaded library
+that runs inside the app is a bigger trust decision than an installer you
+double-click, and it is treated that way.
+
+Photo mode is unavailable in the offline installer and says so plainly.
+`docs/PHOTO_MODE.md` has the sizes, the licences and the verification chain.
+
 ### Updating happens inside the app now
 
 No installer window appears at any point. No wizard, no progress window, no
