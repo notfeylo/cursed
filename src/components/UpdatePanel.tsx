@@ -223,7 +223,27 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
             </p>
           )}
 
-          {phase === "ready" ? (
+          {/* A release that publishes nothing this PC can install. Rare, and
+              worth saying plainly: the alternative is a Download button whose
+              only outcome is an error message. */}
+          {!status?.installer && phase === "available" ? (
+            <>
+              <p className="text-[11px] text-text-muted">
+                That release doesn&apos;t include an installer for this PC&apos;s processor.
+                The releases page has every build.
+              </p>
+              <Button
+                full
+                onClick={() =>
+                  void ipc
+                    .openExternal("https://github.com/notfeylo/cursed/releases/latest")
+                    .catch(() => undefined)
+                }
+              >
+                OPEN THE RELEASES PAGE
+              </Button>
+            </>
+          ) : phase === "ready" ? (
             <>
               <Button full onClick={() => void install()}>
                 INSTALL & RESTART

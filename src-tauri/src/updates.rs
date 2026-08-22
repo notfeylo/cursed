@@ -500,10 +500,24 @@ pub fn check() -> AppResult<UpdateStatus> {
         .find(|a| is_our_installer(&a.name))
         .cloned();
 
+    // **A release with no installer for this processor is still a release.**
+    //
+    // `newer && asset.is_some()` meant an ARM64 machine looking at a release
+    // that shipped x64 only was told "you're on the latest version" — which is
+    // false, and is the one answer that leaves the user with nothing to do
+    // about it. The update is announced; `installer` stays `None`, and the
+    // panel offers the releases page instead of a download it cannot perform.
+    if newer && asset.is_none() {
+        log::warn!(
+            "update: v{tag} publishes no {INSTALLER_SUFFIX} installer for this build; \
+             offering the manual download"
+        );
+    }
+
     Ok(UpdateStatus {
         current,
         latest: Some(tag),
-        newer_available: newer && asset.is_some(),
+        newer_available: newer,
         installer: newer.then(|| asset.as_ref().map(|a| a.name.clone())).flatten(),
         size: asset.as_ref().map(|a| a.size),
         // Trimmed hard: release notes are author-controlled text shown in a UI,
@@ -1902,5 +1916,76 @@ mod tests {
         assert!(record < teardown, "the record is written by the process being replaced");
         assert!(teardown < launch, "the installer must not race a live app");
         assert!(launch < exit, "exiting first would abandon the update");
+
+        // And the step that was missing: a launch that fails has to put back
+        // what the teardown released. Without it the error is returned to a
+        // frontend whose window has already been hidden, so the app does not
+        // report the failure - it disappears.
+        let recovery = at("abort_shutdown");
+        assert!(
+            launch < recovery && recovery < exit,
+            "a failed launch must revive the app before this function returns"
+        );
+    }
+
+    /// **A silent installer must never stop on a dialog.**
+    ///
+    /// The in-app update runs the installer with `/S`, so there is no installer
+    /// window on screen. A `MessageBox` in a hook still appears - parentless,
+    /// from a process the user cannot see, after the app that started the
+    /// update has already exited. The update does not fail; it waits forever
+    /// for a click on a box nobody can find.
+    ///
+    /// The check is reachability rather than absence: the dialog is right for
+    /// somebody running the installer by hand, and must simply be jumped over
+    /// when nobody is there to answer it.
+    #[test]
+    fn nothing_in_the_install_hook_can_stop_a_silent_run() {
+        let hooks = include_str!("../installer-hooks.nsh");
+        let body = hook_body(hooks, "NSIS_HOOK_PREINSTALL");
+        assert!(!body.is_empty(), "NSIS_HOOK_PREINSTALL not found");
+
+        let Some(dialog) = body
+            .iter()
+            .position(|line| line.trim_start().starts_with("MessageBox"))
+        else {
+            return; // no dialog at all is the other way to pass
+        };
+
+        let guard = body[..dialog]
+            .iter()
+            .rposition(|line| line.trim_start().starts_with("IfSilent"))
+            .expect("a MessageBox in the install hook must sit behind an IfSilent");
+
+        let label = body[guard]
+            .trim_start()
+            .strip_prefix("IfSilent ")
+            .expect("IfSilent")
+            .trim()
+            .to_owned();
+        let landing = body
+            .iter()
+            .position(|line| line.trim_start().starts_with(&format!("{label}:")))
+            .unwrap_or_else(|| panic!("the silent branch jumps to {label}, which does not exist"));
+
+        assert!(
+            landing > dialog,
+            "the silent branch lands before the dialog, so a silent run still shows it"
+        );
+    }
+
+    /// The install hook still refuses a machine that cannot run the app -
+    /// silently or not, `Abort` has to be reachable from both.
+    #[test]
+    fn the_windows_floor_still_refuses_the_install() {
+        let body = hook_body(include_str!("../installer-hooks.nsh"), "NSIS_HOOK_PREINSTALL");
+        assert!(
+            body.iter().any(|line| line.trim() == "Abort"),
+            "the build-number floor must still stop the install"
+        );
+        assert!(
+            body.iter().any(|line| line.contains("17134")),
+            "the floor is Windows 10 1803, build 17134"
+        );
     }
 }

@@ -1071,11 +1071,16 @@ pub fn install_update(app: AppHandle, version: String, installer: String) -> App
     // Then everything this process holds, released in order.
     crate::prepare_for_shutdown(&app);
 
-    // Only now. If this fails, the app has been torn down but not replaced —
-    // so the error is returned and the frontend can say so, and the user is one
-    // relaunch away from a working app rather than looking at an installer that
-    // silently did nothing.
-    updates::launch(&file)?;
+    // Only now — and if it fails, everything above is put straight back.
+    //
+    // Returning the error on its own was not enough: by this point the window
+    // is hidden, the tray icon is gone and the hotkeys are released, so the
+    // message went to a frontend nobody could see. What the user got was an app
+    // that disappeared and an update that never happened.
+    if let Err(e) = updates::launch(&file) {
+        crate::abort_shutdown(&app);
+        return Err(e);
+    }
 
     // Immediately, not on a timer. The old code waited a second before exiting
     // in the hope of winning a race against the installer's running-app check;

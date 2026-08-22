@@ -34,7 +34,19 @@
   IntCmp $0 17134 cursed_windows_ok cursed_windows_old cursed_windows_ok
 
   cursed_windows_old:
+    ; Silent first, and this is not a nicety.
+    ;
+    ; An in-app update runs this installer with /S, which means there is no
+    ; installer window on screen for a MessageBox to belong to. NSIS shows one
+    ; anyway: a modal dialog with no parent, from a process the user cannot
+    ; see, while the app that started the update has already exited. The update
+    ; does not fail - it waits, forever, for a click on a box nobody can find.
+    ;
+    ; A silent run refuses silently. The exit code is what the caller reads.
+    IfSilent cursed_windows_refuse
     MessageBox MB_ICONSTOP|MB_OK "Cursed needs Windows 10 version 1803 (build 17134) or newer.$\r$\n$\r$\nThis PC reports build $0. Cursed's window is built on Microsoft Edge WebView2, which Microsoft no longer supports on older versions of Windows, so it cannot run here."
+    cursed_windows_refuse:
+    DetailPrint "This PC reports Windows build $0, below the 17134 floor."
     Abort
 
   cursed_windows_ok:

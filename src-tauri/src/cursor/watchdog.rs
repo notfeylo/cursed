@@ -118,6 +118,36 @@ fn started() -> bool {
     started_slot().get().is_some()
 }
 
+/// Brings the watchdog back after a [`stop_and_wait`] that turned out not to be
+/// the end of the process.
+///
+/// There is exactly one caller and it is the reason this exists: an update
+/// that verifies, tears the app down, and then **fails to launch the
+/// installer**. The process carries on living, and without this it carries on
+/// living with no watchdog — so the next thing that resets the pointer scheme
+/// wins, silently, for the rest of the session. `start` cannot do this job: it
+/// is deliberately once-per-process, and after a stop its `OnceLock` is
+/// already set.
+pub fn restart() {
+    STOPPING.store(false, Ordering::SeqCst);
+
+    // Still running, so there is nothing to spawn — `disable` was all that
+    // happened to it.
+    if started() && !EXITED.load(Ordering::SeqCst) {
+        return;
+    }
+    EXITED.store(false, Ordering::SeqCst);
+
+    if !started() {
+        start();
+        return;
+    }
+    std::thread::Builder::new()
+        .name("cursorforge-watchdog".into())
+        .spawn(run)
+        .ok();
+}
+
 /// Starts the watchdog thread exactly once for the process lifetime.
 pub fn start() {
     if started_slot().set(()).is_err() {

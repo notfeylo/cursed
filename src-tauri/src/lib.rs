@@ -165,6 +165,48 @@ pub fn prepare_for_shutdown(app: &tauri::AppHandle) {
     }
 }
 
+/// Undoes [`prepare_for_shutdown`], for the one case where the shutdown does not
+/// end in an exit.
+///
+/// **An update that fails at the last step used to leave the app alive and
+/// invisible.** `install_update` verifies the installer, releases the watchdog,
+/// the hotkeys and the tray icon, hides the window, and only then spawns the
+/// installer — so a spawn that fails (antivirus quarantine, a file locked by
+/// the scanner, an exhausted desktop heap) returned an error to a frontend that
+/// no longer had a window to show it in. From the outside the app simply
+/// vanished: no window, no tray icon, no hotkeys, and the pointer scheme left
+/// undefended for the rest of the session.
+///
+/// This puts back everything that can be put back, so the failure is what it
+/// should always have been — an error message in a working app.
+///
+/// **One thing does not come back.** The single-instance mutex was destroyed on
+/// the way down and this process no longer holds it, so a second copy launched
+/// from now on will start rather than raising this window. That is a worse
+/// state than before the update attempt and a far better one than an app the
+/// user cannot see, and it lasts until the next restart.
+pub fn abort_shutdown(app: &tauri::AppHandle) {
+    log::warn!("shutdown: the installer did not start, so the app is being put back together");
+    SHUTTING_DOWN.store(false, Ordering::SeqCst);
+
+    cursor::watchdog::restart();
+    let settings = state::settings::get();
+    // After the restart, because `configure` is what decides whether the thread
+    // that is now running is allowed to act.
+    state::settings::propagate(&settings);
+
+    if let Err(e) = hotkeys::register(app, &settings) {
+        log::warn!("shutdown: hotkeys could not be re-registered: {e}");
+    }
+    if let Err(e) = tray::set_visible(app, settings.show_tray_icon) {
+        log::warn!("shutdown: the tray icon could not be restored: {e}");
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 /// Waits for any other copy of this executable in this Windows session to exit,
 /// and returns how many were still there when the wait ran out.
 ///
