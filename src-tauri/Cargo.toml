@@ -7,6 +7,12 @@ license = "MIT"
 repository = "https://github.com/notfeylo/cursed"
 edition = "2021"
 rust-version = "1.82"
+# Two binaries live here - the app, and the build-time catalog generator - and
+# `cargo run` refuses to guess between them. `tauri dev` runs `cargo run`, so
+# without this the whole dev loop stops at "could not determine which binary to
+# run" before the window ever opens. `tauri build` was unaffected, which is why
+# it went unnoticed: releases are built, not run.
+default-run = "cursorforge"
 
 [lib]
 name = "cursorforge_lib"

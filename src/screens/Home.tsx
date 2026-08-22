@@ -73,9 +73,7 @@ export function Home() {
             the question people open the app to ask, and it is the only way to
             tell two similar cursors apart after the fact. */}
         <div className="mt-5 flex w-full max-w-full flex-col items-center gap-2">
-          <span className="display text-[11px] text-text-dim">
-            {active.isDefault ? "USING" : "USING"}
-          </span>
+          <span className="display text-[11px] text-text-dim">USING</span>
           <span
             title={active.isDefault ? "Windows default" : (active.packName ?? "Custom cursor")}
             className={`display max-w-full truncate rounded-full border px-4 py-1.5 text-center text-[12px] ${
