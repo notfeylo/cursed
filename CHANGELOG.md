@@ -7,7 +7,83 @@ happened to, not for the person who made it.
 
 ---
 
-## 1.21.1 — unreleased
+## Unreleased
+
+### Cursor files can be imported
+
+Dropping a `.ani` or `.cur` on the import screen was answered with *"That file
+isn't something Cursed can use: only PNG, JPEG, GIF, WebP and BMP images can be
+imported"* — from a cursor app, about a cursor. The file picker had offered
+`.cur`, `.ani`, `.ico` and `.tif` for months; the decoder had never been able to
+read any of them.
+
+All four import now.
+
+- An **`.ani` arrives as an animation**, every frame with the delay it was
+  authored with, and plays back in the order its `seq` chunk asks for rather
+  than the order the frames happen to be stored in.
+- A **`.cur` keeps the hotspot it was made with**, carried through the trim and
+  the squaring so it still points at the same pixel of the artwork. Guessing it
+  is what makes a converted cursor click slightly to the left of where you point.
+- **`.ico` and TIFF** work, which is what the picker had been claiming.
+- Monochrome cursors — the crosshairs and I-beams Windows itself ships — are
+  drawn almost entirely with the "invert the screen" state, and a reader that
+  treats that as transparency returns a perfectly empty picture. Four of
+  Windows' own cursors imported as nothing at all. They are read properly now.
+
+All 189 cursor files in `C:\Windows\Cursors` decode, rebuild and re-export.
+
+### A cursor that was already cut out is no longer called a photograph
+
+Importing any downloaded cursor pack put this on screen:
+
+> This looks like a photo. Automatic background removal works on flat
+> backgrounds — logos, icons, screenshots — and it will not do a good job here.
+
+Nothing was wrong with the file. Every `.ani` and every cursor PNG arrives with
+its background already gone, and the check that decides whether a background
+*can* be removed was reading the colour of pixels behind alpha 0 — which is
+arbitrary data, reads as a busy high-contrast border, and fails every test.
+The still path had always asked "is there anything left to remove" first. The
+animated path did not.
+
+It now says what is actually true: nothing to remove, this image is already cut
+out.
+
+### Photo mode produces a cutout
+
+Photo mode could be downloaded and verified, and then did nothing: the model was
+on the disk and nothing ran it. It runs now — a person, a car, a pet or an
+object out of a real photograph, in about a quarter of a second, entirely on
+this machine. Settings has the panel that installs and removes it, and the
+refusal above offers it directly when the ordinary remover declines a photo.
+
+### Large photographs are no longer refused
+
+Any image over 4,096 pixels on a side was rejected with *"5824x3264, limit is
+4096x4096"*. A 24-megapixel camera, an 8K wallpaper and most stock photography
+are all over that on one axis, and every one of them is resampled down within
+milliseconds of arriving — the limit was costing nothing and refusing ordinary
+pictures. The guard is now a budget in pixels, which is what it was defending in
+the first place: 40 megapixels in, and a decompression bomb still stopped.
+
+### An update that cannot start no longer takes the app with it
+
+If the installer failed to launch — a scanner holding the file, a quarantine —
+the app had already released its hotkeys, removed its tray icon and hidden its
+window, so the error was reported to a window nobody could see. From the outside
+Cursed simply vanished, with the pointer scheme left undefended for the rest of
+the session. Everything is put back now, and the failure is an error message in
+a working app.
+
+A second one: on a PC too old to run Cursed, a silent update would stop on a
+message box with no window to belong to and wait forever for a click nobody
+could find. And a release that publishes no installer for your processor now
+says so and offers the releases page, rather than insisting you are up to date.
+
+---
+
+## 1.21.1 — 2026-08-19
 
 ### Photo mode: an optional background remover for photographs
 
