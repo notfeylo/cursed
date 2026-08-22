@@ -209,6 +209,57 @@ mod tests {
         out.into_inner()
     }
 
+    /// A real `.cur`, and a real `.ani` with three frames.
+    ///
+    /// Seeded from this app's own writers rather than hand-assembled, so the
+    /// mutations start from a structurally valid file and spend their budget on
+    /// the interesting failures — a length that overruns, a frame count that
+    /// disagrees with the frames, a directory entry pointing at itself.
+    fn cur(size: u32) -> Vec<u8> {
+        let art = crate::build::bitmap::Bitmap::new(size, size);
+        crate::build::cur_writer::write_cur(&[crate::build::cur_writer::CursorImage::new(
+            art,
+            (1, 1),
+        )])
+        .expect("a cursor we just made must encode")
+    }
+
+    fn ani(size: u32) -> Vec<u8> {
+        let frames: Vec<crate::build::ani_writer::AniFrame> = (0..3)
+            .map(|_| crate::build::ani_writer::AniFrame {
+                images: vec![crate::build::cur_writer::CursorImage::new(
+                    crate::build::bitmap::Bitmap::new(size, size),
+                    (0, 0),
+                )],
+                delay_ms: 100,
+            })
+            .collect();
+        crate::build::ani_writer::write_ani(
+            &frames,
+            1.0,
+            &crate::build::ani_writer::AniMetadata::default(),
+        )
+        .expect("an animation we just made must encode")
+    }
+
+    /// The cursor-file readers, which parse offsets and lengths a stranger
+    /// wrote.
+    ///
+    /// Every other decoder in this app belongs to a crate that has been fuzzed
+    /// by its own maintainers. These two are ours, they are reached by dragging
+    /// a file onto the window, and every field in both formats is an index into
+    /// the buffer — which is the shape of bug that ends in a panic in a release
+    /// build with no console to print it.
+    #[test]
+    fn reading_a_cursor_file_never_panics() {
+        let seeds = vec![cur(32), ani(32), cur(1), b"RIFF\x00\x00\x00\x00ACON".to_vec()];
+        hammer("icon_reader::decode_icon", &seeds, ITERATIONS, |bytes| {
+            let _ = crate::build::icon_reader::decode_icon(bytes);
+            let _ = crate::build::icon_reader::decode_ani(bytes);
+            let _ = crate::build::icon_reader::hotspot_fraction(bytes);
+        });
+    }
+
     /// The format identifier. Everything downstream trusts its answer, so it is
     /// the first thing that has to survive nonsense.
     #[test]
@@ -226,7 +277,7 @@ mod tests {
     /// dropped file reaches.
     #[test]
     fn decoding_an_image_never_panics() {
-        let seeds = vec![png(16, 16), gif(16, 16), bmp(16, 16)];
+        let seeds = vec![png(16, 16), gif(16, 16), bmp(16, 16), cur(16), ani(16)];
         hammer("pipeline::decode", &seeds, 600, |bytes| {
             let _ = crate::build::pipeline::decode(bytes.to_vec());
         });

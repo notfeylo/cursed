@@ -53,12 +53,18 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 
+# Only the decoders this app can actually be handed. `tiff` is here because the
+# file picker has always offered it: a filter that lists a format the decoder
+# refuses is a dialog that lets somebody choose a file and then calls it
+# unreadable. `.cur`, `.ani` and `.ico` are read by `build::icon_reader`
+# instead - this crate has no decoder for a cursor container.
 image = { version = "0.25", default-features = false, features = [
     "png",
     "jpeg",
     "webp",
     "bmp",
     "gif",
+    "tiff",
 ] }
 fast_image_resize = { version = "5", features = ["image"] }
 resvg = { version = "0.45", default-features = false }

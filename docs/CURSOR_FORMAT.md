@@ -167,3 +167,34 @@ are covered by round-trip tests that write real bytes to disk and call
 `LoadImageW(…, IMAGE_CURSOR, …)`; the runtime does the same check before any
 generated file can be installed. A cursor that fails to load surfaces as a clear
 error rather than an invisible pointer.
+
+## Reading one back: the four states of a monochrome cursor
+
+`build/icon_reader.rs` is the opposite direction — `.cur`, `.ico` and `.ani`
+parsed from bytes, because the import path is handed bytes and because
+`LoadImageW` cannot give back more than one frame of an animation (see the trap
+above).
+
+Most of it is the writers in reverse. The part that is not, and that cost the
+import of four of Windows' own cursors, is that **a 1-bpp cursor is not a
+picture with a transparency mask.** It is two masks, and the pair has four
+meanings:
+
+| AND | XOR | Windows draws |
+| --- | --- | --- |
+| 0 | 0 | black |
+| 0 | 1 | white |
+| 1 | 0 | the screen — transparent |
+| 1 | 1 | **the screen, inverted** |
+
+The last row is how a crosshair stays visible over anything, and it is what
+`cross_l.cur`, `lcross.cur`, `cross_m.cur` and `libeam.cur` are made of almost
+entirely. Read with the obvious rule — "AND set means transparent" — every one
+of those pixels disappears and the whole cursor decodes to an empty bitmap. The
+import then fails one step later with "the image is completely transparent",
+which points at the wrong module.
+
+An inverted pixel cannot survive as an inversion once it is a bitmap, so it
+becomes opaque black: what an inverted pointer looks like over the light
+backgrounds these were drawn for, and what every cursor editor shows for the
+same files.

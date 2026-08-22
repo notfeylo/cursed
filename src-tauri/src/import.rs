@@ -29,8 +29,13 @@ const CURSOR_FILES: [&str; 2] = ["cur", "ani"];
 /// Everything the decoder can already read. GIF and APNG become real animated
 /// cursors; the rest become still ones. `ico` is here because a downloaded
 /// "cursor" is very often an icon file wearing the wrong extension.
-const IMAGE_FILES: [&str; 9] =
-    ["png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif"];
+///
+/// `tiff` sits beside `tif` because both spellings are in the wild and a folder
+/// import that silently skips half of them is worse than one that refuses them
+/// all. Nothing here decides what a file *is* — that is `pipeline::sniff_input`,
+/// from the bytes — this only decides what is worth opening.
+const IMAGE_FILES: [&str; 10] =
+    ["png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif", "tiff"];
 /// Read for metadata only — never executed, never installed.
 const META_FILES: [&str; 2] = ["inf", "txt"];
 

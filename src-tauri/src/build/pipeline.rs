@@ -15,10 +15,31 @@ use std::time::Duration;
 
 /// 20 MB in, per PRD §6.1. Comfortably more than any real cursor source.
 pub const MAX_INPUT_BYTES: usize = 20 * 1024 * 1024;
-pub const MAX_DIMENSION: u32 = 4_096;
-/// The real defence: a 4096x4096 RGBA image is 64 MB decoded, and that is the
-/// ceiling regardless of how small the compressed file claimed to be.
-pub const MAX_PIXELS: u64 = (MAX_DIMENSION as u64) * (MAX_DIMENSION as u64);
+
+/// The longest a single side may be.
+///
+/// **Deliberately far larger than any cursor**, because this is a bomb guard
+/// and not a quality rule: everything is resampled to `WORKING_CAP` within
+/// milliseconds of arriving, so a large import costs one decode and nothing
+/// after it.
+///
+/// This was 4,096, which is the shape of the limit rather than its purpose, and
+/// it refused ordinary pictures. A 5,824x3,264 stock photograph — an entirely
+/// normal thing to drag onto a cursor app — was answered with "5824x3264, limit
+/// is 4096x4096", which reads as the app being broken rather than as the file
+/// being unusual. A 24-megapixel camera and an 8K wallpaper both cleared the
+/// old side limit on one axis and failed it on the other.
+pub const MAX_DIMENSION: u32 = 16_384;
+
+/// The real defence, and the one that has not moved in spirit: **a budget in
+/// pixels, not in file size.**
+///
+/// A compressed file says nothing about what it costs to decode — that is what
+/// makes a decompression bomb a bomb. 40 megapixels is 160 MB of RGBA at the
+/// moment of decode and nothing afterwards, which covers an 8K wallpaper and a
+/// full-frame camera's output while still refusing the 100,000-square PNG that
+/// is 40 KB on disk.
+pub const MAX_PIXELS: u64 = 40_000_000;
 pub const DECODE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Frames beyond this are dropped before decode, so a 10,000-frame GIF cannot
 /// turn into 10,000 resample jobs.
@@ -53,10 +74,44 @@ impl Source {
     }
 }
 
+/// What kind of file arrived.
+///
+/// A cursor file is not an image format and cannot be one: `.cur` and `.ani`
+/// are containers of images, and the `image` crate has no decoder for either.
+/// They are still the most natural thing in the world to drag onto a cursor
+/// app — which is why dropping one used to be answered with "only PNG, JPEG,
+/// GIF, WebP and BMP images can be imported".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Input {
+    Image(image::ImageFormat),
+    /// A `.cur` or a `.ico`. One picture, and for a cursor a hotspot.
+    Icon,
+    /// A `.ani`: a RIFF container of whole `.cur` files with per-frame delays.
+    Ani,
+}
+
 /// Identifies a format from its leading bytes.
 ///
 /// Extensions are a claim made by whoever named the file; magic bytes are a
-/// property of the file itself. Only the latter decides what decoder runs.
+/// property of the file itself. Only the latter decides what decoder runs — so
+/// a `.ani` renamed to `.png`, which is exactly what half the cursor packs on
+/// the internet contain, is still read as the animation it is.
+pub fn sniff_input(bytes: &[u8]) -> AppResult<Input> {
+    if bytes.len() < 12 {
+        return Err(AppError::invalid("the file is too short to be an image"));
+    }
+    // Checked before the image formats: an `.ani` and a WebP both begin `RIFF`,
+    // and they are told apart by the four bytes after the size.
+    if crate::build::icon_reader::looks_like_an_ani(bytes) {
+        return Ok(Input::Ani);
+    }
+    if crate::build::icon_reader::looks_like_an_icon(bytes) {
+        return Ok(Input::Icon);
+    }
+    Ok(Input::Image(sniff(bytes)?))
+}
+
+/// The same, for the image formats alone.
 pub fn sniff(bytes: &[u8]) -> AppResult<image::ImageFormat> {
     if bytes.len() < 12 {
         return Err(AppError::invalid("the file is too short to be an image"));
@@ -69,9 +124,11 @@ pub fn sniff(bytes: &[u8]) -> AppResult<image::ImageFormat> {
         [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => {
             image::ImageFormat::WebP
         }
+        [b'I', b'I', 42, 0, ..] | [b'M', b'M', 0, 42, ..] => image::ImageFormat::Tiff,
         _ => {
             return Err(AppError::invalid(
-                "only PNG, JPEG, GIF, WebP and BMP images can be imported",
+                "That file isn't a picture or a cursor. Drop a PNG, JPEG, GIF, WebP, BMP or \
+                 TIFF image, or a .cur, .ani or .ico cursor file.",
             ))
         }
     };
@@ -84,11 +141,16 @@ fn guard_dimensions(width: u32, height: u32) -> AppResult<()> {
     }
     if width > MAX_DIMENSION || height > MAX_DIMENSION {
         return Err(AppError::ImageTooLarge(format!(
-            "{width}x{height}, limit is {MAX_DIMENSION}x{MAX_DIMENSION}"
+            "{width}x{height}. One side can be at most {MAX_DIMENSION} pixels"
         )));
     }
     if (width as u64) * (height as u64) > MAX_PIXELS {
-        return Err(AppError::ImageTooLarge("too many pixels".into()));
+        return Err(AppError::ImageTooLarge(format!(
+            "{width}x{height} is {} megapixels, and {} is the most that can be decoded at \
+             once. Scale it down and try again",
+            (width as u64 * height as u64) / 1_000_000,
+            MAX_PIXELS / 1_000_000
+        )));
     }
     Ok(())
 }
@@ -110,13 +172,13 @@ pub fn decode(bytes: Vec<u8>) -> AppResult<Source> {
             MAX_INPUT_BYTES / 1_048_576
         )));
     }
-    let format = sniff(&bytes)?;
+    let input = sniff_input(&bytes)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::Builder::new()
         .name("cursorforge-decode".into())
         .spawn(move || {
-            let _ = tx.send(decode_inner(&bytes, format));
+            let _ = tx.send(decode_input(&bytes, input));
         })
         .map_err(|e| AppError::msg(format!("could not start the decoder: {e}")))?;
 
@@ -125,6 +187,34 @@ pub fn decode(bytes: Vec<u8>) -> AppResult<Source> {
         Err(_) => Err(AppError::invalid(
             "the image took too long to decode and was abandoned",
         )),
+    }
+}
+
+fn decode_input(bytes: &[u8], input: Input) -> AppResult<Source> {
+    match input {
+        Input::Image(format) => decode_inner(bytes, format),
+        Input::Icon => {
+            // A cursor file already carries alpha, so nothing downstream will
+            // try to key a background out of it — `matte` leaves an image that
+            // arrived transparent exactly as it found it.
+            let image = crate::build::icon_reader::decode_icon(bytes)?;
+            guard_dimensions(image.bitmap.width, image.bitmap.height)?;
+            Ok(Source::Static(image.bitmap))
+        }
+        Input::Ani => {
+            let frames = crate::build::icon_reader::decode_ani(bytes)?;
+            if let Some((first, _)) = frames.first() {
+                guard_dimensions(first.width, first.height)?;
+            }
+            // A single-frame `.ani` is a still cursor wearing an animation's
+            // container, and there are a lot of them. Treating it as animated
+            // would write a one-frame `.ani` back out for no reason.
+            if frames.len() == 1 {
+                let (bitmap, _) = frames.into_iter().next().unwrap_or_else(|| unreachable!());
+                return Ok(Source::Static(bitmap));
+            }
+            Ok(Source::Animated(frames))
+        }
     }
 }
 
@@ -235,6 +325,10 @@ pub enum Cut {
     Force,
     /// Leave the image exactly as it arrived.
     Keep,
+    /// Cut it out with the learned matte, for the photographs the flood fill
+    /// is honest about not being able to key. Only reachable once photo mode
+    /// has been downloaded — see `crate::photo`.
+    Photo,
 }
 
 /// The largest resolution anything downstream of the import actually uses.
@@ -303,6 +397,11 @@ pub fn prepare_master_reported(
         Cut::Auto => crate::build::matte::remove_background(&mut source),
         Cut::Force => crate::build::matte::remove_background_forced(&mut source),
         Cut::Keep => crate::build::matte::MatteReport::not_attempted(),
+        // The one cut that can fail for a reason outside the image: the model
+        // has to be on the disk. That is an error rather than a refusal —
+        // a refusal means "this cannot be keyed", and this means "ask again
+        // once it is installed".
+        Cut::Photo => crate::photo::remove_background_learned(&mut source)?,
     };
     if report.removed > 0.0 {
         log::debug!(
@@ -343,6 +442,43 @@ pub fn prepare_master_reported(
         ));
     }
     Ok((trimmed.squared().padded(1), report))
+}
+
+/// Where a point on an imported image lands on the master built from it.
+///
+/// Only one caller needs this and it needs it badly: a `.cur` states its own
+/// hotspot, and `prepare_master` then trims, squares and pads the artwork —
+/// so the coordinate the file gave means something different by the time the
+/// hotspot picker opens. Dropping it and guessing instead is how importing a
+/// cursor produces one that clicks a few pixels off its own tip.
+///
+/// **Self-checking.** The mapping replays the geometry of `prepare_master` —
+/// trim to the opaque bounds, centre on a square, pad by one — and then
+/// verifies the master it was handed is the size that geometry predicts.
+/// Anything else means a step it does not model ran (the working-resolution
+/// cap, or a background cut that moved the bounds), and it returns `None`
+/// rather than a plausible wrong answer.
+pub fn map_point_to_master(
+    original: &Bitmap,
+    master: &Bitmap,
+    point: (f32, f32),
+) -> Option<(f32, f32)> {
+    let (x0, y0, x1, y1) = original.opaque_bounds()?;
+    let (trimmed_w, trimmed_h) = (x1 - x0 + 1, y1 - y0 + 1);
+    let side = trimmed_w.max(trimmed_h);
+    if master.width != side + 2 || master.height != side + 2 {
+        return None;
+    }
+
+    let scale = |value: f32, extent: u32| value * (extent.saturating_sub(1)).max(1) as f32;
+    let x = scale(point.0, original.width) - x0 as f32 + ((side - trimmed_w) / 2) as f32 + 1.0;
+    let y = scale(point.1, original.height) - y0 as f32 + ((side - trimmed_h) / 2) as f32 + 1.0;
+
+    let (dx, dy) = (
+        (master.width.saturating_sub(1)).max(1) as f32,
+        (master.height.saturating_sub(1)).max(1) as f32,
+    );
+    Some(((x / dx).clamp(0.0, 1.0), (y / dy).clamp(0.0, 1.0)))
 }
 
 /// How much of the frame the subject must leave unused before it is worth
@@ -400,13 +536,81 @@ fn recut_at_full_resolution(
         Cut::Auto => crate::build::matte::remove_background(&mut region),
         Cut::Force => crate::build::matte::remove_background_forced(&mut region),
         Cut::Keep => crate::build::matte::MatteReport::not_attempted(),
+        // **The learned matte is not re-run here, and that is not an
+        // optimisation.**
+        //
+        // The model answers "which part of this picture is the subject", and
+        // the crop has already made the subject the whole picture — so asked
+        // again it answers "all of it", returns a fully opaque region, and that
+        // region replaces the good cut that produced the crop. The symptom is
+        // exact and was reproducible: photo mode removed 78% of a photograph
+        // and then handed back the original, uncut, at a slightly different
+        // size.
+        //
+        // What the second pass was for is resolution, not a second opinion. So
+        // the alpha the first pass worked out is carried onto the
+        // full-resolution pixels instead, which is the part that was actually
+        // worth having.
+        Cut::Photo => {
+            transfer_alpha(proxy, (x0, y0, x1, y1), &mut region);
+            crate::build::matte::MatteReport::not_attempted()
+        }
     };
 
     // If the second cut found nothing at all, the first one is still good.
     if region.opaque_bounds().is_none() {
         return Ok(None);
     }
+
+    // The same failure the learned path is protected from above, in the shape
+    // the classical path can produce it: a re-cut that removed *nothing* leaves
+    // a rectangle of background, and returning it throws away a first cut that
+    // had worked. Only the first pass's crop is kept in that case.
+    if cut != Cut::Photo && region.opaque_bounds() == Some((0, 0, region.width - 1, region.height - 1))
+    {
+        let fully_opaque = region
+            .pixels
+            .iter()
+            .skip(3)
+            .step_by(4)
+            .all(|&alpha| alpha == 255);
+        if fully_opaque {
+            log::debug!("the full-resolution re-cut removed nothing; keeping the first cut");
+            return Ok(None);
+        }
+    }
     Ok(Some(region))
+}
+
+/// Copies the alpha a cut worked out on the proxy onto the full-resolution
+/// crop of the same region.
+///
+/// The two are the same picture at two sizes, so the matte transfers by scaling
+/// it: a matte is smooth by construction, and an upscaled one is a softer edge
+/// rather than a wrong one. Colour comes from the full-resolution pixels, which
+/// is the entire point of having cropped them.
+fn transfer_alpha(proxy: &Bitmap, bounds: (u32, u32, u32, u32), region: &mut Bitmap) {
+    let (x0, y0, x1, y1) = bounds;
+    let (pw, ph) = (proxy.width as f32, proxy.height as f32);
+    // The same rectangle, and the same one-pixel margin, that cropped the
+    // original — or the alpha lands offset from the pixels it belongs to.
+    let cropped = proxy.cropped(
+        (x0 as f32 / pw) - (1.0 / pw),
+        (y0 as f32 / ph) - (1.0 / ph),
+        ((x1 + 1) as f32 / pw) + (1.0 / pw),
+        ((y1 + 1) as f32 / ph) + (1.0 / ph),
+    );
+    let Ok(scaled) = cropped.resized(region.width, region.height) else {
+        return;
+    };
+    for y in 0..region.height {
+        for x in 0..region.width {
+            let [r, g, b, existing] = region.pixel(x, y);
+            let matte = scaled.alpha(x, y);
+            let combined = ((existing as u32 * matte as u32) / 255) as u8;
+            region.set_pixel(x, y, [r, g, b, combined]);
+        }
+    }
 }
 
 /// Geometric and tonal edits applied to a user's own artwork before it becomes
@@ -496,12 +700,35 @@ pub fn prepare_animation_with(
     // all, and at what tolerance. `remove_background_at` takes a chosen
     // tolerance and skips the keyability refusal, which is correct here — the
     // refusal was already considered once, for the sequence.
+    // Photo mode is per-frame by necessity rather than by choice: the model
+    // finds the subject, and in an animation the subject moves. One matte
+    // applied to every frame would cut frame one's silhouette out of frame
+    // twenty. The cost is one inference per frame, which is why the frame cap
+    // matters more here than anywhere else.
+    let learned = cut == Cut::Photo;
+    if learned {
+        // Attempted once, up front, so "photo mode is not installed" is an
+        // error before any work rather than sixty failures during it.
+        let mut probe = working_copy(&frames[0].0).unwrap_or_else(|_| frames[0].0.clone());
+        crate::photo::remove_background_learned(&mut probe)?;
+    }
+
     let decision: Option<i32> = match cut {
-        Cut::Keep => None,
+        Cut::Keep | Cut::Photo => None,
         _ => {
             let first = working_copy(&frames[0].0).unwrap_or_else(|_| frames[0].0.clone());
             let keyability = crate::build::matte::assess(&first);
-            if cut == Cut::Auto && !keyability.confident {
+            // Checked before the assessment is believed, exactly as the still
+            // path checks it. Every `.ani` and every animated cursor pack
+            // arrives with its background already gone, and the four signals
+            // measure the colour of pixels behind alpha 0 — which is arbitrary,
+            // reads as a busy border, and fails all of them. The old log line
+            // for this case said "the first frame reads as a photograph" about
+            // a cursor somebody had downloaded as a cursor.
+            if cut == Cut::Auto && crate::build::matte::already_cut_out(&first) {
+                log::info!("matte: the animation already has transparency; leaving it alone");
+                None
+            } else if cut == Cut::Auto && !keyability.confident {
                 log::info!(
                     "matte: not keying this animation — the first frame reads as a photograph"
                 );
@@ -519,7 +746,14 @@ pub fn prepare_animation_with(
             // in size stay identical in size and the union rectangle below still
             // means something.
             let mut copy = working_copy(bitmap).unwrap_or_else(|_| bitmap.clone());
-            if let Some(tolerance) = decision {
+            if learned {
+                // A frame the model cannot key is left alone rather than
+                // dropped: a missing frame changes the animation's timing, and
+                // the probe above already proved the model is there at all.
+                if let Err(e) = crate::photo::remove_background_learned(&mut copy) {
+                    log::warn!("photo mode: a frame could not be keyed, keeping it: {e}");
+                }
+            } else if let Some(tolerance) = decision {
                 crate::build::matte::remove_background_at(&mut copy, tolerance);
             }
             (copy, *delay)
@@ -733,6 +967,81 @@ pub fn preview_ladder(master: &Bitmap, options: &Finish) -> AppResult<Vec<(u32, 
 mod tests {
     use super::*;
 
+    /// A `.cur` dropped on the window has to arrive as an animation-free cursor
+    /// **with the hotspot the file states**, not one guessed from its shape.
+    #[test]
+    fn a_dropped_cursor_file_decodes_and_keeps_its_hotspot() {
+        use crate::build::cur_writer::{self, CursorImage};
+
+        // A subject that does not fill its canvas and is not square, so the
+        // mapping has to survive a trim, a square and a pad rather than an
+        // identity transform.
+        let mut art = Bitmap::new(64, 64);
+        for y in 20..40 {
+            for x in 10..50 {
+                art.set_pixel(x, y, [255, 0, 0, 255]);
+            }
+        }
+        // The stated hotspot sits on the subject's top-left corner.
+        let bytes = cur_writer::write_cur(&[CursorImage::new(art.clone(), (10, 20))]).expect("cur");
+
+        assert_eq!(sniff_input(&bytes).expect("sniffed"), Input::Icon);
+        let source = decode(bytes.clone()).expect("a cursor file decodes");
+        assert!(!source.is_animated());
+
+        let stated = crate::build::icon_reader::hotspot_fraction(&bytes).expect("stated");
+        let master = prepare_master(source.first().expect("frame")).expect("master");
+        let (x, y) = map_point_to_master(source.first().expect("frame"), &master, stated)
+            .expect("the geometry is the one the mapping models");
+
+        // The subject is 40x20 at (10,20); squared onto 40 and padded by one,
+        // its top-left corner lands at (1, 11) of a 42 px master.
+        let expect = |pixel: f32| pixel / 41.0;
+        assert!((x - expect(1.0)).abs() < 0.02, "x was {x}");
+        assert!((y - expect(11.0)).abs() < 0.02, "y was {y}");
+    }
+
+    /// An animated cursor must not arrive as a picture of its first frame.
+    #[test]
+    fn a_dropped_ani_decodes_as_an_animation() {
+        use crate::build::cur_writer::CursorImage;
+
+        let frames: Vec<AniFrame> = (0..5)
+            .map(|index| {
+                let mut art = Bitmap::new(32, 32);
+                for y in 0..32 {
+                    for x in 0..32 {
+                        art.set_pixel(x, y, [index as u8 * 20, 0, 0, 255]);
+                    }
+                }
+                AniFrame {
+                    images: vec![CursorImage::new(art, (0, 0))],
+                    delay_ms: 80,
+                }
+            })
+            .collect();
+        let bytes =
+            ani_writer::write_ani(&frames, 1.0, &AniMetadata::default()).expect("write the ani");
+
+        assert_eq!(sniff_input(&bytes).expect("sniffed"), Input::Ani);
+        let source = decode(bytes).expect("an animated cursor decodes");
+        assert!(source.is_animated(), "a .ani must not import as a still");
+        assert_eq!(source.frame_count(), 5);
+    }
+
+    /// The message a user sees when they drop something that genuinely is not
+    /// art must name what would work — including the cursor formats, which is
+    /// what it did not do.
+    #[test]
+    fn an_unusable_file_is_refused_with_a_message_that_lists_what_works() {
+        let refusal = decode(b"not a picture, not a cursor, just some text.".to_vec())
+            .expect_err("plain text is not importable")
+            .to_string();
+        for expected in [".cur", ".ani", "PNG"] {
+            assert!(refusal.contains(expected), "{refusal:?} never mentions {expected}");
+        }
+    }
+
     fn png_bytes(width: u32, height: u32) -> Vec<u8> {
         let mut buffer = image::RgbaImage::new(width, height);
         for pixel in buffer.pixels_mut() {
@@ -768,7 +1077,51 @@ mod tests {
     fn dimension_guard_rejects_a_decompression_bomb() {
         assert!(guard_dimensions(MAX_DIMENSION + 1, 1).is_err());
         assert!(guard_dimensions(0, 10).is_err());
-        assert!(guard_dimensions(MAX_DIMENSION, MAX_DIMENSION).is_ok());
+        assert!(guard_dimensions(1, 0).is_err());
+
+        // The budget is in pixels, so the square at the side limit is far past
+        // it — 16,384 squared is 268 megapixels — and is refused by the budget
+        // rather than by the side.
+        assert!(guard_dimensions(MAX_DIMENSION, MAX_DIMENSION).is_err());
+        // 36 megapixels is under the budget; 49 is over it. The line is the
+        // budget, not either side.
+        assert!(guard_dimensions(6_000, 6_000).is_ok());
+        assert!(guard_dimensions(7_000, 7_000).is_err());
+    }
+
+    /// **The regression this limit was raised for.**
+    ///
+    /// Every one of these is an ordinary picture somebody could drag onto the
+    /// window, and the old 4,096-a-side rule refused all of them — with
+    /// "5824x3264, limit is 4096x4096", which reads as the app being broken.
+    /// They are all resampled to `WORKING_CAP` within milliseconds of arriving,
+    /// so accepting them costs one decode and nothing after it.
+    #[test]
+    fn ordinary_large_photographs_are_not_refused() {
+        for (width, height, what) in [
+            (5_824u32, 3_264u32, "a stock photograph"),
+            (6_000, 4_000, "a 24 MP camera"),
+            (7_680, 4_320, "an 8K wallpaper"),
+            (4_032, 3_024, "a phone photograph"),
+            (12_000, 2_000, "a panorama"),
+        ] {
+            assert!(
+                guard_dimensions(width, height).is_ok(),
+                "{what} ({width}x{height}) was refused"
+            );
+        }
+    }
+
+    /// And the bomb it still has to stop: small on disk, enormous decoded.
+    #[test]
+    fn a_bomb_is_still_a_bomb() {
+        for (width, height) in [(60_000u32, 60_000u32), (16_000, 16_000), (10_000, 9_000)] {
+            assert!(
+                guard_dimensions(width, height).is_err(),
+                "{width}x{height} is {} megapixels and must be refused",
+                (width as u64 * height as u64) / 1_000_000
+            );
+        }
     }
 
     #[test]

@@ -137,12 +137,47 @@ export const importAllData = (src: string) => call<RestoreReport>("import_all_da
  * `force` cuts regardless, for a PNG that has an alpha channel and a white card
  * behind it anyway. `keep` leaves it exactly as it arrived.
  */
-export type Cut = "auto" | "force" | "keep";
+export type Cut = "auto" | "force" | "keep" | "photo";
 
 export const importImage = (path: string, cut: Cut = "auto") =>
   call<ImportedImage>("import_image", { path, cut });
 export const importImageBytes = (bytes: number[], cut: Cut = "auto") =>
   call<ImportedImage>("import_image_bytes", { bytes, cut });
+
+/* ── photo mode ────────────────────────────────────────────── */
+
+/**
+ * The optional learned matte, downloaded on request.
+ *
+ * `cut: "photo"` is what runs it, and it is only ever offered once
+ * `installed` is true — asking for it without the model is an error rather
+ * than a slow no-op.
+ */
+export interface PhotoStatus {
+  available: boolean;
+  installed: boolean;
+  /** What a first use would cost, in bytes. A measured figure. */
+  downloadBytes: number;
+  /** What removing it would give back. */
+  installedBytes: number;
+  unavailableReason: string | null;
+}
+
+export interface PhotoProgress {
+  running: boolean;
+  received: number;
+  total: number;
+  /** True once the download has finished and been verified. */
+  installed: boolean;
+  error: string | null;
+}
+
+export const getPhotoStatus = () => call<PhotoStatus>("get_photo_status");
+export const installPhotoMode = () => call<void>("install_photo_mode");
+export const getPhotoProgress = () => call<PhotoProgress>("get_photo_progress");
+export const cancelPhotoInstall = () => call<void>("cancel_photo_install");
+/** Returns the bytes reclaimed. */
+export const removePhotoMode = () => call<number>("remove_photo_mode");
 
 /* ── the matte editor ──────────────────────────────────────── */
 

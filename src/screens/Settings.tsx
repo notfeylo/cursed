@@ -3,6 +3,7 @@ import { FolderOpen, FolderPlus, Info, Trash2 } from "lucide-react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { UpdatePanel } from "../components/UpdatePanel";
+import { PhotoModePanel } from "../components/PhotoModePanel";
 import {
   Button,
   Card,
@@ -193,6 +194,9 @@ export function SettingsScreen() {
 
         <SectionTitle>Updates</SectionTitle>
         <UpdatePanel autoCheck />
+
+        <SectionTitle>Background removal</SectionTitle>
+        <PhotoModePanel />
 
         <SectionTitle>My cursors</SectionTitle>
         <Card>

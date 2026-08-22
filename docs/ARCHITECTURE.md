@@ -254,6 +254,9 @@ src-tauri/src/
 ├── build/
 │   ├── cur_writer.rs ICONDIR / ICONDIRENTRY / BGRA DIB / AND mask
 │   ├── ani_writer.rs RIFF ACON / anih / rate / seq / fram
+│   ├── icon_reader.rs the same two formats read back, from bytes: DIB, PNG
+│   │                  frames, the 1-bpp invert state, hotspots, seq order
+│   ├── cur_reader.rs  one frame of a cursor *file*, drawn by Windows
 │   ├── bitmap.rs     resample, trim, tint, outline
 │   ├── svg.rs        resvg rasterisation
 │   ├── hotspot.rs    centroid / tip-detect / manual

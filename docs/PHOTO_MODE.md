@@ -128,7 +128,41 @@ and a `.minisig` for each, and their SHA-256 hashes are compiled into the build.
 Every signature was verified against the public key locally before the release
 was published.
 
-**What is not yet wired: inference itself.** The download, verification,
-storage, removal and reporting are built and tested; the `ort` session that
-turns the model into an alpha matte is not. Photo mode will install correctly
-and does not yet produce a cutout.
+**Wired end to end.** The `ort` session, the pre- and post-processing, the
+`Cut::Photo` path through the pipeline, the Settings panel that installs and
+removes it, and the offer on the refusal banner are all in place. Photo mode
+installs, runs and produces a cutout.
+
+### How it runs
+
+| Stage | What happens |
+| --- | --- |
+| Load | `ort::init_from` resolves the downloaded DLL on **first use**, never at launch |
+| Prepare | resize to 320x320, composite onto black, ImageNet normalisation, NCHW |
+| Run | one session, cached between images; the first of the seven outputs is the fused map |
+| Post | normalise the map against its own extremes, scale it back to the image, multiply into alpha |
+| Check | `matte::survivor_is_coherent` — a model that shreds the subject is reverted, exactly as a bad flood fill is |
+
+Measured on the development machine (x64, release build): **236-952 ms** per
+image end to end, including decode, for sources from 1,200x800 to 5,824x3,264.
+An animation is one inference **per frame**, because the subject moves.
+
+### The one thing the full-resolution re-cut must not do
+
+`prepare_master` runs its cut on a proxy capped at `WORKING_CAP`, then crops the
+original to the subject and cuts again at full resolution. **The learned matte
+is not re-run there.** The model answers "which part of this picture is the
+subject", and the crop has already made the subject the whole picture — asked
+again it says "all of it", hands back a fully opaque region, and that region
+replaces the good cut that produced the crop. The symptom was exact and
+reproducible: 78% of a photograph removed, and then the original returned
+uncut. The proxy's alpha is scaled onto the full-resolution pixels instead,
+which is the part that was worth having.
+
+### Removing it while it is loaded
+
+Windows will not delete a DLL that is mapped into a running process, and after
+one cutout this one is. `remove()` drops the session, deletes what it can, and
+records a marker for anything left; photo mode reports itself uninstalled from
+that moment and the next launch sweeps up the file. Without that the Remove
+button silently frees nothing and the size on screen never drops.

@@ -114,6 +114,28 @@ impl MatteReport {
         }
     }
 
+    /// What a **learned** matte did, reported in the same shape as a keyed one.
+    ///
+    /// Photo mode produces an alpha channel rather than a flood fill, and every
+    /// consumer of this report — the banner, the toggle's hint, the preview —
+    /// only ever asks how much came off and whether anything was refused. Those
+    /// questions have the same answers either way, so they get the same struct
+    /// rather than a parallel one.
+    pub fn learned(removed: f32, keyability: Keyability) -> Self {
+        Self {
+            removed,
+            already_had_alpha: false,
+            refused: None,
+            keyability,
+        }
+    }
+
+    /// A refusal raised outside this module — photo mode's own sanity check on
+    /// what the model gave back.
+    pub fn refused(reason: Refusal, keyability: Keyability) -> Self {
+        Self::refusing(reason, keyability)
+    }
+
     fn refusing(reason: Refusal, keyability: Keyability) -> Self {
         Self {
             removed: 0.0,
@@ -534,7 +556,7 @@ const LEAST_DENSITY: f32 = 0.20;
 /// `density` is what separates that from a wordmark, and it is why this is not
 /// simply a component count — the two have similar counts and completely
 /// different fill.
-fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
+pub fn survivor_is_coherent(bitmap: &Bitmap) -> bool {
     let s = survivors(bitmap);
     if s.total == 0 {
         return false;

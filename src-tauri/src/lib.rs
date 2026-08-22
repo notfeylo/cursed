@@ -450,6 +450,11 @@ pub fn run() {
             // went.
             updates::settle_and_report();
 
+            // And whether a photo-mode removal is still waiting on a library
+            // that was loaded when the user pressed the button. Here because
+            // this is the last moment before anything can load it again.
+            photo::sweep_pending_removal();
+
             // Before anything else touches the registry: capture what was there
             // first. Idempotent, so this is a no-op on every launch but the
             // first (PRD §4.4).

@@ -69,6 +69,10 @@ pub struct ImportedImage {
     pub suggested_hotspot: (f32, f32),
     /// Fraction of the image the background removal took, 0.0–1.0.
     pub background_removed: f32,
+    /// The image arrived with its background already gone, so nothing was
+    /// attempted and nothing needed to be. Distinct from a refusal: there is
+    /// no problem here to explain.
+    pub already_transparent: bool,
     /// Present when removal was **declined**, with the sentence to show. What
     /// is in `data_uri` is then exactly what was imported.
     pub refusal: Option<String>,
@@ -102,6 +106,10 @@ pub fn stage(bytes: Vec<u8>) -> AppResult<ImportedImage> {
 }
 
 pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage> {
+    // Read before the bytes are consumed, and only ever `Some` for a `.cur` or
+    // `.ani`. A cursor file states where its click lands; every other format
+    // leaves it to be guessed at from the artwork.
+    let stated_hotspot = crate::build::icon_reader::hotspot_fraction(&bytes);
     let source = pipeline::decode(bytes)?;
 
     // The image as it arrived, kept for the editor to reset to and re-key from.
@@ -126,13 +134,44 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
         Source::Animated(frames) => {
             let report = frames
                 .first()
-                .map(|(bitmap, _)| crate::build::matte::assess(bitmap))
-                .map(|keyability| crate::build::matte::MatteReport {
-                    removed: 0.0,
-                    already_had_alpha: false,
-                    refused: (!keyability.confident && cut == pipeline::Cut::Auto)
-                        .then_some(crate::build::matte::Refusal::LooksLikeAPhotograph),
-                    keyability,
+                .map(|(bitmap, _)| {
+                    let keyability = crate::build::matte::assess(bitmap);
+
+                    // **An animation that already has transparency is not a
+                    // photograph, and must never be called one.**
+                    //
+                    // The still path has always checked this first — `attempt`
+                    // returns `already_had_alpha` before it ever reaches the
+                    // refusal. This branch went straight to the four signals,
+                    // and those signals measure the colour of pixels that are
+                    // *invisible*: the RGB behind alpha 0 is arbitrary, so a
+                    // cut-out cursor reads as a busy, high-contrast border and
+                    // fails every one of them.
+                    //
+                    // What that produced is the worst kind of wrong answer.
+                    // Dropping any ordinary `.ani` — a downloaded cursor pack,
+                    // which is the single most likely thing to be dropped on
+                    // this app — put "This looks like a photo. Automatic
+                    // background removal works on flat backgrounds" on screen,
+                    // about a file whose background had been removed before it
+                    // was ever downloaded. Nothing was wrong, and the app said
+                    // something was.
+                    if crate::build::matte::already_cut_out(bitmap) {
+                        return crate::build::matte::MatteReport {
+                            removed: 0.0,
+                            already_had_alpha: true,
+                            refused: None,
+                            keyability,
+                        };
+                    }
+
+                    crate::build::matte::MatteReport {
+                        removed: 0.0,
+                        already_had_alpha: false,
+                        refused: (!keyability.confident && cut == pipeline::Cut::Auto)
+                            .then_some(crate::build::matte::Refusal::LooksLikeAPhotograph),
+                        keyability,
+                    }
                 })
                 .unwrap_or_else(crate::build::matte::MatteReport::not_attempted);
             (
@@ -143,7 +182,14 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
     };
 
     let first = normalised.first()?.clone();
-    let suggested = hotspot::compute(&first, hotspot::suggest(&first));
+    // The file's own hotspot wins over anything inferred from the pixels, but
+    // only once it has been carried through the trim-square-pad that produced
+    // the master — the number in the file is in the file's coordinates, and
+    // `map_point_to_master` returns `None` rather than guessing when the
+    // geometry it models is not the geometry that ran.
+    let suggested = stated_hotspot
+        .and_then(|point| pipeline::map_point_to_master(&original_frame, &first, point))
+        .unwrap_or_else(|| hotspot::compute(&first, hotspot::suggest(&first)));
     let token = uuid::Uuid::new_v4().to_string();
 
     let image = ImportedImage {
@@ -155,6 +201,7 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
         data_uri: first.to_png_data_uri()?,
         suggested_hotspot: suggested,
         background_removed: report.removed,
+        already_transparent: report.already_had_alpha,
         // `BarelyMoved` is not worth a banner: "there was no background to
         // find" on art that never had one is noise, and the user can see the
         // preview. The two that change what they should do next are shown.
@@ -163,7 +210,11 @@ pub fn stage_with(bytes: Vec<u8>, cut: pipeline::Cut) -> AppResult<ImportedImage
             Some(reason) => Some(reason.message().to_owned()),
             None => None,
         },
-        keyable: report.keyability.confident,
+        // An image that arrived transparent is not "unkeyable" — there is
+        // simply nothing left to key, and telling somebody their cut-out cursor
+        // "is not a flat background" is an answer to a question they did not
+        // ask.
+        keyable: report.keyability.confident || report.already_had_alpha,
     };
 
     if let Ok(mut staged) = staging().lock() {
@@ -576,6 +627,82 @@ pub fn remove(id: &str) -> AppResult<()> {
 mod tests {
     use super::*;
 
+    /// Builds an animated cursor the way a download site does: a subject with a
+    /// transparent surround, several frames, no background anywhere in it.
+    fn a_cut_out_animation() -> Vec<u8> {
+        use crate::build::ani_writer::{self, AniFrame, AniMetadata};
+        use crate::build::bitmap::Bitmap;
+        use crate::build::cur_writer::CursorImage;
+
+        let frames: Vec<AniFrame> = (0..4)
+            .map(|index| {
+                let mut art = Bitmap::new(64, 64);
+                // A blob in the middle, everything around it transparent.
+                for y in 18..46u32 {
+                    for x in 18..46u32 {
+                        let shade = 40 + index as u8 * 30;
+                        art.set_pixel(x, y, [shade, 200 - shade, 120, 255]);
+                    }
+                }
+                AniFrame {
+                    images: vec![CursorImage::new(art, (20, 20))],
+                    delay_ms: 100,
+                }
+            })
+            .collect();
+        ani_writer::write_ani(&frames, 1.0, &AniMetadata::default()).expect("an ani")
+    }
+
+    /// **The regression for the message that made this feature look broken.**
+    ///
+    /// An animated cursor pack is the single most likely thing to be dropped on
+    /// this app, and every one of them arrives already cut out. Staging one used
+    /// to answer with "This looks like a photo. Automatic background removal
+    /// works on flat backgrounds" — because the animated branch measured the
+    /// four keyability signals without first asking whether there was anything
+    /// left to key, and those signals read the colour of pixels behind alpha 0,
+    /// which is arbitrary.
+    ///
+    /// Nothing was wrong with the file, nothing was wrong with the import, and
+    /// the app said something was.
+    #[test]
+    fn an_animation_that_is_already_cut_out_is_not_called_a_photograph() {
+        let staged = stage(a_cut_out_animation()).expect("an animated cursor stages");
+
+        assert!(staged.animated, "a four-frame .ani is an animation");
+        assert_eq!(staged.frame_count, 4);
+        assert!(
+            staged.refusal.is_none(),
+            "nothing needed removing, so there is nothing to explain: {:?}",
+            staged.refusal
+        );
+        assert!(staged.already_transparent, "it arrived with its background gone");
+        assert!(
+            staged.keyable,
+            "an image that is already cut out must not be reported as unkeyable"
+        );
+    }
+
+    /// The same, for a still `.cur` — the still path has always had this right,
+    /// and this is what keeps it that way.
+    #[test]
+    fn a_cursor_file_is_not_called_a_photograph_either() {
+        use crate::build::bitmap::Bitmap;
+        use crate::build::cur_writer::{self, CursorImage};
+
+        let mut art = Bitmap::new(64, 64);
+        for y in 10..40u32 {
+            for x in 10..30u32 {
+                art.set_pixel(x, y, [220, 40, 40, 255]);
+            }
+        }
+        let bytes = cur_writer::write_cur(&[CursorImage::new(art, (10, 10))]).expect("a cur");
+
+        let staged = stage(bytes).expect("a cursor file stages");
+        assert!(staged.refusal.is_none(), "{:?}", staged.refusal);
+        assert!(staged.already_transparent);
+    }
+
     /// The hover image only matters if the hand role actually reaches for it.
     ///
     /// `file_for_role` is the whole mechanism: ask for the hand and get the hand
@@ -692,6 +819,7 @@ mod tests {
             image::ImageFormat::Jpeg,
             image::ImageFormat::Bmp,
             image::ImageFormat::Gif,
+            image::ImageFormat::Tiff,
         ] {
             let staged = stage(encoded(format))
                 .unwrap_or_else(|e| panic!("{format:?} failed to stage: {e}"));
@@ -700,6 +828,29 @@ mod tests {
                 "{format:?} should be normalised to PNG"
             );
             assert!(staged.width > 0 && staged.height > 0, "{format:?} lost its pixels");
+        }
+
+        // And the two the screen advertises that are not image formats at all.
+        // A cursor app that cannot open a cursor is the joke it took three
+        // releases to notice: dropping a `.ani` was answered with "only PNG,
+        // JPEG, GIF, WebP and BMP images can be imported".
+        for (what, bytes) in [
+            ("a .ani", a_cut_out_animation()),
+            ("a .cur", {
+                use crate::build::bitmap::Bitmap;
+                use crate::build::cur_writer::{self, CursorImage};
+                let mut art = Bitmap::new(32, 32);
+                for y in 8..24u32 {
+                    for x in 8..24u32 {
+                        art.set_pixel(x, y, [10, 180, 220, 255]);
+                    }
+                }
+                cur_writer::write_cur(&[CursorImage::new(art, (8, 8))]).expect("a cur")
+            }),
+        ] {
+            let staged = stage(bytes).unwrap_or_else(|e| panic!("{what} failed to stage: {e}"));
+            assert!(staged.width > 0 && staged.height > 0, "{what} lost its pixels");
+            assert!(staged.data_uri.starts_with("data:image/png;base64,"));
         }
     }
 

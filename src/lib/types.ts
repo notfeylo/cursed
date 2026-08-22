@@ -144,6 +144,12 @@ export interface ImportedImage {
   /** Fraction of the image the background removal took, 0-1. */
   backgroundRemoved: number;
   /**
+   * The image arrived with its background already gone. Not a refusal and not
+   * a failure: there was nothing to remove. Every `.cur`, `.ani` and cut-out
+   * PNG lands here.
+   */
+  alreadyTransparent: boolean;
+  /**
    * Present when removal was declined, with the sentence to show. The preview
    * is then exactly what was imported -- nothing was changed.
    */

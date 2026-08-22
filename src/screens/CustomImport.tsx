@@ -33,10 +33,15 @@ export function CustomImport() {
   const [mode, setMode] = useState<ApplyMode>(settings.applyMode);
   const [blendPack, setBlendPack] = useState(settings.tint ? "precision-gap-cross" : "");
   const [busy, setBusy] = useState(false);
-  // Whether to cut the background out even when the file already claims
-  // transparency. Off by default: re-cutting art somebody already cut loses a
-  // soft edge, and `auto` already handles the ordinary case.
-  const [forceCut, setForceCut] = useState(false);
+  // How the background is dealt with. `auto` unless the user says otherwise:
+  // re-cutting art somebody already cut loses a soft edge, and `auto` already
+  // handles the ordinary case. `photo` is the learned matte, and is only ever
+  // reached from the banner that explains why the ordinary one declined.
+  const [cut, setCut] = useState<ipc.Cut>("auto");
+  const forceCut = cut === "force";
+  // Whether the learned matte is on this machine. Read once: it decides
+  // whether the refusal offers to run it or to go and fetch it.
+  const [photo, setPhoto] = useState<ipc.PhotoStatus | null>(null);
   // Kept so the toggle can re-stage the same image rather than asking the user
   // to drop it again — the cut happens at stage time, because the preview has
   // to show what will actually be built.
@@ -68,24 +73,57 @@ export function CustomImport() {
     [outline, setError],
   );
 
+  useEffect(() => {
+    if (!ipc.isDesktop()) return;
+    let cancelled = false;
+    void ipc
+      .getPhotoStatus()
+      .then((next) => {
+        if (!cancelled) setPhoto(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Read through a ref so the listener below never has to be re-registered
+  // when the background setting changes. A handler that closed over `cut`
+  // directly would either go stale or force the effect to tear the native
+  // listener down and put it back on every toggle.
+  const cutRef = useRef(cut);
+  cutRef.current = cut;
+
   // Real drag-and-drop is a native event, not a DOM one — the webview never
   // sees the file, so the bytes never cross the IPC boundary unvalidated.
   useEffect(() => {
     if (!ipc.isDesktop()) return;
     let unlisten: (() => void) | undefined;
+    // Registering is asynchronous and unmounting is not, so the two can cross:
+    // without this flag a screen closed quickly leaves a live native listener
+    // with nothing to unregister it, and the next one is added on top. Two
+    // listeners means one dropped file staged twice.
+    let cancelled = false;
     void getCurrentWebview()
       .onDragDropEvent((event) => {
-        if (event.payload.type !== "drop") return;
+        if (cancelled || event.payload.type !== "drop") return;
         const [first] = event.payload.paths;
         if (first) {
           setLastSource(first);
-          void accept(() => ipc.importImage(first, forceCut ? "force" : "auto"));
+          void accept(() => ipc.importImage(first, cutRef.current));
         }
       })
       .then((fn) => {
+        if (cancelled) {
+          fn();
+          return;
+        }
         unlisten = fn;
       });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [accept]);
 
   const browse = async () => {
@@ -104,7 +142,7 @@ export function CustomImport() {
     });
     if (typeof picked === "string") {
       setLastSource(picked);
-      void accept(() => ipc.importImage(picked, forceCut ? "force" : "auto"));
+      void accept(() => ipc.importImage(picked, cut));
     }
   };
 
@@ -113,10 +151,10 @@ export function CustomImport() {
   // The cut happens when the image is staged, not when it is built, because
   // the preview and the hotspot picker both show the cut result — changing the
   // setting without re-staging would show one thing and build another.
-  const recut = async (next: boolean) => {
-    setForceCut(next);
+  const recut = async (next: ipc.Cut) => {
+    setCut(next);
     if (!lastSource) return;
-    await accept(() => ipc.importImage(lastSource, next ? "force" : "auto"));
+    await accept(() => ipc.importImage(lastSource, next));
   };
 
   const browseHand = async () => {
@@ -126,14 +164,17 @@ export function CustomImport() {
       filters: [
         {
           name: "Anything with a picture in it",
-          extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif", "tiff"],
+          extensions: [
+            "png", "jpg", "jpeg", "webp", "bmp", "gif", "apng", "ico", "tif", "tiff",
+            "cur", "ani",
+          ],
         },
       ],
     });
     if (typeof picked !== "string") return;
     setHandBusy(true);
     try {
-      setHand(await ipc.importImage(picked, forceCut ? "force" : "auto"));
+      setHand(await ipc.importImage(picked, cut));
     } catch (e) {
       setError(e instanceof Error ? e.message : "That hover image could not be read.");
     } finally {
@@ -274,7 +315,23 @@ export function CustomImport() {
                     probably will not look good.
                   </p>
                 )}
-                {/* The way out. A refusal with nowhere to go is a dead end. */}
+                {/* The way out, and for a photograph there is now a better one
+                    than doing it by hand. The refusal says this is a photo;
+                    photo mode is the thing that cuts photos, so it is offered
+                    here rather than left to be discovered in Settings. */}
+                {!image.keyable && photo?.available && (
+                  <Button
+                    full
+                    onClick={() =>
+                      photo.installed ? void recut("photo") : go("settings")
+                    }
+                    disabled={busy}
+                  >
+                    {photo.installed
+                      ? "CUT IT OUT WITH PHOTO MODE"
+                      : `GET PHOTO MODE — ${(photo.downloadBytes / 1_048_576).toFixed(1)} MB`}
+                  </Button>
+                )}
                 <Button full variant="ghost" onClick={() => setEditing(true)}>
                   CUT IT OUT MYSELF
                 </Button>
@@ -283,15 +340,19 @@ export function CustomImport() {
 
             <div className="mt-2">
               <Toggle
-                checked={forceCut}
-                onChange={(next) => void recut(next)}
+                checked={forceCut || cut === "photo"}
+                onChange={(next) => void recut(next ? "force" : "auto")}
                 label="Remove the background"
                 hint={
-                  forceCut
-                    ? "Cutting it out, whatever the file already claims"
-                    : image && !image.keyable
-                      ? "Not attempted — this image is not a flat background"
-                      : "Cut automatically, unless the image is already transparent"
+                  cut === "photo"
+                    ? "Photo mode — cut out by the downloaded matte, on this machine"
+                    : forceCut
+                      ? "Cutting it out, whatever the file already claims"
+                      : image?.alreadyTransparent
+                        ? "Nothing to remove — this image is already cut out"
+                        : image && !image.keyable
+                          ? "Not attempted — this image is not a flat background"
+                          : "Cut automatically, unless the image is already transparent"
                 }
               />
 
@@ -438,7 +499,7 @@ function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
           <Plus size={22} strokeWidth={1.5} />
         </span>
         <span className="text-[14px] text-text">
-          {busy ? "Reading image…" : "Drop an image or GIF"}
+          {busy ? "Reading image…" : "Drop an image, GIF or cursor file"}
         </span>
         <span className="text-[11px] text-text-dim">or click to browse</span>
       </button>
@@ -459,10 +520,11 @@ function AcceptedFormats() {
     <div className="border-t border-border px-4 py-3">
       <p className="text-[11px] leading-relaxed text-text-dim">
         <span className="mono text-text-muted">
-          PNG · JPEG · WebP · BMP · ICO · TIFF · GIF · APNG
+          PNG · JPEG · WebP · BMP · ICO · TIFF · GIF · APNG · CUR · ANI
         </span>{" "}
-        — up to 20&nbsp;MB. GIF and APNG become animated cursors, and backgrounds
-        are removed automatically.
+        — up to 20&nbsp;MB. GIF, APNG and ANI become animated cursors, a CUR or ANI
+        keeps the hotspot it was made with, and backgrounds are removed
+        automatically.
       </p>
     </div>
   );
