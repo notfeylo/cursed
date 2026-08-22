@@ -7,7 +7,7 @@ happened to, not for the person who made it.
 
 ---
 
-## Unreleased
+## 1.22.0 — 2026-08-21
 
 ### Cursor files can be imported
 
