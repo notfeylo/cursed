@@ -1,13 +1,11 @@
 /* Cursed — the landing page.
 
-   No JavaScript on this site: the CSP is `script-src 'none'`, and it stays that
-   way. Everything here is CSS and semantic HTML.
+   Black, white and one blue. No glow anywhere: depth comes from borders and
+   neutral shadow, never from coloured light.
 
-   There is exactly one animation on the page — the laptop lid opening in the
-   about section — and it is scroll-driven CSS. Nothing else moves: no drifting
-   background, no scroll reveals, no orbit, no hover transitions. Black, white
-   and one blue, with no glow anywhere; depth comes from borders and neutral
-   shadow, never from coloured light. */
+   Two things move, and only two: the laptop lid opening as you scroll to it,
+   and the page's own cursor, which cycles through frames the way an .ani file
+   does. Everything else is still. */
 
 @font-face {
   font-family: "Chakra Petch";
@@ -48,12 +46,21 @@
   --text-2: #a2abba;
   --text-3: #6a7385;
 
+  /* The aluminium the laptop is milled from. */
+  --alu-hi: #4a515e;
+  --alu: #23272f;
+  --alu-lo: #0f1116;
+  --key: #1a1d23;
+  --key-gap: #08090c;
+
   --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
 
   --shell: 1160px;
   --gutter: 28px;
+
+  --grid: rgba(255, 255, 255, 0.045);
 
   color-scheme: dark;
 }
@@ -64,8 +71,8 @@
 
 html {
   /* The header is sticky, so anchor targets have to clear it. No
-     `scroll-behavior: smooth` — smooth scrolling is an animation, and the page
-     no longer has any. */
+     `scroll-behavior: smooth`: smooth scrolling is an animation, and the only
+     animations on this page are the lid and the pointer. */
   scroll-padding-top: 88px;
 }
 
@@ -78,22 +85,17 @@ body {
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 
-  /* The pointer, on the page about pointers. A real .png cursor with a sensible
-     hotspot, and `auto` behind it for anything that refuses it. The product
-     demonstrating itself rather than describing itself.
+  /* The pointer, on the page about pointers. cursor.js swaps `--cursor` frame
+     by frame, so this is a real animated cursor drawn by the OS rather than a
+     sprite chasing the mouse — which is the same reason the app itself never
+     draws one. The fallback here is the first frame, so the page still has its
+     pointer if the script never runs. */
+  --cursor: url("shots/fly/cur-trump.png");
+  cursor: var(--cursor) 4 4, auto;
 
-     Deliberately no `overflow-x` here: `overflow-x: hidden` on the body turns it
-     into a scroll container, which silently breaks the `view()` timeline the
-     laptop lid depends on. Anything that would overflow is clipped by its own
-     section instead. */
-  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
-}
-
-#about {
-  cursor: url("shots/fly/cur-elon.png") 4 4, auto;
-}
-#download {
-  cursor: url("shots/fly/cur-wheel.png") 4 4, auto;
+  /* Deliberately no `overflow-x`: `overflow-x: hidden` on the body turns it into
+     a scroll container, which silently breaks the `view()` timeline the laptop
+     lid depends on. Whatever overflows is clipped by its own section. */
 }
 
 ::selection {
@@ -119,18 +121,39 @@ a:hover {
   font-size: 0.92em;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* -------------------------------------------------------------- header -- */
 
 .site-header {
   position: sticky;
   top: 0;
   z-index: 20;
+  border-bottom: 1px solid var(--border);
+  /* The same grid as the footer, and nowhere else. */
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.header-inner {
   display: flex;
   align-items: center;
   gap: 24px;
+  max-width: var(--shell);
+  margin: 0 auto;
   padding: 16px var(--gutter);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
 }
 
 .brand {
@@ -168,7 +191,6 @@ a:hover {
 
 .header-cta {
   padding: 9px 20px;
-  border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--text);
   color: #000;
@@ -179,7 +201,6 @@ a:hover {
 }
 .header-cta:hover {
   background: var(--accent);
-  border-color: var(--accent);
   color: #fff;
   text-decoration: none;
 }
@@ -189,7 +210,7 @@ a:hover {
 .hero {
   max-width: var(--shell);
   margin: 0 auto;
-  padding: clamp(80px, 14vh, 150px) var(--gutter) clamp(70px, 11vh, 120px);
+  padding: clamp(84px, 14vh, 152px) var(--gutter) clamp(72px, 11vh, 120px);
   text-align: center;
 }
 
@@ -219,7 +240,7 @@ a:hover {
 }
 
 .hero-sub {
-  max-width: 640px;
+  max-width: 660px;
   margin: 30px auto 0;
   font-size: clamp(1rem, 1.5vw, 1.14rem);
   color: var(--text-2);
@@ -235,7 +256,8 @@ a:hover {
 }
 
 .section-head {
-  margin-bottom: 48px;
+  margin-bottom: 52px;
+  max-width: 640px;
 }
 
 .kicker {
@@ -257,93 +279,132 @@ a:hover {
   color: var(--text);
 }
 
-/* --------------------------------------------- 2 · the about, on a laptop -- */
+.section-lede {
+  margin: 16px 0 0;
+  color: var(--text-2);
+}
+
+/* ----------------------------------------------- 2 · the laptop, for real -- */
 
 .stage {
-  /* The perspective origin sits above the laptop so a closed lid tips away from
-     the reader rather than folding into them. */
-  perspective: 2200px;
-  perspective-origin: 50% 0%;
+  perspective: 2400px;
+  perspective-origin: 50% 34%;
 }
 
 .laptop {
-  width: min(1000px, 100%);
+  position: relative;
+  width: min(1040px, 100%);
   margin: 0 auto;
+  transform-style: preserve-3d;
 }
+
+/* --- the lid ---------------------------------------------------------- */
 
 .laptop-lid {
   transform-origin: 50% 100%;
-  padding: 13px 13px 0;
-  background: var(--elevated);
-  border: 1px solid var(--border-strong);
-  border-bottom: none;
-  border-radius: 16px 16px 0 0;
-  /* Neutral, not coloured: the page has no glow. */
-  box-shadow: 0 34px 70px rgba(0, 0, 0, 0.85);
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  border-radius: 20px 20px 3px 3px;
+  /* Milled aluminium: a bright top edge, a body, and a darker fall-off, plus
+     hairline highlights down both sides. */
+  background:
+    linear-gradient(90deg, var(--alu-hi) 0 1px, transparent 1px calc(100% - 1px), var(--alu-hi) calc(100% - 1px)),
+    linear-gradient(180deg, var(--alu-hi) 0 1px, var(--alu) 1px 22%, #191c22 100%);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.9);
+}
+
+.lid-inner {
+  padding: 11px 11px 0;
 }
 
 .laptop-screen {
+  position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 11px 11px 0 0;
   overflow: hidden;
 }
 
-.screen-bar {
+/* The menu strip. Content scrolls underneath it and disappears cleanly, which
+   is what stops text sliding out from behind the notch. */
+.laptop-screen::before {
+  content: "cursed";
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  height: 36px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.screen-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.screen-title {
+  height: 34px;
+  padding: 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   color: var(--text-3);
 }
 
-/* The part you actually scroll. A fixed height with its own overflow is what
-   makes the section read as a screen rather than as a picture of one. */
+/* The notch, hanging into the display exactly as it does on the machine. */
+.notch {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 156px;
+  height: 27px;
+  background: #000;
+  border-radius: 0 0 11px 11px;
+}
+.notch-cam {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10141b;
+  box-shadow: inset 0 0 0 1px #1d232d;
+}
+
+/* --- what is on the screen -------------------------------------------- */
+
 .screen-doc {
-  height: clamp(340px, 52vh, 520px);
+  height: clamp(360px, 56vh, 560px);
   overflow-y: auto;
-  padding: 38px clamp(24px, 4vw, 52px) 44px;
+  padding: 34px 0 46px;
   text-align: left;
   scrollbar-color: var(--border-strong) transparent;
   scrollbar-width: thin;
 }
 
-.screen-doc h3 {
-  margin: 0 0 22px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
-  line-height: 1.15;
-  color: var(--text);
+.doc-inner {
+  padding: 22px clamp(22px, 4vw, 54px) 0;
 }
 
-.screen-doc h4 {
-  margin: 40px 0 14px;
+.doc-eyebrow {
+  margin: 0 0 12px;
   font-family: var(--font-mono);
-  font-weight: 400;
-  font-size: 12px;
-  letter-spacing: 0.2em;
+  font-size: 11px;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--accent);
 }
 
-.screen-doc p {
+.screen-doc h3 {
   margin: 0 0 18px;
-  max-width: 68ch;
+  max-width: 22ch;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.screen-doc p {
+  margin: 0 0 16px;
+  max-width: 66ch;
 }
 
 .screen-doc strong {
@@ -351,83 +412,228 @@ a:hover {
   font-weight: 500;
 }
 
-.doc-list {
-  margin: 0;
+.doc-turn {
+  padding-left: 16px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+}
+
+/* The six things it does, as cards with real icons rather than a list of
+   dashes. */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+  gap: 12px;
+  margin: 0 0 40px;
   padding: 0;
   list-style: none;
-  max-width: 72ch;
 }
-.doc-list li {
-  position: relative;
-  padding-left: 26px;
-  margin-bottom: 16px;
+.feature-grid li {
+  padding: 18px 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
-.doc-list li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 12px;
-  width: 9px;
-  height: 1px;
-  background: var(--accent);
+.fi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
+  border-radius: 9px;
+  background: rgba(46, 139, 255, 0.12);
+  border: 1px solid rgba(46, 139, 255, 0.3);
+  color: var(--accent-hi);
 }
-.doc-list b {
-  color: var(--text);
+.feature-grid b {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 15px;
   font-weight: 500;
+  color: var(--text);
 }
-.doc-list.tight li {
-  margin-bottom: 8px;
+.feature-grid li > span:not(.fi) {
+  display: block;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.doc-callout {
+  margin: 0 0 40px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px 12px 12px 4px;
+  background: var(--surface);
+}
+.doc-callout p:last-child {
+  margin-bottom: 0;
+}
+
+.nope-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 20px;
+  margin: 0 0 34px;
+  padding: 0;
+  list-style: none;
+}
+.nope-list li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 14.5px;
+  color: var(--text-2);
+}
+.ni {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
 }
 
 .doc-close {
-  margin-top: 34px;
   padding-top: 22px;
   border-top: 1px solid var(--border);
-  color: var(--text-3);
   font-size: 14.5px;
+  color: var(--text-3);
 }
 
-/* The screen sits on a wedge rather than a slab, which is the whole difference
-   between reading as a laptop and reading as a bordered box. */
-.laptop-base {
-  position: relative;
-  width: 108%;
-  margin-left: -4%;
-  height: 18px;
-  background: linear-gradient(180deg, #2b323e 0%, #14171d 55%, #06070a 100%);
-  border-radius: 0 0 12px 12px;
-  clip-path: polygon(0 0, 100% 0, 97.5% 100%, 2.5% 100%);
-  box-shadow: 0 26px 44px rgba(0, 0, 0, 0.8);
+/* The strip under the screen, with the name milled into it. */
+.lid-chin {
+  display: block;
+  padding: 9px 0 11px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  color: #5a6272;
 }
-.laptop-notch {
+
+/* --- the deck --------------------------------------------------------- */
+
+/* The layout box. Its height is only what the page reserves — a rotated element
+   keeps its untransformed height in flow, so leaving the 330px plane in flow
+   would reserve three times the room the deck actually occupies. */
+.laptop-deck {
+  position: relative;
+  height: 104px;
+  transform-style: preserve-3d;
+}
+
+/* The plane that actually tips back. */
+.deck-plane {
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 116px;
-  height: 6px;
-  background: var(--bg);
-  border-radius: 0 0 7px 7px;
+  left: 0;
+  right: 0;
+  height: 330px;
+  transform-origin: 50% 0;
+  transform: rotateX(74deg);
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, #262a33 0%, #1a1d24 42%, #101318 100%);
+  box-shadow:
+    0 0 0 1px #333844 inset,
+    0 30px 60px rgba(0, 0, 0, 0.85);
 }
 
-/* The one animation on the site.
+/* The front lip, drawn on the plane's own leading edge so it can never drift
+   out of line with it. */
+.deck-plane::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 0;
+  height: 7px;
+  border-radius: 7px 7px 0 0;
+  background: #05070a;
+}
 
-   The open lid is the default so that a browser without scroll-driven
-   animations — or a reader who has asked for less motion — gets a laptop that
-   is simply open and readable. Only inside @supports does it start closed and
-   swing up as the section enters the viewport. */
+/* The hinge barrel, sitting in the shadow the lid casts on the deck. */
+.deck-hinge {
+  position: absolute;
+  top: 0;
+  left: 6%;
+  right: 6%;
+  height: 16px;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(180deg, #05060a 0%, #14171d 100%);
+}
+
+.deck-keys {
+  position: absolute;
+  top: 34px;
+  left: 7.5%;
+  right: 7.5%;
+  height: 150px;
+  border-radius: 5px;
+  padding: 5px;
+  background: var(--key-gap);
+  /* Keys are the fill; the gradients only draw the gaps between them. */
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 4.6%, var(--key-gap) 4.6% 5.7%),
+    repeating-linear-gradient(180deg, transparent 0 22px, var(--key-gap) 22px 27px);
+  background-color: var(--key);
+}
+.key-rows,
+.key-space {
+  position: absolute;
+}
+/* The bottom row is one long key, so the repeating grid has to stop above it. */
+.key-space {
+  left: 26%;
+  right: 26%;
+  bottom: 5px;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--key);
+  box-shadow: 0 0 0 5px var(--key-gap);
+}
+.key-rows {
+  inset: auto 5px 32px 5px;
+  height: 0;
+  border-top: 5px solid var(--key-gap);
+}
+
+.deck-pad {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34%;
+  height: 108px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #202430 0%, #191c24 100%);
+  box-shadow: 0 0 0 1px #2c313c inset;
+}
+
+/* --- the one animation ------------------------------------------------ */
+
+/* The open lid is the default, so a browser without scroll-driven animations —
+   or a reader who has asked for less motion — gets a laptop that is simply
+   open. Written the other way round they would get one welded shut. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .laptop-lid {
-      transform: rotateX(-88deg);
+      transform: rotateX(-89deg);
       animation: lid-open linear both;
       animation-timeline: view();
-      animation-range: entry 20% cover 42%;
+      animation-range: entry 22% cover 44%;
     }
 
     @keyframes lid-open {
       from {
-        transform: rotateX(-88deg);
+        transform: rotateX(-89deg);
       }
       to {
         transform: rotateX(0deg);
@@ -438,19 +644,28 @@ a:hover {
 
 /* ------------------------------------------------------- 3 · download -- */
 
-.download-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
+.download {
+  display: flex;
+  justify-content: center;
 }
 
-.download-card,
-.reqs {
-  padding: clamp(26px, 3.4vw, 40px);
+.download-card {
+  width: min(560px, 100%);
+  padding: clamp(28px, 3.4vw, 40px);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
+  text-align: center;
+}
+.download-card .kicker {
+  margin-bottom: 10px;
+}
+.download-card h2 {
+  margin: 0 0 24px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--text);
 }
 
 .btn {
@@ -458,13 +673,13 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  width: 100%;
   padding: 15px 28px;
   border-radius: 999px;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid transparent;
 }
 .btn:hover {
   text-decoration: none;
@@ -477,13 +692,9 @@ a:hover {
   background: var(--accent-hi);
   color: #001126;
 }
-.btn-wide {
-  width: 100%;
-}
 
 .rel-line {
-  margin: 18px 0 0;
-  text-align: center;
+  margin: 14px 0 0;
   font-size: 13px;
   color: var(--text-3);
 }
@@ -492,113 +703,208 @@ a:hover {
   color: var(--border-strong);
 }
 
-.price {
-  margin: 8px 0 0;
-  text-align: center;
-  font-size: 14px;
-  color: var(--text-2);
-}
-
-.platforms {
-  margin: 30px 0 0;
+.reqs-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 26px 0 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--border);
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
 }
-.platforms li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--border);
+.reqs-row li {
+  padding: 16px 10px;
+  background: var(--bg);
 }
-.plat-name {
-  font-family: var(--font-display);
-  font-size: 15px;
-  letter-spacing: 0.08em;
-  color: var(--text-3);
-}
-.platforms .is-ready .plat-name {
-  color: var(--text);
-}
-.plat-state {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.platforms .is-ready .plat-state {
-  color: var(--accent);
-}
-
-.builds {
-  margin-top: 30px;
-}
-.builds-head {
-  margin: 0 0 14px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.builds ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.builds li {
-  margin-bottom: 12px;
-  font-size: 14px;
-  color: var(--text-3);
-}
-.builds li a {
-  font-weight: 500;
-}
-.builds li span {
+.req-k {
   display: block;
-}
-
-.reqs-head {
-  margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.3rem;
-  letter-spacing: 0.02em;
-  color: var(--text);
-}
-
-.reqs-list {
-  margin: 0;
-}
-.reqs-list > div {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-.reqs-list > div:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.reqs-list dt {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 10.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-3);
 }
-.reqs-list dd {
-  margin: 6px 0 0;
+.req-v {
+  display: block;
+  margin-top: 6px;
   font-size: 15px;
+  font-weight: 500;
   color: var(--text);
 }
-.reqs-note {
+.req-n {
   display: block;
-  margin-top: 5px;
-  font-size: 13.5px;
-  line-height: 1.6;
+  margin-top: 2px;
+  font-size: 12px;
   color: var(--text-3);
+}
+
+.platforms {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+.platforms li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.platforms li span {
+  color: var(--text-2);
+}
+.platforms li b {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.platforms .is-ready {
+  border-color: rgba(46, 139, 255, 0.4);
+}
+.platforms .is-ready span {
+  color: var(--text);
+}
+.platforms .is-ready b {
+  color: var(--accent);
+}
+
+.builds {
+  margin: 22px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* --------------------------------------------------------- 4 · rating -- */
+
+.rate {
+  display: flex;
+  justify-content: center;
+}
+
+.rate-card {
+  width: min(560px, 100%);
+  padding: clamp(28px, 3.4vw, 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  text-align: center;
+}
+.rate-card h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--text);
+}
+.rate-lede {
+  margin: 0 0 26px;
+  font-size: 14.5px;
+  color: var(--text-3);
+}
+
+/* The stars are radio inputs in descending order, laid out reversed. That is
+   what lets `input:checked ~ label` light every star below the one picked
+   without a line of script. */
+.stars {
+  /* A grid, not a reversed flex row: the inputs sit in the DOM as 5-4-3-2-1 so
+     the sibling selector can reach downwards, and each label is then placed in
+     the column it belongs in. Reversing a flex row instead leaves the caption
+     below fighting the reversal for its position. */
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+#star1 + label {
+  grid-column: 1;
+}
+#star2 + label {
+  grid-column: 2;
+}
+#star3 + label {
+  grid-column: 3;
+}
+#star4 + label {
+  grid-column: 4;
+}
+#star5 + label {
+  grid-column: 5;
+}
+.stars label {
+  grid-row: 1;
+}
+.stars input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.stars label {
+  width: 38px;
+  height: 38px;
+  background: var(--border-strong);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+.stars label:hover,
+.stars label:hover ~ label,
+.stars input:checked ~ label {
+  background: var(--accent);
+}
+.stars input:focus-visible + label {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 4px;
+}
+
+/* `output` comes after every input, so a checked star can address it. */
+.rate-out {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rate-said {
+  display: none;
+  color: var(--accent);
+}
+.stars input:checked ~ .rate-out .rate-idle {
+  display: none;
+}
+#star1:checked ~ .rate-out .r1,
+#star2:checked ~ .rate-out .r2,
+#star3:checked ~ .rate-out .r3,
+#star4:checked ~ .rate-out .r4,
+#star5:checked ~ .rate-out .r5 {
+  display: inline;
 }
 
 /* -------------------------------------------------------------- footer -- */
@@ -608,13 +914,13 @@ a:hover {
   margin-top: clamp(60px, 9vh, 110px);
   padding: clamp(48px, 6vw, 76px) var(--gutter) 30px;
   border-top: 1px solid var(--border);
-  /* The wordmark below is meant to run past both edges, so this is the one
-     element on the page that clips. */
+  /* The wordmark below runs past both edges, so this is the one element on the
+     page that clips. */
   overflow: hidden;
   background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 132px 132px;
 }
 
@@ -682,7 +988,6 @@ a:hover {
   text-align: right;
 }
 
-/* The pill from the reference, in the blue this site already uses. */
 .footer-pill {
   display: flex;
   align-items: center;
@@ -714,8 +1019,6 @@ a:hover {
   line-height: 1;
 }
 
-/* The oversized mark. Set in the display face, slanted and stretched, and
-   allowed to run off both edges exactly as in the reference. */
 .footer-wordmark {
   margin: clamp(56px, 9vw, 120px) 0 clamp(28px, 4vw, 56px);
   font-family: var(--font-display);
@@ -733,8 +1036,9 @@ a:hover {
 
 .footer-base {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
+  align-items: center;
   max-width: var(--shell);
   margin: 0 auto;
   padding-top: 26px;
@@ -746,21 +1050,17 @@ a:hover {
 .footer-base p {
   margin: 0;
 }
-.footer-legal,
-.footer-social {
+.footer-legal {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
+  gap: 18px;
+  justify-content: center;
 }
-.footer-legal a,
-.footer-social a {
+.footer-legal a {
   color: var(--text-2);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.footer-legal a:hover,
-.footer-social a:hover {
+.footer-legal a:hover {
   color: var(--accent-hi);
 }
 .footer-note {
@@ -770,12 +1070,8 @@ a:hover {
 /* -------------------------------------------------------- narrow screens -- */
 
 @media (max-width: 900px) {
-  .download-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   /* Below this width the laptop stops being useful and starts being a tiny
-     window with a scrollbar in it. The frame flattens and the about text
+     window with a scrollbar in it. The machine folds away and the about text
      becomes ordinary page content. */
   .stage {
     perspective: none;
@@ -783,21 +1079,34 @@ a:hover {
   .laptop-lid {
     transform: none;
     animation: none;
-    padding: 0;
-    border: 1px solid var(--border);
     border-radius: 14px;
+    background: none;
+    border: 1px solid var(--border);
     box-shadow: none;
   }
+  .lid-inner {
+    padding: 0;
+  }
   .laptop-screen {
-    border: none;
     border-radius: 14px;
+  }
+  .laptop-screen::before,
+  .notch,
+  .lid-chin,
+  .laptop-deck {
+    display: none;
   }
   .screen-doc {
     height: auto;
     overflow-y: visible;
+    padding-top: 0;
   }
-  .laptop-base {
-    display: none;
+  .doc-inner {
+    padding: 26px 22px;
+  }
+
+  .reqs-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .footer-top {
@@ -812,7 +1121,11 @@ a:hover {
     text-align: left;
   }
   .footer-base {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    text-align: left;
+  }
+  .footer-legal {
+    justify-content: flex-start;
   }
   .footer-note {
     text-align: left;
@@ -826,7 +1139,8 @@ a:hover {
   .footer-nav {
     flex-wrap: wrap;
   }
-  .footer-base {
-    grid-template-columns: minmax(0, 1fr);
+  .stars label {
+    width: 32px;
+    height: 32px;
   }
 }
