@@ -7,6 +7,56 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.24.0 — 2026-08-23
+
+A quality release. Both of these look like "the cursors got worse", both have
+been shipping for a while, and neither was caused by anything that changed
+recently.
+
+### The grey shadow around a cut-out, on light backgrounds only
+
+A cursor made with **photo mode** looked clean on a dark desktop and had a grey
+rim around it on a white one — a halo that read as a drop shadow the app never
+drew.
+
+The edge of a cut-out is not fully opaque; it is part subject, part whatever was
+behind it. Photo mode worked out *how much* of each pixel was subject and then
+kept the pixel's original colour, which still had the background mixed into it.
+Against a dark desktop that leftover is invisible. Against a white one it is a
+dirty outline.
+
+The colour is now unmixed from the background at every soft edge, using the
+background actually found next to that edge rather than a guess. Cursors made
+from photographs sit on any wallpaper without an outline around them.
+
+This only ever affected photo mode. Cursors keyed the ordinary way have had this
+correction since the day they had a soft edge at all.
+
+### A pointer that went blocky if you had made it large
+
+If your pointer size came from **Windows' own accessibility setting** rather
+than from this app, and you had it above about half-way, every cursor was
+blurry and blocky — enlarged, with soft stair-stepped edges.
+
+Cursed built each cursor at eight sizes, the largest being 128 px, because that
+is as large as this app's own size slider goes. Windows' pointer-size setting
+writes the same value and goes twice as far. Anything past 128 px was Windows
+stretching our 128 px picture, with the crude enlargement the shell uses for
+that.
+
+Every cursor now carries 192 px and 256 px as well, drawn at those sizes rather
+than stretched into them. Large pointers are as sharp as small ones.
+
+- Cursors you import from a photograph or a PNG still will not be enlarged past
+  four times their original size — inventing detail that was never in the file
+  makes it look worse, not better.
+- Animated cursors pick the size above what is being asked for and shrink it,
+  rather than picking the one below and stretching it.
+- Cached cursors take more room on disk than they did. Nothing in the download
+  changed, and the cache rebuilds itself.
+
+---
+
 ## 1.23.0 — 2026-08-22
 
 ### Turn and mirror your own artwork
