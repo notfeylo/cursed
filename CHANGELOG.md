@@ -7,6 +7,37 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.25.0 — 2026-08-23
+
+### A pointer that looked soft, stepped, or zoomed in
+
+If your cursor looked blurry — edges stepped, pixels visible, as though it had
+been enlarged — this is why, and it had nothing to do with the picture you gave
+it.
+
+Cursors are stored at a set of fixed sizes. The size slider moved in steps of
+two, from 10 to 128, so **most positions on it were not a size any cursor
+actually exists at** — and Windows had to stretch the nearest one to fit. Its
+stretch is a crude one, and the result is exactly the soft, stepped pointer
+people described.
+
+The eight buttons under the slider were always real sizes. That is why clicking
+one looked sharp and dragging the slider did not.
+
+The slider now moves between real sizes only, so whatever you pick is drawn
+exactly, pixel for pixel. Nothing is stretched.
+
+- **Your pointer may change size slightly after updating.** A size that was not
+  a real one becomes the nearest that is — 38 px becomes 32, for example. Pick
+  the next notch up if you want it bigger; it will be just as sharp.
+- Sizes set in **Windows' own accessibility settings** are snapped too. That
+  slider does not know about this one, and a size it chooses had the same
+  problem.
+- Animated cursors were never affected. They are drawn at the exact size asked
+  for and always have been.
+
+---
+
 ## 1.24.0 — 2026-08-23
 
 A quality release. Both of these look like "the cursors got worse", both have
