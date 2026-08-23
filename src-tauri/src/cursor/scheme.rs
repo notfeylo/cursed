@@ -71,7 +71,9 @@ fn to_expandable(path: &Path) -> String {
     text
 }
 
-fn expand_sz(value: &str) -> RegValue {
+// The value is always owned, so it outlives the borrowed `value` it was built
+// from — `'static` says that, where an elided lifetime would tie the two.
+fn expand_sz(value: &str) -> RegValue<'static> {
     let mut bytes: Vec<u8> = value
         .encode_utf16()
         .flat_map(|unit| unit.to_le_bytes())
@@ -79,7 +81,7 @@ fn expand_sz(value: &str) -> RegValue {
     bytes.extend_from_slice(&[0, 0]); // terminating NUL, in UTF-16
     RegValue {
         vtype: REG_EXPAND_SZ,
-        bytes,
+        bytes: bytes.into(),
     }
 }
 
@@ -243,7 +245,7 @@ pub fn write_base_size(size: u32) -> AppResult<()> {
         "CursorBaseSize",
         &RegValue {
             vtype: REG_DWORD,
-            bytes: size.to_le_bytes().to_vec(),
+            bytes: size.to_le_bytes().to_vec().into(),
         },
     )?;
     broadcast()
