@@ -91,7 +91,15 @@ body {
      draws one. The fallback here is the first frame, so the page still has its
      pointer if the script never runs. */
   --cursor: url("shots/fly/cur-trump.png");
+  --cursor-2x: url("shots/fly/cur-trump@2x.png");
+  /* Two declarations, and the order matters. A 32 px cursor image is the right
+     size at 100% scaling and a blurry enlargement at 150% or 200%, which is
+     what most laptops ship at — so the pointer looked soft to almost everyone.
+     `image-set()` hands the browser a 64 px copy to use instead. Anything that
+     does not understand `image-set` in `cursor` ignores that line and keeps the
+     one above it. */
   cursor: var(--cursor) 4 4, auto;
+  cursor: image-set(var(--cursor) 1x, var(--cursor-2x) 2x) 4 4, auto;
 
   /* Deliberately no `overflow-x`: `overflow-x: hidden` on the body turns it into
      a scroll container, which silently breaks the `view()` timeline the laptop

@@ -20,14 +20,15 @@
 (function () {
   "use strict";
 
-  var FRAMES = [
-    "shots/fly/cur-trump.png",
-    "shots/fly/cur-elon.png",
-    "shots/fly/cur-f1.png",
-    "shots/fly/cur-wheel.png",
-    "shots/fly/cur-trump2.png",
-    "shots/fly/cur-gun.png",
-  ];
+  // Each frame twice: a 32 px copy and a 64 px one. A cursor image is sized in
+  // CSS pixels, so on a 150% or 200% display the 32 px file is enlarged by the
+  // browser and the pointer goes soft — which is most laptops.
+  var FRAMES = ["trump", "elon", "f1", "wheel", "trump2", "gun"].map(function (name) {
+    return {
+      one: 'url("shots/fly/cur-' + name + '.png")',
+      two: 'url("shots/fly/cur-' + name + '@2x.png")',
+    };
+  });
 
   // Slow enough to read as a frame rather than a strobe, fast enough not to
   // look like a slideshow.
@@ -40,9 +41,11 @@
 
   // Decode every frame before the first swap, or the cursor blinks out for a
   // moment the first time each one is needed.
-  FRAMES.forEach(function (src) {
-    var img = new Image();
-    img.src = src;
+  FRAMES.forEach(function (frame) {
+    [frame.one, frame.two].forEach(function (css) {
+      var img = new Image();
+      img.src = css.slice(5, -2); // strip url(" and ")
+    });
   });
 
   var i = 0;
@@ -50,7 +53,11 @@
 
   function tick() {
     i = (i + 1) % FRAMES.length;
-    document.body.style.setProperty("--cursor", 'url("' + FRAMES[i] + '")');
+    // Only the two custom properties move. The `cursor` declarations that read
+    // them, `image-set()` included, stay in the stylesheet where the fallback
+    // ordering is already correct.
+    document.body.style.setProperty("--cursor", FRAMES[i].one);
+    document.body.style.setProperty("--cursor-2x", FRAMES[i].two);
   }
 
   function start() {
