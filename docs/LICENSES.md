@@ -118,6 +118,29 @@ The principal ones:
 | `zip`                | `.cfpack` archives                   | MIT              |
 | `serde`              | Serialisation                        | MIT / Apache-2.0 |
 
-**No Windows or Microsoft trademark, logo, or asset is used, bundled, or
-implied.** Cursed is not affiliated with, endorsed by, or sponsored by
-Microsoft.
+## Downloaded on request — photo mode
+
+**None of this is in the installer.** It is fetched only when somebody turns
+photo mode on, checked against a published SHA-256 *and* a signature made with
+this project's release key before it is loaded, and deleted again when photo
+mode is removed. `docs/PHOTO_MODE.md` carries the sizes and the reasoning.
+
+| Component | Purpose | Licence |
+| -------------------- | ------------------------------------ | ---------------- |
+| `u2netp.onnx` (U²-Net) | The learned matte | Apache-2.0 |
+| ONNX Runtime | Runs the model | MIT |
+| Microsoft Visual C++ Runtime | What the ONNX Runtime is built against | Microsoft distributable code |
+
+The Visual C++ runtime files — `msvcp140.dll`, `msvcp140_1.dll`,
+`vcruntime140.dll` and, on x64, `vcruntime140_1.dll` — are Microsoft's, taken
+unmodified from the `VC/Redist/MSVC/<version>/<arch>/Microsoft.VC*.CRT`
+directory that Visual Studio installs so that applications may deploy them, and
+redistributed under the Visual Studio distributable-code terms. They are carried
+because the ONNX Runtime imports them and Windows does not include them; a
+machine that already has the redistributable never uses these copies.
+
+**No Windows or Microsoft trademark or logo is used or implied, and nothing
+Microsoft publishes ships inside the installer.** The Visual C++ runtime above
+is the only Microsoft component Cursed ever places on a machine, it arrives only
+if photo mode is turned on, and it is there because another dependency requires
+it. Cursed is not affiliated with, endorsed by, or sponsored by Microsoft.

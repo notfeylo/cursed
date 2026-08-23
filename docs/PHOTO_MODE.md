@@ -32,12 +32,15 @@ Nothing at launch. Nothing without being asked.
 | `onnxruntime-x64.dll` | **16,149,344 bytes (15.40 MB)** | MIT |
 | `onnxruntime-arm64.dll` | **16,261,432 bytes (15.51 MB)** | MIT |
 | `onnxruntime-x86.dll` | **10,884,640 bytes (10.38 MB)** | MIT |
+| `vcruntime140`, `vcruntime140_1`, `msvcp140`, `msvcp140_1` | **908,008 bytes (0.87 MB)** x64 | Microsoft redistributable |
+| `vcruntime140`, `msvcp140`, `msvcp140_1` | **1,884,704 bytes (1.80 MB)** ARM64 | Microsoft redistributable |
+| `vcruntime140`, `msvcp140`, `msvcp140_1` | **776,000 bytes (0.74 MB)** x86 | Microsoft redistributable |
 
 | Architecture | First-use download |
 | --- | --- |
-| x64 | **19.76 MB** |
-| ARM64 | **19.87 MB** |
-| x86 | **14.74 MB** |
+| x64 | **20.63 MB** |
+| ARM64 | **21.67 MB** |
+| x86 | **15.48 MB** |
 
 The model is architecture-independent, because ONNX is a portable graph.
 
@@ -49,6 +52,102 @@ for a feature that works fine there.
 Every figure above was measured from the actual artifact, not estimated. The
 80 MB figure on the ONNX Runtime release page is the full SDK — headers, import
 libraries, tooling — of which only the one DLL ships.
+
+### The C++ runtime, and the bug that put it here
+
+**1.22.0 shipped photo mode with a dependency it never downloaded.** Every
+published `onnxruntime` build statically imports `MSVCP140.dll`,
+`VCRUNTIME140.dll` and their companions — the Visual C++ redistributable, which
+is **not part of Windows**. This app itself has never needed it: Rust links the
+MSVC C runtime statically, so `Cursed.exe` imports only the OS and the UCRT and
+runs on a bare install.
+
+That combination produces the least diagnosable shape a bug comes in. The app
+starts, every other feature works, and photo mode alone answers `LoadLibraryExW
+failed` — four words that were all `libloading` would say, with the Windows
+error code sitting unprinted in a `source` that `ort`'s error type does not
+expose. Nothing on screen distinguished a missing dependency from a corrupted
+file.
+
+It survived every test because **installing Visual Studio, the Build Tools, or
+almost any other developer runtime installs these files**, so every machine the
+feature was written on already had them. Only a machine that has never built
+anything can find it. One did, on 2026-08-22.
+
+So the runtime is now carried with the library that needs it, per architecture,
+verified by the same checksum and signature as everything else here, and loaded
+by absolute path *before* the ONNX Runtime — which is the part that is not
+obvious:
+
+> `ort` opens the runtime with `LoadLibraryExW(path, NULL, 0)`, with no
+> `LOAD_WITH_ALTERED_SEARCH_PATH`. Windows therefore resolves that library's own
+> imports through the standard search order, which contains the **executable's**
+> directory and System32 and *not* the directory the library was loaded from.
+> Putting `msvcp140.dll` next to `onnxruntime-x64.dll` and expecting it to be
+> found is the obvious fix, and it does nothing. Loading each dependency first
+> by absolute path works instead, because an import is satisfied from the
+> modules already loaded in the process, **matched by base name**, before any
+> search of the disk happens.
+
+The filenames on disk are therefore not a free choice, while the *asset* names
+must differ — three architectures cannot publish three files called
+`msvcp140.dll` in one release. `Artifact` carries both, and
+`scripts/photo-assets.mjs` stages them from the redistributable directory,
+refusing any file whose hash is not the one compiled into the app.
+
+**Carried, not required.** The model and the ONNX Runtime are what photo mode
+cannot work without; the C++ runtime is a copy of something most machines
+already have in System32. So a copy that will not download is logged and
+stepped over rather than failing the install — a machine that cannot fetch it
+is the machine every release before 1.23.0 ran on, not a machine that has lost
+the feature. It also means the order of a release is not load-bearing: shipping
+the app before the assets go up degrades to the old behaviour instead of
+breaking photo mode for everyone.
+
+**Licence.** These are Microsoft's redistributable files, taken from the
+`VC/Redist/MSVC/<version>/<arch>/Microsoft.VC*.CRT` directory that Visual Studio
+installs for exactly this purpose, and redistributed unmodified under the
+Visual Studio distributable-code terms. `docs/LICENSES.md` records them.
+
+A machine that already has the redistributable — most machines, and every
+machine with a compiler — is unaffected either way: those files load from
+`models` instead of System32, and the result is identical.
+
+### What it costs while it runs
+
+**The arena is off, and that is worth 528 MB.**
+
+ONNX Runtime's CPU allocator is an arena by default. It takes memory from the
+OS as the graph executes and then keeps it for the life of the session, because
+the next inference will probably want it back. For a server answering requests
+all day that is the right default. For an application that sits in a tray it is
+not, and the numbers are not subtle:
+
+| | arena on (the default) | arena off |
+| --- | --- | --- |
+| Committed after one cutout | **554 MB** | **26 MB** |
+| Still committed a minute later | 554 MB | ~0 MB |
+| Inference | 91 ms | 102 ms |
+
+Half a gigabyte, for eleven milliseconds. And **not in proportion to the
+picture** — u2netp always runs at 320x320, so a 64x64 image committed the same
+554 MB as a 19-megapixel one. The arena sizes itself to the graph.
+
+That is what turned photo mode from heavy into fatal on a small machine. Rust
+aborts on a failed allocation; an abort never reaches the panic hook that writes
+to `cursed.log`; so it arrived as *"the app just closes after three or four
+goes"* with nothing on disk to explain it.
+
+With the arena disabled the whole path is proportional to the image again, at
+about **4 bytes per pixel** of transient working memory on top of the source —
+27 MB at rest, 41 MB during a 3.7-megapixel cutout, 100 MB during a
+19-megapixel one, and back to 27 MB after each. Eight cutouts in a row do not
+move it.
+
+`a_learned_matte_gives_its_memory_back` in `photo.rs` is the measurement, and
+`the_learned_matte_runs_without_the_memory_arena` is the guard that runs in the
+suite — the measurement itself reads process-wide committed bytes and cannot
+share a process with three hundred other tests.
 
 ### The model
 

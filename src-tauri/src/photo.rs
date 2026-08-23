@@ -30,7 +30,18 @@
 use crate::error::{AppError, AppResult};
 use crate::paths;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::os::windows::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
+use windows::core::{HRESULT, PCWSTR};
+use windows::Win32::Foundation::ERROR_MOD_NOT_FOUND;
+use windows::Win32::System::LibraryLoader::LoadLibraryW;
+
+fn wide(path: &Path) -> Vec<u16> {
+    path.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
 
 /// The release these artifacts come from.
 ///
@@ -42,8 +53,15 @@ const ARTIFACT_TAG: &str = "photo-v1";
 /// One file photo mode needs on disk.
 #[derive(Debug, Clone, Copy)]
 pub struct Artifact {
-    /// The asset name in the release, and the filename on disk.
+    /// **The filename on disk, which for the C++ runtime is not a free choice.**
+    /// Windows satisfies an import from the list of modules already loaded in
+    /// the process, matched by base name, so a downloaded `msvcp140.dll`
+    /// answers the runtime's import only while it is called exactly that.
     pub name: &'static str,
+    /// The asset name in the release. The same as `name` wherever one file
+    /// serves every machine, and architecture-tagged where it cannot be: three
+    /// different `msvcp140.dll` cannot share one name in one release.
+    pub asset: &'static str,
     /// Lowercase hex SHA-256 of the exact bytes. Empty until published.
     pub sha256: &'static str,
     pub bytes: u64,
@@ -57,6 +75,7 @@ pub struct Artifact {
 /// `docs/PHOTO_MODE.md` records the licence and provenance.
 pub const MODEL: Artifact = Artifact {
     name: "u2netp.onnx",
+    asset: "u2netp.onnx",
     sha256: "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
     bytes: 4_574_861,
 };
@@ -71,6 +90,7 @@ pub const fn runtime() -> Option<Artifact> {
     {
         Some(Artifact {
             name: "onnxruntime-x64.dll",
+            asset: "onnxruntime-x64.dll",
             sha256: "69d8e6d3879a3b4001cdc74c8ed9ccc7e7f799a5b847059738323404519ec471",
             bytes: 16_149_344,
         })
@@ -79,6 +99,7 @@ pub const fn runtime() -> Option<Artifact> {
     {
         Some(Artifact {
             name: "onnxruntime-arm64.dll",
+            asset: "onnxruntime-arm64.dll",
             sha256: "7c7df2cefd6910f50f44792e8f8f71b371bf9675f9273e70a9277eb92e4d75ed",
             bytes: 16_261_432,
         })
@@ -90,6 +111,7 @@ pub const fn runtime() -> Option<Artifact> {
         // against the older runtime.
         Some(Artifact {
             name: "onnxruntime-x86.dll",
+            asset: "onnxruntime-x86.dll",
             sha256: "f898b430bb6130b8c1394f98ea1c6f4134752919cf96601da27537a8b9458fdb",
             bytes: 10_884_640,
         })
@@ -98,6 +120,143 @@ pub const fn runtime() -> Option<Artifact> {
     {
         None
     }
+}
+
+/// The Microsoft C++ runtime the ONNX Runtime was built against.
+///
+/// **This is what shipped broken in 1.22.0.** `onnxruntime-x64.dll` imports
+/// `MSVCP140.dll`, `MSVCP140_1.dll`, `VCRUNTIME140.dll` and
+/// `VCRUNTIME140_1.dll` — the Visual C++ redistributable, which is not part of
+/// Windows. This app itself never needed it: Rust links the MSVC C runtime
+/// statically, so `Cursed.exe` imports only the OS and the UCRT and runs on a
+/// bare install of Windows. The result was the worst shape a dependency bug
+/// comes in — an app that starts perfectly and one feature inside it that
+/// answers `LoadLibraryExW failed` for a reason nothing on screen explains.
+///
+/// It survived every test because installing Visual Studio, the build tools, or
+/// almost any other developer runtime installs these files. **A machine that has
+/// never built anything is the only machine that can find this**, which is why
+/// it took until a clean VM.
+///
+/// Per architecture, because the set genuinely differs. `VCRUNTIME140_1.dll` is
+/// the x64 C++ exception helper: the 32-bit redistributable does not contain it
+/// at all, and the ARM64 runtime does not import it. Each list is the transitive
+/// closure of the imports, checked against the published artifact rather than
+/// assumed — everything else these files reach for is the UCRT, which has been
+/// part of Windows since long before the 1803 floor.
+///
+/// **Order is load order**, and it matters: each file is loaded by absolute
+/// path, and a file loaded that way still resolves *its own* imports through
+/// the normal search. `msvcp140.dll` needs `vcruntime140.dll` to already be
+/// in the process.
+pub const fn crt() -> &'static [Artifact] {
+    #[cfg(target_arch = "x86_64")]
+    {
+        &[
+            Artifact {
+                name: "vcruntime140.dll",
+                asset: "vcruntime140-x64.dll",
+                sha256: "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+                bytes: 178_616,
+            },
+            Artifact {
+                name: "vcruntime140_1.dll",
+                asset: "vcruntime140_1-x64.dll",
+                sha256: "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+                bytes: 50_112,
+            },
+            Artifact {
+                name: "msvcp140.dll",
+                asset: "msvcp140-x64.dll",
+                sha256: "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+                bytes: 643_512,
+            },
+            Artifact {
+                name: "msvcp140_1.dll",
+                asset: "msvcp140_1-x64.dll",
+                sha256: "206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982",
+                bytes: 35_768,
+            },
+        ]
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        &[
+            Artifact {
+                name: "vcruntime140.dll",
+                asset: "vcruntime140-arm64.dll",
+                sha256: "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310",
+                bytes: 246_112,
+            },
+            Artifact {
+                name: "msvcp140.dll",
+                asset: "msvcp140-arm64.dll",
+                sha256: "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+                bytes: 1_588_064,
+            },
+            Artifact {
+                name: "msvcp140_1.dll",
+                asset: "msvcp140_1-arm64.dll",
+                sha256: "c7713c2061b29d24de4874923522ada0815cfca80d09265c181e81d16c7c42d6",
+                bytes: 50_528,
+            },
+        ]
+    }
+    #[cfg(target_arch = "x86")]
+    {
+        &[
+            Artifact {
+                name: "vcruntime140.dll",
+                asset: "vcruntime140-x86.dll",
+                sha256: "2fa6efc053203460a23d3a25158f227d895d2dadc63acc1a372da97c3a4281c3",
+                bytes: 123_328,
+            },
+            Artifact {
+                name: "msvcp140.dll",
+                asset: "msvcp140-x86.dll",
+                sha256: "f0cda2a0cf1fe6fbbf579b9098462329d3aaa7513a207af2e0f33b01456e388a",
+                bytes: 618_944,
+            },
+            Artifact {
+                name: "msvcp140_1.dll",
+                asset: "msvcp140_1-x86.dll",
+                sha256: "b08edd7954ae9954d24eb344a8b0116a980c60179ff1b92d5219639e21028cc2",
+                bytes: 33_728,
+            },
+        ]
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "x86")))]
+    {
+        &[]
+    }
+}
+
+/// Everything a working photo mode needs on disk, in the order it is fetched.
+///
+/// One list, so that installing, removing, sweeping a failed removal and
+/// deciding whether the feature is installed can never disagree about what the
+/// feature *is*. Adding the C++ runtime to this list is what makes an existing
+/// install notice that it is now missing something.
+fn artifacts() -> Vec<Artifact> {
+    let mut all = required();
+    all.extend_from_slice(crt());
+    all
+}
+
+/// The two without which there is no photo mode at all.
+///
+/// **The C++ runtime is deliberately not in here.** It is a copy of something
+/// most machines already have in System32, carried for the ones that do not, so
+/// a machine that cannot fetch it is not a machine that has lost the feature —
+/// it is the machine every release before this one ran on. Treating it as
+/// required would mean an unreachable asset, or a release published in the
+/// wrong order, breaking photo mode for everybody rather than for nobody.
+fn required() -> Vec<Artifact> {
+    let mut all = vec![MODEL];
+    if let Some(library) = runtime() {
+        all.push(library);
+    }
+    all
 }
 
 /// Whether this build can use photo mode at all.
@@ -146,7 +305,7 @@ pub fn status() -> PhotoStatus {
         unavailable_reason: Some(why.to_owned()),
     };
 
-    let Some(library) = runtime() else {
+    let Some(_library) = runtime() else {
         return unavailable("Photo mode has no build for this processor architecture.");
     };
     if !available() {
@@ -160,8 +319,12 @@ pub fn status() -> PhotoStatus {
             .map(|m| m.len())
             .unwrap_or(0)
     };
-    let model = on_disk(&MODEL);
-    let runtime_bytes = on_disk(&library);
+    let all = artifacts();
+    let installed_bytes: u64 = all.iter().map(on_disk).sum();
+    // Judged on what photo mode cannot work without. A machine that has the
+    // model and the runtime *is* installed, whether or not the C++ runtime came
+    // down beside them — see `required`.
+    let complete = required().iter().all(|a| on_disk(a) > 0);
 
     // A removal waiting on the next launch is a removal as far as anyone using
     // the app is concerned: the button worked, and offering "Remove" again for
@@ -171,9 +334,9 @@ pub fn status() -> PhotoStatus {
 
     PhotoStatus {
         available: true,
-        installed: !pending && model > 0 && runtime_bytes > 0,
-        download_bytes: MODEL.bytes + library.bytes,
-        installed_bytes: if pending { 0 } else { model + runtime_bytes },
+        installed: !pending && complete,
+        download_bytes: all.iter().map(|a| a.bytes).sum(),
+        installed_bytes: if pending { 0 } else { installed_bytes },
         unavailable_reason: None,
     }
 }
@@ -221,7 +384,7 @@ fn asset_path(name: &str) -> String {
 fn signature_for(artifact: &Artifact) -> AppResult<String> {
     let bytes = crate::updates::get_with_progress(
         crate::updates::DOWNLOAD_HOST,
-        &asset_path(&format!("{}.minisig", artifact.name)),
+        &asset_path(&format!("{}.minisig", artifact.asset)),
         64 * 1024,
         true,
         &mut |_, _| {},
@@ -311,7 +474,7 @@ fn fetch(artifact: &Artifact, progress: &mut dyn FnMut(u64, u64)) -> AppResult<(
     let cap = (artifact.bytes as usize).saturating_mul(2).max(1024 * 1024);
     let bytes = crate::updates::get_with_progress(
         crate::updates::DOWNLOAD_HOST,
-        &asset_path(artifact.name),
+        &asset_path(artifact.asset),
         cap,
         true,
         progress,
@@ -336,22 +499,74 @@ pub fn install(progress: &mut dyn FnMut(u64, u64)) -> AppResult<()> {
     if !available() {
         return Err(AppError::invalid(UNAVAILABLE));
     }
-    let Some(library) = runtime() else {
+    if runtime().is_none() {
         return Err(AppError::invalid(
             "photo mode has no build for this processor architecture",
         ));
-    };
-
-    // One figure across both files, so the UI shows a single bar that only
-    // moves forwards rather than two that each restart at zero.
-    let total = MODEL.bytes + library.bytes;
-    fetch(&MODEL, &mut |got, _| progress(got, total))?;
-    if cancelled() {
-        return Err(AppError::invalid("the download was cancelled"));
     }
-    let done = MODEL.bytes;
-    fetch(&library, &mut |got, _| progress(done + got, total))?;
+
+    // One figure across every file, so the UI shows a single bar that only
+    // moves forwards rather than one that restarts at zero per artifact.
+    let all = artifacts();
+    let total: u64 = all.iter().map(|a| a.bytes).sum();
+    let optional: Vec<&'static str> = crt().iter().map(|a| a.name).collect();
+    let mut done = 0u64;
+    for artifact in &all {
+        if cancelled() {
+            return Err(AppError::invalid("the download was cancelled"));
+        }
+        // **Skipped when it is already here and already right.** Adding the C++
+        // runtime to the list would otherwise make everybody who already has
+        // photo mode fetch twenty megabytes again to be handed the eight
+        // hundred kilobytes they were actually missing.
+        if already_installed(artifact) {
+            log::info!("photo mode: {} is already installed", artifact.name);
+            done += artifact.bytes;
+            progress(done, total);
+            continue;
+        }
+        match fetch(artifact, &mut |got, _| progress(done + got, total)) {
+            Ok(()) => {}
+            // **A missing C++ runtime is not a failed install.** Most machines
+            // resolve those from System32 and never touch these copies, so
+            // refusing the whole install because one of them could not be
+            // fetched would break photo mode for everyone in order to fix it
+            // for the few. What it costs is one honest sentence later:
+            // `diagnose` names the file if the runtime then will not load.
+            Err(e) if optional.contains(&artifact.name) => {
+                log::warn!(
+                    "photo mode: {} could not be downloaded ({e}); \
+                     carrying on, because this PC may already have it",
+                    artifact.name
+                );
+            }
+            Err(e) => return Err(e),
+        }
+        done += artifact.bytes;
+    }
     Ok(())
+}
+
+/// Whether this artifact is on disk *and* is the artifact it claims to be.
+///
+/// By hash rather than by size, because the point of it is to skip a download
+/// safely: a file that hashes to the constant compiled into this build is
+/// byte-for-byte the file that passed both the checksum and the signature when
+/// it was written. A size match alone would wave through a truncated or
+/// substituted file, which for a library this process is about to load is the
+/// one mistake worth never making.
+fn already_installed(artifact: &Artifact) -> bool {
+    if artifact.sha256.is_empty() {
+        return false;
+    }
+    let Ok(path) = artifact_path(artifact) else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    bytes.len() as u64 == artifact.bytes
+        && crate::hash::hex_eq(&crate::hash::sha256_hex(&bytes), artifact.sha256)
 }
 
 /// Deletes both artifacts and reports what was reclaimed.
@@ -370,11 +585,7 @@ pub fn remove() -> AppResult<u64> {
 
     let mut freed = 0u64;
     let mut stubborn = false;
-    let mut artifacts: Vec<Artifact> = vec![MODEL];
-    if let Some(library) = runtime() {
-        artifacts.push(library);
-    }
-    for artifact in artifacts {
+    for artifact in artifacts() {
         let path = artifact_path(&artifact)?;
         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         match std::fs::remove_file(&path) {
@@ -418,11 +629,7 @@ pub fn sweep_pending_removal() {
         return;
     }
     let mut left = false;
-    let mut artifacts: Vec<Artifact> = vec![MODEL];
-    if let Some(library) = runtime() {
-        artifacts.push(library);
-    }
-    for artifact in artifacts {
+    for artifact in artifacts() {
         let Ok(path) = artifact_path(&artifact) else {
             continue;
         };
@@ -523,6 +730,8 @@ fn load_runtime_once() -> AppResult<()> {
 
     let path = runtime_path()?;
     log::info!("photo mode: loading the runtime from {}", path.display());
+    // Before the runtime, the runtime's own dependencies. See `preload_crt`.
+    preload_crt();
     // `init_from` is the `load-dynamic` entry point: it resolves the library
     // from this path rather than from a link at build time, which is the whole
     // reason the installer does not carry it. `commit` answers `false` when an
@@ -530,14 +739,105 @@ fn load_runtime_once() -> AppResult<()> {
     // same runtime, and there is only ever one in a process.
     let builder = ort::init_from(&path).map_err(|e| {
         AppError::msg(format!(
-            "the photo-mode runtime could not be loaded from {}: {e}",
-            path.display()
+            "the photo-mode runtime could not be loaded from {}: {e}{}",
+            path.display(),
+            diagnose(&path)
         ))
     })?;
     let _ = builder.commit();
 
     LOADED.store(true, std::sync::atomic::Ordering::Release);
     Ok(())
+}
+
+/// Loads the C++ runtime into this process before anything asks for it.
+///
+/// **Why a preload, and not simply a file in the same folder.** `ort` opens the
+/// runtime through `libloading::Library::new`, which is
+/// `LoadLibraryExW(path, NULL, 0)` — no `LOAD_WITH_ALTERED_SEARCH_PATH`.
+/// Windows therefore resolves `onnxruntime-x64.dll`'s own imports through the
+/// standard search order, and the standard search order contains this
+/// executable's directory and System32 and pointedly **not** the directory the
+/// library itself was loaded from. Dropping `msvcp140.dll` next to it in
+/// `models` and expecting that to work is the obvious fix and it does nothing.
+///
+/// Loading each dependency first, by absolute path, does work — for a reason
+/// worth writing down. An import is satisfied from the list of modules already
+/// loaded in the process, matched **by base name**, before any search of the
+/// disk happens. Once `msvcp140.dll` is in that list, the runtime's import of
+/// it resolves with no search at all, wherever the file came from.
+///
+/// Best-effort, file by file. A missing copy is not an error here: most
+/// machines have the redistributable in System32 and never needed this, and an
+/// install made before these files joined the list must still be able to load.
+/// If it genuinely cannot be resolved, `diagnose` says so afterwards in a
+/// sentence that names the file.
+fn preload_crt() {
+    for artifact in crt() {
+        let Ok(path) = artifact_path(artifact) else {
+            continue;
+        };
+        if !path.is_file() {
+            continue;
+        }
+        let wide_path = wide(&path);
+        match unsafe { LoadLibraryW(PCWSTR(wide_path.as_ptr())) } {
+            // **Never freed, deliberately.** Staying in the loaded-module list
+            // for the life of the process is the whole mechanism; unloading it
+            // again would leave the import with nothing to match.
+            Ok(_) => log::debug!("photo mode: preloaded {}", artifact.name),
+            Err(e) => log::warn!(
+                "photo mode: {} could not be preloaded: {}",
+                artifact.name,
+                crate::error::describe_win32(&e)
+            ),
+        }
+    }
+}
+
+/// Why the load really failed, asked of Windows instead of of `ort`.
+///
+/// **The layer that knows will not say.** `ort` formats a load failure as
+/// "failed to load from `…`: {e}", where `{e}` is a `libloading::Error` whose
+/// entire `Display` is the four words "LoadLibraryExW failed"; the real error
+/// lives in that type's `source`, and `ort`'s own error implements `source`
+/// as `None`, so the chain is cut before it reaches anything useful. A missing
+/// dependency (126), a file that is not a library of this architecture (193)
+/// and one an antivirus is holding open (5) all arrive as the same four words.
+/// That is exactly what a user on a clean machine was shown.
+///
+/// So the same file is opened again here, and this time the answer is kept.
+/// Only ever on the failing path, where one more `LoadLibraryW` costs nothing.
+fn diagnose(path: &Path) -> String {
+    let wide_path = wide(path);
+    let Err(error) = (unsafe { LoadLibraryW(PCWSTR(wide_path.as_ptr())) }) else {
+        // It loaded this time, so the load was not what failed — `ort` also
+        // refuses a runtime older than the one it was built against. Adding a
+        // guess here would be worse than adding nothing.
+        return String::new();
+    };
+    let mut said = format!(" — Windows says: {}", crate::error::describe_win32(&error));
+    if error.code() == HRESULT::from_win32(ERROR_MOD_NOT_FOUND.0) {
+        let missing: Vec<&str> = crt()
+            .iter()
+            .map(|a| a.name)
+            .filter(|name| !module_resolves(name))
+            .collect();
+        if !missing.is_empty() {
+            said.push_str(&format!(
+                ". {} could not be found on this PC — that is the Microsoft Visual C++ Runtime,                  which photo mode's library is built against and Windows does not include.                  Installing photo mode again downloads a copy of it",
+                missing.join(", ")
+            ));
+        }
+    }
+    said
+}
+
+/// Whether Windows can resolve a module by bare name, through the search order
+/// it would use for an import.
+fn module_resolves(name: &str) -> bool {
+    let wide_name: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe { LoadLibraryW(PCWSTR(wide_name.as_ptr())) }.is_ok()
 }
 
 /// Runs the model over one image and returns its alpha, 320x320, row-major.
@@ -558,9 +858,35 @@ fn infer(input: Vec<f32>) -> AppResult<Vec<f32>> {
             ));
         }
         let started = std::time::Instant::now();
-        let session = ort::session::Session::builder()
-            .and_then(|mut builder| builder.commit_from_file(&model))
-            .map_err(|e| AppError::msg(format!("the photo-mode model would not load: {e}")))?;
+        let failed = |e: &dyn std::fmt::Display| {
+            AppError::msg(format!("the photo-mode model would not load: {e}"))
+        };
+        let mut builder = ort::session::Session::builder().map_err(|e| failed(&e))?;
+        // **Without the arena.** ONNX Runtime's CPU allocator is a growing
+        // arena by default: it takes memory from the OS as the graph runs and
+        // then keeps it for the life of the session, on the assumption that the
+        // next run wants it back. For a server answering requests all day that
+        // is exactly right. For a cursor app it is not — measured on this
+        // model, one cutout committed **554 MB and held it**, no matter how
+        // small the picture was, because u2netp always runs at 320x320 and the
+        // arena sizes itself to the graph rather than to the image.
+        //
+        // A tray application sitting on half a gigabyte after somebody removed
+        // a background once is wrong on any machine. On a small one it is fatal:
+        // Rust aborts on a failed allocation, and an abort takes the whole app
+        // with it without reaching the panic hook, which is precisely the
+        // "it just crashes after a few goes" this was reported as.
+        //
+        // Turning the arena off gives the memory back after every run — 554 MB
+        // becomes 26 MB, and 27 MB at rest rather than 557 — for about 11 ms on
+        // a 91 ms inference. That trade is not close. `docs/PHOTO_MODE.md` has
+        // the table.
+        builder = builder
+            .with_execution_providers([ort::ep::CPU::default()
+                .with_arena_allocator(false)
+                .build()])
+            .map_err(|e| failed(&e))?;
+        let session = builder.commit_from_file(&model).map_err(|e| failed(&e))?;
         log::info!("photo mode: model ready in {} ms", started.elapsed().as_millis());
         *guard = Some(session);
     }
@@ -752,6 +1078,30 @@ mod tests {
         bitmap
     }
 
+    /// **One at a time.** Every test below drives the real model through the
+    /// one shared session, and one of them measures this process's memory while
+    /// it does. Left to run in parallel they measure each other: a concurrent
+    /// cutout, or a session that another test has just released and is
+    /// rebuilding, lands in the same reading — which is how the memory test
+    /// first reported 277 MB for a 64x64 picture that costs 26.
+    fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The two files a learned matte actually opens.
+    ///
+    /// **Not `status().installed`**, which asks a stricter question: it also
+    /// wants the C++ runtime downloaded into `models`, and is therefore false
+    /// on every machine that resolves `msvcp140.dll` from System32 — which is
+    /// every machine with a compiler on it, including this one. Guarding on the
+    /// stricter question does not fail the tests below, it *skips* them, which
+    /// is the failure mode worth spending a helper to avoid.
+    fn the_model_and_runtime_are_here() -> bool {
+        let present = |a: &Artifact| artifact_path(a).map(|p| p.is_file()).unwrap_or(false);
+        present(&MODEL) && runtime().is_some_and(|r| present(&r))
+    }
+
     /// **The end-to-end test, when the artifacts are on this machine.**
     ///
     /// Skipped rather than failed when they are not: they are a 20 MB download
@@ -762,9 +1112,10 @@ mod tests {
     /// the real runtime and checks the matte that comes back.
     #[test]
     fn the_model_produces_a_matte_when_it_is_installed() {
-        if !status().installed {
+        if !the_model_and_runtime_are_here() {
             return;
         }
+        let _serialised = one_at_a_time();
         let mut bitmap = a_subject_on_noise();
         let report = remove_background_learned(&mut bitmap).expect("the model runs");
 
@@ -777,6 +1128,162 @@ mod tests {
         // The subject survives: the middle is opaque and the corners are gone.
         assert_eq!(bitmap.alpha(255, 255), 255, "the subject was eaten");
         assert_eq!(bitmap.alpha(2, 2), 0, "the background stayed");
+    }
+
+    /// **The mechanism, checked instead of assumed.**
+    ///
+    /// The whole fix rests on one claim: loading our verified copy by absolute
+    /// path first puts it in this process's module list under the bare name the
+    /// runtime imports, so the runtime binds to *that* file and never searches
+    /// the disk. Asking Windows where `msvcp140.dll` was actually loaded from
+    /// is the only way to know the claim holds — and it is worth knowing,
+    /// because the failure it guards against, quietly binding to System32
+    /// instead, is invisible on a machine that has both.
+    ///
+    /// Skipped where the copies have not been downloaded, like the end-to-end
+    /// test above.
+    #[test]
+    fn a_preloaded_runtime_is_the_copy_that_gets_used() {
+        use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
+
+        let Ok(models) = models_dir() else {
+            return;
+        };
+        let ours = models.join("msvcp140.dll");
+        if !ours.is_file() {
+            return;
+        }
+        let _serialised = one_at_a_time();
+        preload_crt();
+
+        let name: Vec<u16> = "msvcp140.dll"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let handle = unsafe { GetModuleHandleW(PCWSTR(name.as_ptr())) }
+            .expect("msvcp140.dll is in the process after a preload");
+        let mut buffer = [0u16; 512];
+        let written = unsafe { GetModuleFileNameW(Some(handle), &mut buffer) } as usize;
+        let loaded = String::from_utf16_lossy(&buffer[..written]);
+
+        assert_eq!(
+            Path::new(&loaded),
+            ours.as_path(),
+            "the C++ runtime bound to {loaded} rather than to the verified copy"
+        );
+    }
+
+    /// **The guard for a session that held 554 MB**, and the one that runs in
+    /// the suite.
+    ///
+    /// The measurement it stands in for is `a_learned_matte_gives_its_memory_back`
+    /// below, which reads this process's committed bytes — and therefore cannot
+    /// run beside three hundred other tests that are all allocating. Reading the
+    /// source instead is exact, free, and catches the thing actually worth
+    /// catching: somebody simplifying the session options back to the default
+    /// and quietly restoring half a gigabyte.
+    #[test]
+    fn the_learned_matte_runs_without_the_memory_arena() {
+        let source = include_str!("photo.rs");
+        assert!(
+            source.contains("with_arena_allocator(false)"),
+            "the CPU memory arena has to stay off: with it on, one cutout of a              64x64 picture commits 554 MB and keeps it for the life of the              session. See a_learned_matte_gives_its_memory_back for the figures."
+        );
+    }
+
+    /// **The measurement behind that guard. Run it deliberately:**
+    ///
+    /// ```text
+    /// cargo test --release --lib a_learned_matte_gives_its_memory_back -- --ignored --nocapture --test-threads=1
+    /// ```
+    ///
+    /// `#[ignore]` because it reads **process-wide** committed bytes, and the
+    /// rest of the suite allocates freely in parallel: run alongside everything
+    /// else it reported 277 MB for a picture that costs 26. Serialising the
+    /// tests in this file was not enough, because the noise is in the other
+    /// three hundred. A number that is only true when nothing else is running
+    /// belongs behind a flag rather than in a gate.
+    ///
+    /// Measured on 24 logical processors, release build:
+    ///
+    /// | | arena on | arena off |
+    /// | --- | --- | --- |
+    /// | committed after one cutout | **554 MB** | **26 MB** |
+    /// | still committed afterwards | 554 MB | ~0 MB |
+    /// | inference | 91 ms | 102 ms |
+    #[test]
+    #[ignore]
+    fn a_learned_matte_gives_its_memory_back() {
+    ///
+    /// ONNX Runtime's CPU allocator is an arena by default: it takes memory as
+    /// the graph runs and keeps it for the life of the session, which is right
+    /// for a server and wrong for a tray application. Measured on this model it
+    /// committed **554 MB on the first cutout and never gave it back** — and
+    /// not in proportion to the picture, because u2netp always runs at 320x320.
+    /// A 64x64 image cost the same 554 MB as a 19-megapixel one.
+    ///
+    /// That is what made photo mode fatal on a small machine rather than merely
+    /// heavy. Rust aborts on a failed allocation, an abort never reaches the
+    /// panic hook, and so it arrived as "the app just closes after a few goes"
+    /// with nothing in the log to say why.
+    ///
+    /// The budget below is deliberately loose. The measured figure with the
+    /// arena disabled is about 26 MB and with it enabled about 554 MB, so
+    /// anything between the two catches the regression while leaving room for
+    /// whatever else this process is doing — the reading is process-wide, and
+    /// the rest of the suite is running alongside it.
+        use windows::Win32::System::ProcessStatus::{
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+        };
+        use windows::Win32::System::Threading::GetCurrentProcess;
+
+        if !the_model_and_runtime_are_here() {
+            return;
+        }
+        let _serialised = one_at_a_time();
+
+        /// Committed private bytes. Working set is trimmed by Windows whenever
+        /// it likes and would measure memory pressure rather than this code.
+        fn committed() -> u64 {
+            let mut ex = PROCESS_MEMORY_COUNTERS_EX::default();
+            let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+            unsafe {
+                GetProcessMemoryInfo(
+                    GetCurrentProcess(),
+                    &mut ex as *mut _ as *mut PROCESS_MEMORY_COUNTERS,
+                    size,
+                )
+            }
+            .ok();
+            ex.PrivateUsage as u64
+        }
+
+        const BUDGET: u64 = 200 * 1024 * 1024;
+
+        // Start from no session, so what is measured is one session's whole
+        // cost rather than one that some other test already paid for.
+        release();
+        let before = committed();
+
+        // Small on purpose. The arena sizes itself to the graph, so a tiny
+        // picture that costs half a gigabyte is the clearest possible statement
+        // of what is wrong.
+        let mut bitmap = Bitmap::new(64, 64);
+        for y in 0..64u32 {
+            for x in 0..64u32 {
+                bitmap.set_pixel(x, y, [(x * 4) as u8, (y * 4) as u8, 120, 255]);
+            }
+        }
+        let _ = remove_background_learned(&mut bitmap);
+
+        let held = committed().saturating_sub(before);
+        release();
+
+        assert!(
+            held < BUDGET,
+            "one cutout of a 64x64 picture is holding {} MB. The CPU memory              arena is the usual reason — see the session options in `infer`.",
+            held / (1024 * 1024)
+        );
     }
 
     /// The classical path is still the one that runs for flat art, whatever is
@@ -801,7 +1308,7 @@ mod tests {
     /// user who gets there another way is owed a sentence.
     #[test]
     fn asking_for_a_learned_matte_without_the_model_says_so() {
-        if status().installed {
+        if the_model_and_runtime_are_here() {
             return;
         }
         let mut bitmap = Bitmap::new(64, 64);
@@ -811,13 +1318,125 @@ mod tests {
         assert!(error.contains("photo mode") || error.contains("Photo mode"), "{error}");
     }
 
+    /// **The regression test for what shipped in 1.22.0.**
+    ///
+    /// These filenames are not a labelling choice. Windows satisfies an import
+    /// from the modules already loaded in the process, matched by base name, so
+    /// a file downloaded as anything but `msvcp140.dll` answers nothing and the
+    /// runtime fails to load exactly as it did before. The sets are per
+    /// architecture and were read out of each published runtime's import table:
+    /// `VCRUNTIME140_1.dll` is the x64 C++ exception helper, absent from the
+    /// 32-bit redistributable entirely and not imported by the ARM64 build.
+    #[test]
+    fn the_cpp_runtime_is_carried_under_the_names_windows_matches() {
+        let names: Vec<&str> = crt().iter().map(|a| a.name).collect();
+        #[cfg(target_arch = "x86_64")]
+        assert_eq!(
+            names,
+            [
+                "vcruntime140.dll",
+                "vcruntime140_1.dll",
+                "msvcp140.dll",
+                "msvcp140_1.dll"
+            ]
+        );
+        #[cfg(any(target_arch = "aarch64", target_arch = "x86"))]
+        assert_eq!(names, ["vcruntime140.dll", "msvcp140.dll", "msvcp140_1.dll"]);
+    }
+
+    /// **The C++ runtime is carried, not required.**
+    ///
+    /// Were it required, a release published before its assets went up — or an
+    /// asset that later went missing — would break photo mode on every machine,
+    /// including the great majority that already have those files in System32
+    /// and never touch the copies. This is the assertion that stops the order
+    /// of a release from being load-bearing.
+    #[test]
+    fn photo_mode_does_not_depend_on_the_carried_cpp_runtime() {
+        let names: Vec<&str> = required().iter().map(|a| a.name).collect();
+        for artifact in crt() {
+            assert!(
+                !names.contains(&artifact.name),
+                "{} is being treated as required",
+                artifact.name
+            );
+        }
+        assert!(names.contains(&MODEL.name), "the model is required");
+        assert_eq!(names.len(), if runtime().is_some() { 2 } else { 1 });
+    }
+
+    /// The list is a load order, and the order is a dependency order.
+    ///
+    /// A library loaded by absolute path still resolves **its own** imports
+    /// through the ordinary search, so `msvcp140.dll` finds `vcruntime140.dll`
+    /// only if that one is already in the process. Getting this backwards fails
+    /// on precisely the machines the whole change exists for, and nowhere else.
+    #[test]
+    fn the_cpp_runtime_loads_in_dependency_order() {
+        let names: Vec<&str> = crt().iter().map(|a| a.name).collect();
+        let at = |n: &str| names.iter().position(|x| *x == n);
+        if let (Some(runtime), Some(cpp)) = (at("vcruntime140.dll"), at("msvcp140.dll")) {
+            assert!(runtime < cpp, "msvcp140.dll imports vcruntime140.dll");
+        }
+        if let (Some(cpp), Some(part)) = (at("msvcp140.dll"), at("msvcp140_1.dll")) {
+            assert!(part > cpp, "msvcp140_1.dll imports msvcp140.dll");
+        }
+    }
+
+    /// Every artifact is published under a name of its own.
+    ///
+    /// Three architectures need three different `msvcp140.dll` and one release
+    /// cannot hold three assets called that, which is why the asset name and the
+    /// filename are separate fields. A collision here is an architecture quietly
+    /// downloading another architecture's library — which loads, and then fails
+    /// in a way indistinguishable from a corrupted file.
+    #[test]
+    fn every_artifact_is_published_under_its_own_name() {
+        let mut seen = std::collections::BTreeSet::new();
+        for artifact in artifacts() {
+            assert!(
+                !artifact.sha256.is_empty(),
+                "{} has no published checksum",
+                artifact.name
+            );
+            assert!(artifact.bytes > 0, "{} has no published size", artifact.name);
+            assert!(
+                seen.insert(artifact.asset),
+                "two artifacts are published as {}",
+                artifact.asset
+            );
+        }
+    }
+
+    /// The trust boundary again, on the other road into it.
+    ///
+    /// `already_installed` exists to *skip* a download, so a build with no
+    /// published checksum must be unable to skip one — otherwise the checksum
+    /// that `verify` refuses to do without could be sidestepped by the file
+    /// simply being there already.
+    #[test]
+    fn an_artifact_with_no_published_checksum_is_never_taken_from_disk() {
+        let unpublished = Artifact {
+            name: MODEL.name,
+            asset: MODEL.asset,
+            sha256: "",
+            bytes: MODEL.bytes,
+        };
+        assert!(!already_installed(&unpublished));
+    }
+
     /// **The trust boundary.** A library that gets loaded into this process
     /// must never arrive on the strength of its filename. A build with no
     /// published checksum has nothing to check against, and the safe answer is
     /// to do without photo mode entirely.
     #[test]
     fn an_artifact_with_no_published_checksum_is_refused() {
-        let unpublished = Artifact { name: "onnxruntime-x64.dll", sha256: "", bytes: 10 };
+        let unpublished = Artifact {
+            name: "onnxruntime-x64.dll",
+            asset: "onnxruntime-x64.dll",
+            sha256: "",
+            bytes: 10,
+        };
         assert!(verify(&unpublished, b"anything at all").is_err());
     }
 
@@ -825,6 +1444,7 @@ mod tests {
     fn a_checksum_mismatch_is_refused() {
         let artifact = Artifact {
             name: "u2netp.onnx",
+            asset: "u2netp.onnx",
             sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             bytes: 4,
         };
