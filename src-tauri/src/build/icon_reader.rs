@@ -574,10 +574,10 @@ pub fn decode_ani(bytes: &[u8]) -> AppResult<Vec<(Bitmap, u32)>> {
                     .filter_map(|chunk| u32_at(chunk, 0))
                     .collect();
             }
-            b"LIST" => {
-                if body.starts_with(b"fram") {
-                    collect_icons(body, 4, &mut icons);
-                }
+            // Only the `fram` list holds the frames; a `LIST` of anything else
+            // (`INFO`, most often) is metadata and is skipped by the arm below.
+            b"LIST" if body.starts_with(b"fram") => {
+                collect_icons(body, 4, &mut icons);
             }
             _ => {}
         }
