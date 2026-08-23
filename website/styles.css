@@ -1,7 +1,13 @@
-/* Cursed — the same design tokens as the app (§10.2).
+/* Cursed — the landing page.
+
    No JavaScript on this site: the CSP is `script-src 'none'`, and it stays that
-   way. Everything below — the scroll reveals, the orbit, the drifting cursors,
-   the FAQ — is CSS and semantic HTML. */
+   way. Everything here is CSS and semantic HTML.
+
+   There is exactly one animation on the page — the laptop lid opening in the
+   about section — and it is scroll-driven CSS. Nothing else moves: no drifting
+   background, no scroll reveals, no orbit, no hover transitions. Black, white
+   and one blue, with no glow anywhere; depth comes from borders and neutral
+   shadow, never from coloured light. */
 
 @font-face {
   font-family: "Chakra Petch";
@@ -29,32 +35,25 @@
 }
 
 :root {
-  --bg: #050507;
-  --surface: #0b0d12;
-  --elevated: #131722;
-  --border: #1e2532;
-  --border-strong: #2a3446;
+  --bg: #000000;
+  --surface: #08090c;
+  --elevated: #0d0f14;
+  --border: #1b1f27;
+  --border-strong: #2b323e;
 
   --accent: #2e8bff;
   --accent-hi: #5cb8ff;
-  --accent-dim: #0a2540;
-  --accent-glow: rgba(46, 139, 255, 0.28);
 
-  --text: #edf1f7;
-  --text-2: #8a94a6;
-  --text-3: #58606e;
+  --text: #ffffff;
+  --text-2: #a2abba;
+  --text-3: #6a7385;
 
   --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
 
-  --shell: 1120px;
+  --shell: 1160px;
   --gutter: 28px;
-
-  /* One motion vocabulary, used by everything. */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --fast: 140ms;
-  --med: 200ms;
 
   color-scheme: dark;
 }
@@ -64,9 +63,10 @@
 }
 
 html {
-  scroll-behavior: smooth;
-  /* The header is sticky, so anchor targets must clear it. */
-  scroll-padding-top: 90px;
+  /* The header is sticky, so anchor targets have to clear it. No
+     `scroll-behavior: smooth` — smooth scrolling is an animation, and the page
+     no longer has any. */
+  scroll-padding-top: 88px;
 }
 
 body {
@@ -75,102 +75,48 @@ body {
   color: var(--text-2);
   font-family: var(--font-ui);
   font-size: 16px;
-  line-height: 1.65;
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 
   /* The pointer, on the page about pointers. A real .png cursor with a sensible
-     hotspot, and `auto` behind it for anything that refuses it. Each section
-     below sets its own, so it changes as you scroll — which is the product
-     demonstrating itself rather than describing itself. */
+     hotspot, and `auto` behind it for anything that refuses it. The product
+     demonstrating itself rather than describing itself.
+
+     Deliberately no `overflow-x` here: `overflow-x: hidden` on the body turns it
+     into a scroll container, which silently breaks the `view()` timeline the
+     laptop lid depends on. Anything that would overflow is clipped by its own
+     section instead. */
   cursor: url("shots/fly/cur-trump.png") 4 4, auto;
 }
 
-/* ---------------------------------------------------------- background -- */
-
-.bg {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  overflow: hidden;
+#about {
+  cursor: url("shots/fly/cur-elon.png") 4 4, auto;
+}
+#download {
+  cursor: url("shots/fly/cur-wheel.png") 4 4, auto;
 }
 
-.bg-grid {
-  position: absolute;
-  inset: -20%;
-  background-image:
-    linear-gradient(rgba(46, 139, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(46, 139, 255, 0.07) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 70%);
-  animation: grid-drift 60s linear infinite;
+::selection {
+  background: var(--accent);
+  color: #fff;
 }
 
-@keyframes grid-drift {
-  to {
-    transform: translate3d(64px, 64px, 0);
-  }
+:focus-visible {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 3px;
 }
 
-/* Blurred colour, moving slowly. `filter: blur()` on a big element is expensive
-   to paint once and free thereafter, because only the transform animates. */
-.blob {
-  position: absolute;
-  width: 60vw;
-  height: 60vw;
-  min-width: 520px;
-  min-height: 520px;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.5;
-  will-change: transform;
+a {
+  color: var(--accent-hi);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
 }
 
-.blob-a {
-  top: -22vw;
-  left: -12vw;
-  background: radial-gradient(circle, rgba(46, 139, 255, 0.55), transparent 65%);
-  animation: drift-a 34s var(--ease) infinite alternate;
-}
-.blob-b {
-  top: 28vh;
-  right: -20vw;
-  background: radial-gradient(circle, rgba(92, 184, 255, 0.38), transparent 65%);
-  animation: drift-b 46s var(--ease) infinite alternate;
-}
-.blob-c {
-  bottom: -28vw;
-  left: 22vw;
-  background: radial-gradient(circle, rgba(18, 58, 114, 0.75), transparent 65%);
-  animation: drift-c 40s var(--ease) infinite alternate;
-}
-
-@keyframes drift-a {
-  to {
-    transform: translate3d(14vw, 10vh, 0) scale(1.15);
-  }
-}
-@keyframes drift-b {
-  to {
-    transform: translate3d(-12vw, 14vh, 0) scale(0.9);
-  }
-}
-@keyframes drift-c {
-  to {
-    transform: translate3d(10vw, -12vh, 0) scale(1.1);
-  }
-}
-
-.bg-vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    120% 90% at 50% 0%,
-    rgba(5, 5, 7, 0.1) 0%,
-    rgba(5, 5, 7, 0.72) 55%,
-    rgba(5, 5, 7, 0.94) 100%
-  );
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
 }
 
 /* -------------------------------------------------------------- header -- */
@@ -178,1088 +124,709 @@ body {
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 24px;
-  width: 100%;
-  max-width: var(--shell);
-  margin: 0 auto;
-  padding: 14px var(--gutter);
-  /* Frosted, so the page moves under it rather than behind a solid bar. */
-  backdrop-filter: blur(14px) saturate(1.3);
-  background: rgba(5, 5, 7, 0.55);
-  border-bottom: 1px solid transparent;
-}
-
-/* The border only appears once the page has moved. Pure CSS, via a scroll
-   timeline — no listener, no layout reads. */
-@supports (animation-timeline: scroll()) {
-  .site-header {
-    animation: header-solid linear both;
-    animation-timeline: scroll(root);
-    animation-range: 0 120px;
-  }
-  @keyframes header-solid {
-    to {
-      background: rgba(5, 5, 7, 0.82);
-      border-bottom-color: var(--border);
-    }
-  }
+  padding: 16px var(--gutter);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
+  color: var(--text);
+}
+.brand:hover {
   text-decoration: none;
-  border: 0;
 }
-
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
-  border: 1px solid var(--accent-dim);
-  transition: transform var(--med) var(--ease), box-shadow var(--med) var(--ease);
+  display: inline-flex;
 }
-
-.brand:hover .brand-mark {
-  transform: translateY(-2px) rotate(-6deg);
-  box-shadow: 0 8px 24px var(--accent-glow);
-}
-
 .brand-word {
   font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: 19px;
+  letter-spacing: 0.14em;
   color: var(--text);
 }
 
 .site-nav {
   display: flex;
-  gap: 22px;
+  gap: 26px;
   margin-left: auto;
+  font-size: 14px;
 }
-
 .site-nav a {
-  font-size: 13px;
   color: var(--text-2);
-  text-decoration: none;
-  border: 0;
-  position: relative;
-  padding: 4px 0;
 }
-
-/* Underline grows from the left rather than fading in. */
-.site-nav a::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 1px;
-  background: var(--accent-hi);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--med) var(--ease);
-}
-
 .site-nav a:hover {
   color: var(--text);
-}
-.site-nav a:hover::after {
-  transform: scaleX(1);
+  text-decoration: none;
 }
 
 .header-cta {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text);
-  text-decoration: none;
-  padding: 9px 16px;
-  border-radius: 999px;
+  padding: 9px 20px;
   border: 1px solid var(--border-strong);
-  background: var(--elevated);
-  transition: border-color var(--med) var(--ease), background var(--med) var(--ease),
-    transform var(--med) var(--ease);
+  border-radius: 999px;
+  background: var(--text);
+  color: #000;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-
 .header-cta:hover {
+  background: var(--accent);
   border-color: var(--accent);
-  background: var(--accent-dim);
-  transform: translateY(-1px);
+  color: #fff;
+  text-decoration: none;
 }
 
-/* ---------------------------------------------------------- reveal ------ */
-
-/* Scroll-driven reveals, with no JavaScript and no IntersectionObserver.
-   `animation-timeline: view()` ties the animation to the element's own progress
-   through the viewport, which is the thing an observer approximates.
-
-   Guarded by @supports because Safari and Firefox do not have it yet: without
-   the guard those browsers would show elements stuck at opacity 0 — content
-   hidden by a progressive enhancement is the one outcome worth engineering
-   around. Outside the guard, everything is simply visible. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .reveal {
-      animation: reveal-in linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 26%;
-    }
-    .delay-1 { animation-range: entry 0% cover 32%; }
-    .delay-2 { animation-range: entry 0% cover 38%; }
-    .delay-3 { animation-range: entry 0% cover 44%; }
-    .delay-4 { animation-range: entry 0% cover 50%; }
-    .delay-5 { animation-range: entry 0% cover 56%; }
-  }
-}
-
-@keyframes reveal-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 26px, 0);
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
-}
-
-/* ---------------------------------------------------------------- hero -- */
-
-main {
-  width: 100%;
-  max-width: var(--shell);
-  margin: 0 auto;
-  padding: 0 var(--gutter);
-}
+/* ------------------------------------------------------- 1 · the title -- */
 
 .hero {
-  position: relative;
-  padding: 96px 0 72px;
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: clamp(80px, 14vh, 150px) var(--gutter) clamp(70px, 11vh, 120px);
   text-align: center;
-  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
 }
 
 .eyebrow {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  margin: 0 0 26px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--accent-hi);
-  margin: 0 0 22px;
+  color: var(--accent);
 }
 
 .hero-title {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(40px, 8.5vw, 92px);
   font-weight: 700;
-  line-height: 0.98;
+  font-size: clamp(2.9rem, 9vw, 6.4rem);
+  line-height: 0.94;
   letter-spacing: -0.02em;
   color: var(--text);
-  margin: 0;
-  text-transform: uppercase;
 }
-
 .hero-title .line {
   display: block;
 }
-
-/* The second line carries the gradient and a slow shimmer across it. Clipping
-   to the text means the animation is a background-position change — no filter,
-   no repaint of the glyphs. */
-.hero-title em {
-  font-style: normal;
-  background: linear-gradient(
-    100deg,
-    var(--accent) 0%,
-    var(--accent-hi) 25%,
-    #ffffff 40%,
-    var(--accent-hi) 55%,
-    var(--accent) 80%
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 7s linear infinite;
-}
-
-@keyframes shimmer {
-  to {
-    background-position: 250% 0;
-  }
+.hero-title .accent {
+  color: var(--accent);
 }
 
 .hero-sub {
-  max-width: 620px;
-  margin: 24px auto 0;
-  font-size: 17px;
+  max-width: 640px;
+  margin: 30px auto 0;
+  font-size: clamp(1rem, 1.5vw, 1.14rem);
   color: var(--text-2);
 }
 
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 32px;
+/* ----------------------------------------------------------- sections -- */
+
+.section {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: clamp(64px, 9vh, 108px) var(--gutter);
+  border-top: 1px solid var(--border);
 }
 
-.hero-meta {
-  margin-top: 20px;
+.section-head {
+  margin-bottom: 48px;
+}
+
+.kicker {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-3);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
-.hero-meta .dot {
-  margin: 0 8px;
-  opacity: 0.5;
+.section-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 4vw, 2.9rem);
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
-.hero-hint {
-  margin-top: 34px;
-  font-size: 12px;
-  color: var(--text-3);
-  animation: hint-pulse 3.5s ease-in-out infinite;
+/* --------------------------------------------- 2 · the about, on a laptop -- */
+
+.stage {
+  /* The perspective origin sits above the laptop so a closed lid tips away from
+     the reader rather than folding into them. */
+  perspective: 2200px;
+  perspective-origin: 50% 0%;
 }
 
-@keyframes hint-pulse {
-  50% {
-    opacity: 0.45;
-  }
+.laptop {
+  width: min(1000px, 100%);
+  margin: 0 auto;
 }
 
-/* ------------------------------------------------------------- fliers -- */
+.laptop-lid {
+  transform-origin: 50% 100%;
+  padding: 13px 13px 0;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  /* Neutral, not coloured: the page has no glow. */
+  box-shadow: 0 34px 70px rgba(0, 0, 0, 0.85);
+}
 
-/* Six cursors drifting behind the hero, like kites on separate strings.
-   Each has its own duration and delay so they never sync into a pattern, and
-   the whole layer is behind the text and ignores the pointer. */
-.fliers {
-  position: absolute;
-  inset: -40px 0 0;
-  pointer-events: none;
-  z-index: -1;
+.laptop-screen {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
   overflow: hidden;
 }
 
-.flier {
+.screen-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.screen-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.screen-title {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+/* The part you actually scroll. A fixed height with its own overflow is what
+   makes the section read as a screen rather than as a picture of one. */
+.screen-doc {
+  height: clamp(340px, 52vh, 520px);
+  overflow-y: auto;
+  padding: 38px clamp(24px, 4vw, 52px) 44px;
+  text-align: left;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.screen-doc h3 {
+  margin: 0 0 22px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.screen-doc h4 {
+  margin: 40px 0 14px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.screen-doc p {
+  margin: 0 0 18px;
+  max-width: 68ch;
+}
+
+.screen-doc strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.doc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 72ch;
+}
+.doc-list li {
+  position: relative;
+  padding-left: 26px;
+  margin-bottom: 16px;
+}
+.doc-list li::before {
+  content: "";
   position: absolute;
-  width: 62px;
-  height: 62px;
-  object-fit: contain;
-  opacity: 0.55;
-  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.55));
-  will-change: transform;
+  left: 2px;
+  top: 12px;
+  width: 9px;
+  height: 1px;
+  background: var(--accent);
+}
+.doc-list b {
+  color: var(--text);
+  font-weight: 500;
+}
+.doc-list.tight li {
+  margin-bottom: 8px;
 }
 
-.f1 { top: 6%;  left: 4%;   animation: fly-a 19s var(--ease) infinite alternate; }
-.f2 { top: 52%; left: 9%;   animation: fly-b 23s var(--ease) infinite alternate; animation-delay: -4s; }
-.f3 { top: 14%; right: 6%;  animation: fly-c 21s var(--ease) infinite alternate; animation-delay: -8s; width: 74px; height: 74px; }
-.f4 { top: 62%; right: 10%; animation: fly-a 26s var(--ease) infinite alternate; animation-delay: -2s; }
-.f5 { top: 34%; left: 1%;   animation: fly-c 24s var(--ease) infinite alternate; animation-delay: -11s; width: 52px; height: 52px; }
-.f6 { top: 78%; right: 24%; animation: fly-b 20s var(--ease) infinite alternate; animation-delay: -6s; width: 54px; height: 54px; }
-
-@keyframes fly-a {
-  from { transform: translate3d(0, 0, 0) rotate(-8deg); }
-  to   { transform: translate3d(70px, -46px, 0) rotate(10deg); }
-}
-@keyframes fly-b {
-  from { transform: translate3d(0, 0, 0) rotate(6deg); }
-  to   { transform: translate3d(-60px, -66px, 0) rotate(-12deg); }
-}
-@keyframes fly-c {
-  from { transform: translate3d(0, 0, 0) rotate(4deg) scale(1); }
-  to   { transform: translate3d(-48px, 54px, 0) rotate(-9deg) scale(1.12); }
+.doc-close {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 14.5px;
 }
 
-/* On scroll they also glide sideways — the "kite" the brief asked for. Layered
-   on top of the idle drift by animating the container, not the images. */
-@supports (animation-timeline: scroll()) {
+/* The screen sits on a wedge rather than a slab, which is the whole difference
+   between reading as a laptop and reading as a bordered box. */
+.laptop-base {
+  position: relative;
+  width: 108%;
+  margin-left: -4%;
+  height: 18px;
+  background: linear-gradient(180deg, #2b323e 0%, #14171d 55%, #06070a 100%);
+  border-radius: 0 0 12px 12px;
+  clip-path: polygon(0 0, 100% 0, 97.5% 100%, 2.5% 100%);
+  box-shadow: 0 26px 44px rgba(0, 0, 0, 0.8);
+}
+.laptop-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 116px;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 0 0 7px 7px;
+}
+
+/* The one animation on the site.
+
+   The open lid is the default so that a browser without scroll-driven
+   animations — or a reader who has asked for less motion — gets a laptop that
+   is simply open and readable. Only inside @supports does it start closed and
+   swing up as the section enters the viewport. */
+@supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    .fliers {
-      animation: fliers-glide linear both;
-      animation-timeline: scroll(root);
-      animation-range: 0 100vh;
+    .laptop-lid {
+      transform: rotateX(-88deg);
+      animation: lid-open linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 42%;
     }
-    @keyframes fliers-glide {
+
+    @keyframes lid-open {
+      from {
+        transform: rotateX(-88deg);
+      }
       to {
-        transform: translate3d(0, -120px, 0) rotate(-2deg);
-        opacity: 0.25;
+        transform: rotateX(0deg);
       }
     }
   }
 }
 
-/* -------------------------------------------------------------- buttons -- */
+/* ------------------------------------------------------- 3 · download -- */
+
+.download-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.download-card,
+.reqs {
+  padding: clamp(26px, 3.4vw, 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  height: 50px;
-  padding: 0 26px;
+  padding: 15px 28px;
   border-radius: 999px;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  text-decoration: none;
   border: 1px solid transparent;
-  transition: transform var(--fast) var(--ease), box-shadow var(--med) var(--ease),
-    background var(--med) var(--ease), border-color var(--med) var(--ease);
 }
-
+.btn:hover {
+  text-decoration: none;
+}
 .btn-primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 0 26px var(--accent-glow);
 }
-
 .btn-primary:hover {
   background: var(--accent-hi);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 38px rgba(46, 139, 255, 0.55);
+  color: #001126;
 }
-
-/* The press happens now; anything else can wait. */
-.btn:active {
-  transform: scale(0.97);
-  transition-duration: 60ms;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-.btn-ghost:hover {
-  border-color: var(--accent);
-  background: rgba(46, 139, 255, 0.08);
-  transform: translateY(-2px);
-}
-
 .btn-wide {
   width: 100%;
 }
 
-.btn svg {
-  transition: transform var(--med) var(--ease);
-}
-.btn:hover svg {
-  transform: translateY(2px);
-}
-
-/* --------------------------------------------------------------- stats -- */
-
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  padding: 8px 0 40px;
-}
-
-.stat {
+.rel-line {
+  margin: 18px 0 0;
   text-align: center;
-  padding: 22px 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(19, 23, 34, 0.7), rgba(11, 13, 18, 0.5));
-  backdrop-filter: blur(6px);
-  transition: border-color var(--med) var(--ease), transform var(--med) var(--ease);
-}
-
-.stat:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-3px);
-}
-
-.stat b {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 30px;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-.stat span {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-3);
 }
-
-/* ------------------------------------------------------------ sections -- */
-
-.section {
-  padding: 78px 0;
-  border-top: 1px solid var(--border);
-}
-
-.section-head {
-  max-width: 660px;
-  margin: 0 0 42px;
-}
-
-.kicker {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--accent-hi);
-  margin: 0 0 12px;
-}
-
-.section h2 {
-  font-family: var(--font-display);
-  font-size: clamp(26px, 3.6vw, 40px);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.section-lede {
-  margin: 16px 0 0;
-  font-size: 16px;
-  color: var(--text-2);
-}
-
-/* Each section changes the pointer. This is the product arguing for itself. */
-#see { cursor: url("shots/fly/cur-wheel.png") 4 4, auto; }
-#how { cursor: url("shots/fly/cur-elon.png") 4 4, auto; }
-#cursors { cursor: url("shots/fly/cur-f1.png") 4 4, auto; }
-#faq { cursor: url("shots/fly/cur-gun.png") 4 4, auto; }
-#download { cursor: url("shots/fly/cur-trump2.png") 4 4, auto; }
-
-/* Anything clickable keeps a pointer that says "clickable". A themed cursor is
-   a nice touch; losing the affordance for it is not. */
-a,
-summary,
-.btn {
-  cursor: pointer;
-}
-
-/* ----------------------------------------------------------- screenshots -- */
-
-.shots-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  perspective: 1400px;
-}
-
-.shot {
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--surface);
-  transform-style: preserve-3d;
-  transition: transform 320ms var(--ease), border-color var(--med) var(--ease),
-    box-shadow 320ms var(--ease);
-}
-
-/* The 3D tilt. Opposite directions per column so the pair leans apart rather
-   than in parallel, which is what makes it read as depth. */
-.shot:nth-child(odd):hover {
-  transform: rotateY(6deg) rotateX(3deg) translateY(-6px);
-  border-color: var(--border-strong);
-  box-shadow: -18px 26px 60px rgba(0, 0, 0, 0.6);
-}
-.shot:nth-child(even):hover {
-  transform: rotateY(-6deg) rotateX(3deg) translateY(-6px);
-  border-color: var(--border-strong);
-  box-shadow: 18px 26px 60px rgba(0, 0, 0, 0.6);
-}
-
-.shot a {
-  display: block;
-  border: 0;
-}
-
-.shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.shot figcaption {
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-.shot figcaption b {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text);
-  margin-bottom: 2px;
-}
-
-/* --------------------------------------------------------------- steps -- */
-
-.steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  counter-reset: step;
-}
-
-.step {
-  position: relative;
-  padding: 26px 22px 24px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(19, 23, 34, 0.66), rgba(11, 13, 18, 0.5));
-  overflow: hidden;
-  transition: border-color var(--med) var(--ease), transform var(--med) var(--ease);
-}
-
-/* A light sweeps across the card on hover. Contained by overflow, so it never
-   affects anything outside the card. */
-.step::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 35%,
-    rgba(92, 184, 255, 0.09) 50%,
-    transparent 65%
-  );
-  transform: translateX(-100%);
-  transition: transform 620ms var(--ease);
-}
-
-.step:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-4px);
-}
-.step:hover::after {
-  transform: translateX(100%);
-}
-
-.step-n {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--accent-hi);
-}
-
-.step h3 {
-  font-family: var(--font-display);
-  font-size: 15px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text);
-  margin: 10px 0 8px;
-}
-
-.step p {
-  margin: 0;
-  font-size: 14px;
-}
-
-/* --------------------------------------------------------------- orbit -- */
-
-/* Cursors on a slowly turning ring. The ring rotates one way and each item
-   counter-rotates at the same duration, so the artwork stays upright — a
-   ferris wheel rather than a tumble dryer. */
-.orbit {
-  position: relative;
-  width: min(460px, 88vw);
-  aspect-ratio: 1;
-  margin: 0 auto 48px;
-  display: grid;
-  place-items: center;
-}
-
-.orbit-ring {
-  position: absolute;
-  inset: 0;
-  animation: spin 44s linear infinite;
-  border: 1px dashed rgba(46, 139, 255, 0.18);
-  border-radius: 50%;
-}
-
-/* Position only. The counter-rotation lives on the image inside, because an
-   animation on this element would overwrite the transform placing it on the
-   ring — every item would pile up in the middle. Two elements, one transform
-   each. */
-.orbit-item {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 74px;
-  height: 74px;
-  margin: -37px 0 0 -37px;
-  display: grid;
-  place-items: center;
-}
-
-.orbit-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6));
-  animation: spin-back 44s linear infinite;
-}
-
-/* Six positions on the ring, as a rotate-then-push-out pair. */
-.o1 { transform: rotate(0deg) translate(190px); }
-.o2 { transform: rotate(60deg) translate(190px); }
-.o3 { transform: rotate(120deg) translate(190px); }
-.o4 { transform: rotate(180deg) translate(190px); }
-.o5 { transform: rotate(240deg) translate(190px); }
-.o6 { transform: rotate(300deg) translate(190px); }
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes spin-back {
-  to {
-    transform: rotate(-360deg);
-  }
-}
-
-.orbit-core {
-  display: grid;
-  place-items: center;
-  width: 96px;
-  height: 96px;
-  border-radius: 26px;
-  background: linear-gradient(160deg, #0d1a2e 0%, #070a10 100%);
-  border: 1px solid var(--accent-dim);
-  box-shadow: 0 0 44px var(--accent-glow);
-  animation: core-breathe 6s ease-in-out infinite;
-}
-
-@keyframes core-breathe {
-  50% {
-    box-shadow: 0 0 70px rgba(46, 139, 255, 0.45);
-  }
-}
-
-/* --------------------------------------------------------------- facts -- */
-
-.facts {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--border);
-}
-
-.facts li {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 22px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.facts .k {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  padding-top: 4px;
-}
-
-.facts .v {
-  font-size: 15px;
-}
-
-/* ----------------------------------------------------------------- faq -- */
-
-.faq {
-  display: grid;
-  gap: 10px;
-}
-
-.faq details {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(11, 13, 18, 0.6);
-  overflow: hidden;
-  transition: border-color var(--med) var(--ease), background var(--med) var(--ease);
-}
-
-.faq details:hover {
-  border-color: var(--border-strong);
-}
-
-.faq details[open] {
-  border-color: var(--accent-dim);
-  background: rgba(19, 23, 34, 0.7);
-}
-
-.faq summary {
-  list-style: none;
-  padding: 16px 46px 16px 18px;
-  position: relative;
-  font-size: 15px;
-  color: var(--text);
-  font-weight: 500;
-}
-
-.faq summary::-webkit-details-marker {
-  display: none;
-}
-
-/* A + that becomes a − . Two bars, one rotated. */
-.faq summary::before,
-.faq summary::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  width: 13px;
-  height: 1.5px;
-  background: var(--accent-hi);
-  transition: transform var(--med) var(--ease);
-}
-
-.faq summary::after {
-  transform: rotate(90deg);
-}
-
-.faq details[open] summary::after {
-  transform: rotate(0deg);
-}
-
-.faq p {
-  margin: 0;
-  padding: 0 18px 18px;
-  font-size: 15px;
-}
-
-/* ------------------------------------------------------------ download -- */
-
-.download {
-  border-top: 1px solid var(--border);
-}
-
-.download-card {
-  max-width: 620px;
-  margin: 0 auto;
-  padding: 34px 30px 30px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(19, 23, 34, 0.8), rgba(11, 13, 18, 0.7));
-  backdrop-filter: blur(10px);
-  text-align: center;
-}
-
-.download-card h2 {
-  margin-bottom: 24px;
+.rel-line .dot {
+  margin: 0 8px;
+  color: var(--border-strong);
 }
 
 .price {
-  margin: 14px 0 0;
-  font-size: 13px;
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.platforms {
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.platforms li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.plat-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.08em;
   color: var(--text-3);
 }
-
-.trust {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 16px;
+.platforms .is-ready .plat-name {
+  color: var(--text);
 }
-
-.trust span {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+.plat-state {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-2);
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 11px;
+  color: var(--text-3);
+}
+.platforms .is-ready .plat-state {
+  color: var(--accent);
 }
 
 .builds {
-  margin: 20px 0 0;
-  font-size: 13px;
-  color: var(--text-3);
-  text-align: left;
+  margin-top: 30px;
 }
-
-.builds summary {
-  cursor: pointer;
-  text-align: center;
-  color: var(--text-2);
-  padding: 6px 0;
-}
-
-.builds summary:hover {
-  color: var(--text);
-}
-
-.builds ul {
-  margin: 12px 0 0;
-  padding: 14px 16px;
-  list-style: none;
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  line-height: 1.6;
-}
-
-.builds li + li {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.spec {
-  margin: 24px 0 18px;
-  border-top: 1px solid var(--border);
-  text-align: left;
-}
-
-.spec > div {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.spec dt {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+.builds-head {
+  margin: 0 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-3);
-  padding-top: 3px;
+}
+.builds ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.builds li {
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+.builds li a {
+  font-weight: 500;
+}
+.builds li span {
+  display: block;
 }
 
-.spec dd {
-  margin: 0;
-  font-size: 13px;
+.reqs-head {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
   color: var(--text);
 }
 
-.note {
-  margin: 14px 0 0;
-  font-size: 12px;
+.reqs-list {
+  margin: 0;
+}
+.reqs-list > div {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reqs-list > div:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.reqs-list dt {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--text-3);
-  text-align: left;
+}
+.reqs-list dd {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: var(--text);
+}
+.reqs-note {
+  display: block;
+  margin-top: 5px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-3);
 }
 
 /* -------------------------------------------------------------- footer -- */
 
 .site-footer {
-  margin-top: 60px;
+  position: relative;
+  margin-top: clamp(60px, 9vh, 110px);
+  padding: clamp(48px, 6vw, 76px) var(--gutter) 30px;
   border-top: 1px solid var(--border);
-  background: rgba(5, 5, 7, 0.6);
-  cursor: url("shots/fly/cur-trump.png") 4 4, auto;
+  /* The wordmark below is meant to run past both edges, so this is the one
+     element on the page that clips. */
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 132px 132px;
 }
 
-.footer-inner {
+.footer-top {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 32px;
-  width: 100%;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 40px;
+  align-items: start;
   max-width: var(--shell);
   margin: 0 auto;
-  padding: 48px var(--gutter) 34px;
 }
 
-.footer-brand p {
-  margin: 10px 0 0;
-  font-size: 13px;
-}
-
-.footer-fine {
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.footer-col h3 {
+.footer-brand {
   font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: 17px;
+  letter-spacing: 0.16em;
+  color: var(--text);
+}
+.footer-brand sup {
+  font-size: 0.55em;
+  letter-spacing: 0;
+}
+.footer-brand:hover {
+  text-decoration: none;
+  color: var(--accent-hi);
+}
+
+.footer-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.footer-nav .bracket {
+  color: var(--text-3);
+}
+.footer-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.footer-nav a {
+  color: var(--text-2);
+}
+.footer-nav a:hover {
+  color: var(--accent-hi);
+  text-decoration: none;
+}
+
+.footer-cta {
+  justify-self: end;
+  max-width: 320px;
+  width: 100%;
+}
+.footer-cta-head {
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text);
-  margin: 0 0 12px;
+  text-align: right;
 }
 
-.footer-col {
+/* The pill from the reference, in the blue this site already uses. */
+.footer-pill {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 10px 24px;
+  background: var(--accent);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 500;
 }
-
-.footer-col a {
-  font-size: 13px;
-  color: var(--text-2);
+.footer-pill:hover {
+  background: var(--accent-hi);
+  color: #001126;
   text-decoration: none;
-  border: 0;
-  width: fit-content;
-  transition: color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.footer-pill-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: #000;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
 }
 
-.footer-col a:hover {
-  color: var(--accent-hi);
-  transform: translateX(3px);
+/* The oversized mark. Set in the display face, slanted and stretched, and
+   allowed to run off both edges exactly as in the reference. */
+.footer-wordmark {
+  margin: clamp(56px, 9vw, 120px) 0 clamp(28px, 4vw, 56px);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(4.5rem, 26vw, 22rem);
+  line-height: 0.78;
+  letter-spacing: -0.045em;
+  text-align: center;
+  white-space: nowrap;
+  color: #f2f4f7;
+  transform: skewX(-11deg) scaleY(1.22);
+  transform-origin: 50% 100%;
+  user-select: none;
 }
 
 .footer-base {
-  border-top: 1px solid var(--border);
-  padding: 18px var(--gutter);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
   max-width: var(--shell);
   margin: 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 20px;
-  justify-content: space-between;
-  font-size: 12px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--text-3);
 }
-
 .footer-base p {
   margin: 0;
 }
-
-/* --------------------------------------------------------------- misc -- */
-
-a {
+.footer-legal,
+.footer-social {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.footer-legal a,
+.footer-social a {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.footer-legal a:hover,
+.footer-social a:hover {
   color: var(--accent-hi);
-  text-decoration: none;
-  border-bottom: 1px solid rgba(92, 184, 255, 0.35);
+}
+.footer-note {
+  text-align: right;
 }
 
-a:hover {
-  border-bottom-color: var(--accent-hi);
-}
-
-strong {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  color: var(--text);
-}
-
-/* Visible focus, everywhere. Keyboard users get the same affordances. */
-:focus-visible {
-  outline: 2px solid var(--accent-hi);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-/* Scrollbar. A default Windows scrollbar in a dark page is a cheapness tell. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 999px;
-  border: 3px solid var(--bg);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-dim);
-}
-
-/* ---------------------------------------------------------- responsive -- */
+/* -------------------------------------------------------- narrow screens -- */
 
 @media (max-width: 900px) {
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .shots-grid,
-  .steps,
-  .footer-inner {
+  .download-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* Below this width the laptop stops being useful and starts being a tiny
+     window with a scrollbar in it. The frame flattens and the about text
+     becomes ordinary page content. */
+  .stage {
+    perspective: none;
+  }
+  .laptop-lid {
+    transform: none;
+    animation: none;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: none;
+  }
+  .laptop-screen {
+    border: none;
+    border-radius: 14px;
+  }
+  .screen-doc {
+    height: auto;
+    overflow-y: visible;
+  }
+  .laptop-base {
+    display: none;
+  }
+
+  .footer-top {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .footer-cta {
+    justify-self: stretch;
+    max-width: none;
+  }
+  .footer-cta-head {
+    text-align: left;
+  }
+  .footer-base {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .footer-note {
+    text-align: left;
+  }
+}
+
+@media (max-width: 620px) {
   .site-nav {
     display: none;
   }
-  .facts li {
+  .footer-nav {
+    flex-wrap: wrap;
+  }
+  .footer-base {
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-  .orbit {
-    width: min(340px, 84vw);
-  }
-  .o1, .o2, .o3, .o4, .o5, .o6 {
-    /* The ring shrinks with the container, so the push-out distance must too. */
-    --r: 140px;
-  }
-  .o1 { transform: rotate(0deg) translate(var(--r)); }
-  .o2 { transform: rotate(60deg) translate(var(--r)); }
-  .o3 { transform: rotate(120deg) translate(var(--r)); }
-  .o4 { transform: rotate(180deg) translate(var(--r)); }
-  .o5 { transform: rotate(240deg) translate(var(--r)); }
-  .o6 { transform: rotate(300deg) translate(var(--r)); }
-  .flier {
-    opacity: 0.32;
-  }
-}
-
-/* Someone who asked for less motion has asked for exactly that. Everything
-   decorative stops; nothing that carries meaning disappears with it. */
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-  .fliers,
-  .orbit-ring {
-    display: none;
   }
 }

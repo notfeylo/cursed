@@ -3,59 +3,38 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cursed — Cursor replacement for Windows</title>
+    <title>Cursed — Turn any image into a Windows cursor</title>
     <meta
       name="description"
-      content="Replace every Windows pointer role with a crisp, multi-resolution cursor scheme, or turn any image into a real .cur or .ani. Free, no account, no telemetry. No administrator rights, no overlay, no added input latency."
+      content="Cursed is a free Windows app that turns any image into a real cursor and replaces all seventeen Windows pointer roles at once. No account, no telemetry, no admin rights."
     />
-    <meta name="theme-color" content="#050507" />
+    <meta name="theme-color" content="#000000" />
     <link rel="icon" href="favicon.png" type="image/png" />
     <link rel="stylesheet" href="styles.css" />
 
-    <meta property="og:title" content="Cursed — Cursor replacement for Windows" />
+    <meta property="og:title" content="Cursed — Turn any image into a Windows cursor" />
     <meta
       property="og:description"
-      content="Your pointer. Possessed. 36 hand-made cursor packs, all 17 pointer roles, sharp at every DPI. Free, no account, no telemetry."
+      content="Your pointer. Possessed. Drop in any image and get a real cursor. All seventeen pointer roles, 36 packs included. Free, no account, no telemetry."
     />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="shots/home.png" />
   </head>
 
   <body>
-    <!-- The moving background. Three blurred blobs on long, offset drifts, plus a
-         grid and a grain layer. All transform/opacity, all composited, none of it
-         reading layout — so it costs a paint and nothing else. -->
-    <div class="bg" aria-hidden="true">
-      <div class="bg-grid"></div>
-      <div class="blob blob-a"></div>
-      <div class="blob blob-b"></div>
-      <div class="blob blob-c"></div>
-      <div class="bg-vignette"></div>
-    </div>
-
     <!-- ------------------------------------------------------------ HEADER -->
     <header class="site-header">
       <a class="brand" href="#top">
         <span class="brand-mark" aria-hidden="true">
           <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
-          <svg viewBox="0 0 64 64" width="26" height="26">
-            <defs>
-              <linearGradient id="face" x1="0.1" y1="0" x2="0.75" y2="1">
-                <stop offset="0" stop-color="#5cb8ff" />
-                <stop offset="1" stop-color="#2e8bff" />
-              </linearGradient>
-              <linearGradient id="fold" x1="0" y1="0" x2="0.4" y2="1">
-                <stop offset="0" stop-color="#2e8bff" />
-                <stop offset="1" stop-color="#123a72" />
-              </linearGradient>
-            </defs>
+          <svg viewBox="0 0 64 64" width="24" height="24">
             <path
               d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-              fill="url(#face)"
+              fill="#2e8bff"
             />
             <path
               d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z"
-              fill="url(#fold)"
+              fill="#1b5fb5"
             />
           </svg>
         </span>
@@ -63,467 +42,349 @@
       </a>
 
       <nav class="site-nav" aria-label="Sections">
-        <a href="#see">See it</a>
-        <a href="#how">How</a>
-        <a href="#cursors">Cursors</a>
-        <a href="#faq">FAQ</a>
+        <a href="#about">About</a>
+        <a href="#download">Download</a>
       </nav>
 
       <a class="header-cta" href="#download">Download</a>
     </header>
 
     <main id="top">
-      <!-- -------------------------------------------------------------- HERO -->
+      <!-- ---------------------------------------------------- 1 · THE TITLE -->
       <section class="hero" aria-labelledby="hero-h">
-        <!-- The flying cursors. Decorative, so aria-hidden and no alt text: a
-             screen reader announcing six drifting pictures of nothing would be
-             noise. Each drifts on its own duration and delay, so they never
-             fall into step and never look like a loop. -->
-        <div class="fliers" aria-hidden="true">
-          <img class="flier f1" src="shots/fly/trump.png" alt="" width="128" height="128" />
-          <img class="flier f2" src="shots/fly/elon.png" alt="" width="128" height="128" />
-          <img class="flier f3" src="shots/fly/f1.png" alt="" width="128" height="128" />
-          <img class="flier f4" src="shots/fly/wheel.png" alt="" width="128" height="128" />
-          <img class="flier f5" src="shots/fly/trump2.png" alt="" width="128" height="128" />
-          <img class="flier f6" src="shots/fly/gun.png" alt="" width="128" height="128" />
-        </div>
-
-        <p class="eyebrow reveal">Windows 10 &amp; 11 · Free · No account</p>
+        <p class="eyebrow">Windows · Free · No account</p>
 
         <h1 class="hero-title" id="hero-h">
-          <span class="line reveal">YOUR POINTER.</span>
-          <span class="line reveal delay-1"><em>POSSESSED.</em></span>
+          <span class="line">YOUR POINTER.</span>
+          <span class="line accent">POSSESSED.</span>
         </h1>
 
-        <p class="hero-sub reveal delay-2">
-          Replace all seventeen Windows pointer roles with a real cursor scheme — or drop in
-          any image and turn it into one. No overlay. No added input latency.
-        </p>
-
-        <div class="hero-actions reveal delay-3">
-          <a
-            class="btn btn-primary"
-            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
-            download
-            rel="noopener noreferrer"
-          >
-            <span>Download for Windows</span>
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-              <path
-                d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </a>
-          <a class="btn btn-ghost" href="#see">See how it looks</a>
-        </div>
-
-        <p class="hero-meta reveal delay-4">
-          <span class="mono">v<span id="rel-version">1.23.0</span></span>
-          <span class="dot">·</span>
-          <span class="mono" id="rel-size">11.31 MB</span>
-          <span class="dot">·</span>
-          <span class="mono" id="rel-date">2026-08-23</span>
-        </p>
-
-        <p class="hero-hint reveal delay-5">
-          Move your pointer around this page — it changes as you go.
+        <p class="hero-sub">
+          Turn any image you own into a real Windows cursor, and replace all seventeen
+          pointer roles in one click. Changing your cursor used to be a chore. Now it takes
+          about a second.
         </p>
       </section>
 
-      <!-- ------------------------------------------------------------ STATS -->
-      <section class="stats" aria-label="At a glance">
-        <div class="stat reveal"><b>36</b><span>cursor packs, in the installer</span></div>
-        <div class="stat reveal delay-1"><b>17</b><span>pointer roles, every one</span></div>
-        <div class="stat reveal delay-2"><b>0 ms</b><span>added input latency</span></div>
-        <div class="stat reveal delay-3"><b>0</b><span>accounts, trackers, telemetry</span></div>
-      </section>
-
-      <!-- ---------------------------------------------------------- SEE IT -->
-      <section class="section" id="see" aria-labelledby="see-h">
-        <header class="section-head reveal">
-          <p class="kicker">See it</p>
-          <h2 id="see-h">The whole app is four screens</h2>
-          <p class="section-lede">
-            No dashboard, no wizard, no sign-in. Open it, pick a cursor, close it — it
-            keeps running in the tray.
-          </p>
+      <!-- ------------------------------------------- 2 · ABOUT, ON A LAPTOP -->
+      <!-- The lid starts closed and rotates open as the section scrolls into
+           view. This is the only motion left on the page, and it is a CSS
+           scroll-driven animation because this site ships no JavaScript — the
+           CSP is `script-src 'none'` and it stays that way. Browsers without
+           `animation-timeline` get the laptop already open, which is why the
+           open state is the default and the closed state lives inside
+           @supports rather than the other way round. -->
+      <section class="section about" id="about" aria-labelledby="about-h">
+        <header class="section-head">
+          <p class="kicker">About</p>
+          <h2 id="about-h">What Cursed actually is</h2>
         </header>
 
-        <div class="shots-grid">
-          <figure class="shot reveal">
-            <a href="shots/home.png">
-              <img
-                src="shots/home.png"
-                width="413"
-                height="656"
-                alt="The Cursed home screen, showing the cursor currently in use and buttons for the catalog, custom imports, saved presets and settings."
-                decoding="async"
-              />
-            </a>
-            <figcaption><b>Home</b> What you're using now</figcaption>
-          </figure>
-          <figure class="shot reveal delay-1">
-            <a href="shots/catalog.png">
-              <img
-                src="shots/catalog.png"
-                width="409"
-                height="656"
-                alt="The catalog, a searchable grid of cursor packs with filter tabs."
-                loading="lazy"
-                decoding="async"
-              />
-            </a>
-            <figcaption><b>Catalog</b> Search, filter, hover to preview</figcaption>
-          </figure>
-          <figure class="shot reveal">
-            <a href="shots/custom.png">
-              <img
-                src="shots/custom.png"
-                width="412"
-                height="654"
-                alt="The custom screen, with a drop zone for an image or GIF above a grid of cursors built from the user's own pictures."
-                loading="lazy"
-                decoding="async"
-              />
-            </a>
-            <figcaption><b>Custom</b> Drop an image, get a cursor</figcaption>
-          </figure>
-          <figure class="shot reveal delay-1">
-            <a href="shots/customise.png">
-              <img
-                src="shots/customise.png"
-                width="416"
-                height="658"
-                alt="The customise screen, with a cursor size slider, size presets, and a control choosing which pointer roles the size applies to."
-                loading="lazy"
-                decoding="async"
-              />
-            </a>
-            <figcaption><b>Customise</b> Size, colour, which roles</figcaption>
-          </figure>
-        </div>
-      </section>
+        <div class="stage">
+          <div class="laptop">
+            <div class="laptop-lid">
+              <div class="laptop-screen">
+                <div class="screen-bar" aria-hidden="true">
+                  <span class="screen-dot"></span>
+                  <span class="screen-title">cursed — about</span>
+                </div>
 
-      <!-- ------------------------------------------------------------- HOW -->
-      <section class="section" id="how" aria-labelledby="how-h">
-        <header class="section-head reveal">
-          <p class="kicker">How it works</p>
-          <h2 id="how-h">Three steps, then forget it exists</h2>
-        </header>
+                <!-- Scrollable in its own right, so the section reads as a window
+                     you are scrolling inside. tabindex makes that reachable from
+                     the keyboard, which an overflow container is not by default
+                     in every browser. -->
+                <div class="screen-doc" tabindex="0" role="region" aria-label="About Cursed">
+                  <h3>A cursor app that does the boring part for you</h3>
 
-        <ol class="steps">
-          <li class="step reveal">
-            <span class="step-n">01</span>
-            <h3>Pick a cursor</h3>
-            <p>
-              Hover a tile and it previews on your actual pointer, live. Click to apply.
-              Nothing is downloaded — every pack is already in the installer.
-            </p>
-          </li>
-          <li class="step reveal delay-1">
-            <span class="step-n">02</span>
-            <h3>Or make your own</h3>
-            <p>
-              Drop a PNG, JPEG or GIF. The background is removed, the hotspot is found,
-              and you get a real <span class="mono">.cur</span> or
-              <span class="mono">.ani</span> in about a second.
-            </p>
-          </li>
-          <li class="step reveal delay-2">
-            <span class="step-n">03</span>
-            <h3>It stays put</h3>
-            <p>
-              Windows resets pointers on theme changes and updates. A watchdog notices and
-              puts yours back, so the choice survives.
-            </p>
-          </li>
-        </ol>
-      </section>
+                  <p>
+                    Windows has always let you change your pointer. It has never made it
+                    pleasant. The stock route is a Control Panel dialog from another decade,
+                    a file picker, and seventeen separate pointer roles you are expected to
+                    set one at a time — assuming you already have
+                    <span class="mono">.cur</span> files, which almost nobody does. Then a
+                    theme change or a feature update quietly puts the arrow back.
+                  </p>
 
-      <!-- --------------------------------------------------------- CURSORS -->
-      <section class="section" id="cursors" aria-labelledby="cursors-h">
-        <header class="section-head reveal">
-          <p class="kicker">Anything is a cursor</p>
-          <h2 id="cursors-h">Yes, really anything</h2>
-          <p class="section-lede">
-            These are real cursors, built by the app from ordinary images. Backgrounds
-            removed automatically, rendered at eight sizes so they stay sharp.
-          </p>
-        </header>
+                  <p>
+                    <strong>Cursed is the shortcut.</strong> It is a small, free Windows app
+                    that does two things properly: it turns any picture you already have
+                    into a genuine cursor file, and it applies a complete, consistent
+                    pointer set across every role Windows defines — then keeps it there.
+                  </p>
 
-        <!-- The orbit. Six cursors on one slowly rotating ring, each
-             counter-rotated by the same duration so the artwork stays upright
-             while the ring turns. -->
-        <div class="orbit reveal" aria-hidden="true">
-          <div class="orbit-ring">
-            <span class="orbit-item o1"><img src="shots/fly/trump.png" alt="" width="128" height="128" /></span>
-            <span class="orbit-item o2"><img src="shots/fly/elon.png" alt="" width="128" height="128" /></span>
-            <span class="orbit-item o3"><img src="shots/fly/f1.png" alt="" width="128" height="128" /></span>
-            <span class="orbit-item o4"><img src="shots/fly/wheel.png" alt="" width="128" height="128" /></span>
-            <span class="orbit-item o5"><img src="shots/fly/trump2.png" alt="" width="128" height="128" /></span>
-            <span class="orbit-item o6"><img src="shots/fly/gun.png" alt="" width="128" height="128" /></span>
-          </div>
-          <div class="orbit-core">
-            <svg viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">
-              <!-- Its own fill, not url(#face): that gradient is defined in the
-                   header's SVG, and a cross-element reference breaks the moment
-                   the header is removed or reordered. -->
-              <path
-                d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-                fill="#5cb8ff"
-              />
-            </svg>
+                  <h4>What the app does</h4>
+                  <ul class="doc-list">
+                    <li>
+                      <b>Any image becomes a cursor.</b> Drop in a PNG, JPEG or GIF. The
+                      background is removed for you, the hotspot is worked out, and you get
+                      a real <span class="mono">.cur</span> or
+                      <span class="mono">.ani</span> rendered at eight sizes, so it stays
+                      sharp on any display. An animated GIF stays animated.
+                    </li>
+                    <li>
+                      <b>All seventeen roles, not just the arrow.</b> The arrow, the hand,
+                      the text beam, the busy ring, every resize handle. No more custom
+                      pointer sitting next to a stock Windows hourglass the moment your PC
+                      copies a file.
+                    </li>
+                    <li>
+                      <b>36 cursor packs, already installed.</b> They ship inside the
+                      installer. Nothing is fetched, nothing is streamed, and the catalog
+                      works with the network unplugged.
+                    </li>
+                    <li>
+                      <b>It stays applied.</b> Windows resets pointers on theme changes and
+                      updates. A watchdog notices and puts yours back, so the choice you
+                      made survives the machine disagreeing with it.
+                    </li>
+                    <li>
+                      <b>Bring cursors you already own.</b> Existing
+                      <span class="mono">.cur</span>, <span class="mono">.ani</span>,
+                      <span class="mono">.ico</span> and TIFF files import directly, frames
+                      and all.
+                    </li>
+                    <li>
+                      <b>Size and shape are yours.</b> Scale the whole set, or only the
+                      roles you name, without hunting for a larger copy of the artwork.
+                    </li>
+                  </ul>
+
+                  <h4>Why it is built this way</h4>
+                  <p>
+                    Cursed never draws a cursor. It tells Windows which cursor to draw, and
+                    Windows renders it on the graphics card's hardware cursor plane — the
+                    same path it uses for its own arrow. That is a deliberate constraint,
+                    not a shortcut: apps that paint a pointer sprite into an always-on-top
+                    window are composited by the desktop compositor and trail your real
+                    pointer by 8–33 ms, permanently. This one adds nothing.
+                  </p>
+
+                  <h4>What it does not do</h4>
+                  <ul class="doc-list tight">
+                    <li>No account, no sign-in, no licence key.</li>
+                    <li>No telemetry, no analytics, no crash reporting.</li>
+                    <li>No administrator rights, ever — the install is per-user.</li>
+                    <li>
+                      No code injected into other programs, which is why a fullscreen game
+                      drawing its own crosshair from raw input keeps drawing it.
+                    </li>
+                  </ul>
+
+                  <p class="doc-close">
+                    Your settings, presets and imported cursors live in a folder on your own
+                    machine and never leave it. Uninstalling puts all seventeen pointers
+                    back exactly as they were, and a script in the repository checks that
+                    before every release.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="laptop-base" aria-hidden="true">
+              <span class="laptop-notch"></span>
+            </div>
           </div>
         </div>
-
-        <ul class="facts">
-          <li class="reveal">
-            <span class="k">Sharp</span>
-            <span class="v"
-              >Vector artwork renders at 10, 16, 24, 32, 48, 64, 96 and 128 px into one
-              multi-resolution file. Photographs are sharpened in proportion to how far they
-              were shrunk, because a good downscale filter is a blur by design.</span
-            >
-          </li>
-          <li class="reveal">
-            <span class="k">All 17 roles</span>
-            <span class="v"
-              >Most packs draw an arrow and a hand; the rest are filled from a plain built-in
-              base. You never end up with a custom pointer and a stock Windows hourglass the
-              moment your PC copies a file.</span
-            >
-          </li>
-          <li class="reveal">
-            <span class="k">No latency</span>
-            <span class="v"
-              >Every cursor is a real file registered with Windows, drawn by the graphics
-              card's hardware cursor plane — the same path Windows uses for its own arrow.
-              An overlay window would trail your pointer by a frame or two, forever.</span
-            >
-          </li>
-        </ul>
       </section>
 
-      <!-- ------------------------------------------------------------- FAQ -->
-      <section class="section" id="faq" aria-labelledby="faq-h">
-        <header class="section-head reveal">
-          <p class="kicker">Questions</p>
-          <h2 id="faq-h">The things people ask</h2>
-        </header>
-
-        <div class="faq">
-          <details class="reveal">
-            <summary>Is it really free?</summary>
-            <p>
-              Yes. No paid tier, no trial, no licence key, no advertising, no account. The
-              source is public under the MIT licence, so none of that has to be taken on
-              trust.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Windows says "Windows protected your PC". Is it safe?</summary>
-            <p>
-              That is SmartScreen warning you the installer is not code-signed yet — a
-              reputation warning shown to all new unsigned software, not a detection of
-              anything harmful. Select <strong>More info</strong>, then
-              <strong>Run anyway</strong>. You can verify your download against the
-              published checksums, and build it yourself from source if you would rather.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Does it collect anything about me?</summary>
-            <p>
-              No. No telemetry, no analytics, no crash reporting, no fingerprinting. Your
-              settings, presets and imported cursors live in a folder on your own machine
-              and never leave it. The only network request the app can make is checking
-              GitHub for a new version, and that can be switched off.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Will it slow my mouse down?</summary>
-            <p>
-              It cannot. Cursed never draws a cursor — it tells Windows which cursor to
-              draw, and Windows renders it on the hardware cursor plane. Tools that paint a
-              sprite in an always-on-top window are composited by the desktop compositor and
-              trail the real pointer by 8–33 ms on any hardware. That is the reason this app
-              is built the way it is.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Do my cursors work in games?</summary>
-            <p>
-              In anything that uses the normal Windows pointer, yes — browsers, Office, File
-              Explorer, most windowed games. A fullscreen game that draws its own crosshair
-              from raw input is drawing its own crosshair; nothing outside that game can
-              change it without injecting code into it, which Cursed will never do.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>What happens when I uninstall?</summary>
-            <p>
-              Every pointer role is restored to the exact value it had before install, and
-              the registry entries, cursor schemes, startup entry and the WebView2 cache go
-              with it. You are asked whether to keep your presets and custom cursors. A
-              script in the repository verifies all of that before each release.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Does it need administrator rights?</summary>
-            <p>
-              No, and it never will. Everything is per-user: the install goes under your own
-              profile and only <span class="mono">HKCU</span> is written. There is no UAC
-              prompt at any point, including updates.
-            </p>
-          </details>
-          <details class="reveal">
-            <summary>Which Windows do I need?</summary>
-            <p>
-              Windows 10 version 1803 or newer, or Windows 11. That floor is not ours to
-              move: the app's window is Microsoft Edge WebView2, and Microsoft ended
-              WebView2 support for Windows 7, 8 and 8.1. Builds ship for x64, ARM64 and
-              32-bit.
-            </p>
-          </details>
-        </div>
-      </section>
-
-      <!-- -------------------------------------------------------- DOWNLOAD -->
+      <!-- ------------------------------------------------------ 3 · DOWNLOAD -->
       <section class="section download" id="download" aria-labelledby="download-h">
-        <div class="download-card reveal">
+        <header class="section-head">
           <p class="kicker">Download</p>
           <h2 id="download-h">Get Cursed</h2>
+        </header>
 
-          <a
-            class="btn btn-primary btn-wide"
-            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
-            download
-            rel="noopener noreferrer"
-          >
-            <span>Download for Windows</span>
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-              <path
-                d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </a>
+        <div class="download-grid">
+          <div class="download-card">
+            <a
+              class="btn btn-primary btn-wide"
+              href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
+              download
+              rel="noopener noreferrer"
+            >
+              <span>Download for Windows</span>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path
+                  d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
 
-          <p class="price">Free. No account, no telemetry.</p>
+            <p class="rel-line">
+              <span class="mono">v<span id="rel-version">1.23.0</span></span>
+              <span class="dot">·</span>
+              <span class="mono" id="rel-size">11.31 MB</span>
+              <span class="dot">·</span>
+              <span class="mono" id="rel-date">2026-08-23</span>
+            </p>
 
-          <div class="trust" aria-label="Privacy">
-            <span>No telemetry</span>
-            <span>No account</span>
-            <span>No admin</span>
-            <span>100% local</span>
-          </div>
+            <p class="price">Free. No account, no telemetry.</p>
 
-          <!-- The button above is x64, which is what an unknown visitor almost
-               always runs. Every href is an unversioned alias staged by
-               scripts/build-release.mjs, so publishing a release does not turn
-               this list into 404s. -->
-          <details class="builds">
-            <summary>Not an x64 PC, or no internet on it?</summary>
-            <ul>
-              <li>
-                <a
-                  href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-ARM64.exe"
-                  download
-                  rel="noopener noreferrer"
-                  >ARM64</a
-                >
-                — Snapdragon and Copilot+ laptops, Surface Pro X. Runs native instead of
-                emulated.
+            <ul class="platforms" aria-label="Platform availability">
+              <li class="is-ready">
+                <span class="plat-name">Windows</span>
+                <span class="plat-state">Available now</span>
               </li>
               <li>
-                <a
-                  href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-x86.exe"
-                  download
-                  rel="noopener noreferrer"
-                  >32-bit</a
-                >
-                — older PCs running 32-bit Windows, which cannot run the x64 build at all.
+                <span class="plat-name">Linux</span>
+                <span class="plat-state">Coming soon</span>
               </li>
               <li>
-                <a
-                  href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe"
-                  download
-                  rel="noopener noreferrer"
-                  >Offline installer</a
-                >
-                — x64 with the Edge WebView2 runtime built in (~211 MB). For an air-gapped
-                machine or a network that blocks Microsoft's download.
+                <span class="plat-name">macOS</span>
+                <span class="plat-state">Coming soon</span>
               </li>
             </ul>
-          </details>
 
-          <dl class="spec">
-            <div><dt>Version</dt><dd>See above</dd></div>
-            <div><dt>Platform</dt><dd>Windows 10 (1803+) / 11</dd></div>
-            <div><dt>Architecture</dt><dd>x64, ARM64, 32-bit</dd></div>
-            <div><dt>Install</dt><dd>Per-user, no admin</dd></div>
-            <div><dt>Cursors</dt><dd>36 packs × 17 roles</dd></div>
-            <div><dt>Licence</dt><dd>MIT</dd></div>
-          </dl>
+            <!-- The button above is x64, which is what an unknown visitor almost
+                 always runs. Every href is an unversioned alias staged by
+                 scripts/build-release.mjs, so publishing a release does not turn
+                 this list into 404s. -->
+            <div class="builds">
+              <p class="builds-head">Not an x64 PC, or no internet on it?</p>
+              <ul>
+                <li>
+                  <a
+                    href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-ARM64.exe"
+                    download
+                    rel="noopener noreferrer"
+                    >ARM64</a
+                  >
+                  <span
+                    >Snapdragon and Copilot+ laptops, Surface Pro X. Runs native instead of
+                    emulated.</span
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-x86.exe"
+                    download
+                    rel="noopener noreferrer"
+                    >32-bit</a
+                  >
+                  <span
+                    >Older PCs running 32-bit Windows, which cannot run the x64 build at
+                    all.</span
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe"
+                    download
+                    rel="noopener noreferrer"
+                    >Offline installer</a
+                  >
+                  <span
+                    >x64 with the Edge WebView2 runtime built in, about 211 MB. For an
+                    air-gapped machine, or a network that blocks Microsoft's download.</span
+                  >
+                </li>
+              </ul>
+            </div>
+          </div>
 
-          <p class="note">
-            Verify your download against the checksums published with the release:
-            <a
-              href="https://github.com/notfeylo/cursed/releases/latest/download/SHA256SUMS.txt"
-              rel="noopener noreferrer"
-              >SHA256SUMS.txt</a
-            >
-          </p>
+          <div class="reqs">
+            <h3 class="reqs-head">Requirements</h3>
+            <dl class="reqs-list">
+              <div>
+                <dt>Operating system</dt>
+                <dd>
+                  Windows 10 version 1803 or newer, or Windows 11.
+                  <span class="reqs-note"
+                    >The floor is Microsoft's: the app window is Edge WebView2, and WebView2
+                    support ended for Windows 7, 8 and 8.1.</span
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>Architecture</dt>
+                <dd>x64, ARM64 or 32-bit — a separate installer for each.</dd>
+              </div>
+              <div>
+                <dt>Runtime</dt>
+                <dd>
+                  Edge WebView2.
+                  <span class="reqs-note"
+                    >Already present on Windows 11 and up-to-date Windows 10; fetched
+                    automatically if it is missing, or use the offline installer.</span
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>Disk space</dt>
+                <dd>About 40 MB installed, including all 36 cursor packs.</dd>
+              </div>
+              <div>
+                <dt>Permissions</dt>
+                <dd>
+                  None. Per-user install, no UAC prompt, and only your own registry hive is
+                  written.
+                </dd>
+              </div>
+              <div>
+                <dt>Network</dt>
+                <dd>
+                  Not required. The only request the app can make is an update check, and
+                  that can be switched off.
+                </dd>
+              </div>
+              <div>
+                <dt>Licence</dt>
+                <dd>MIT. The source is public.</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </section>
     </main>
 
     <!-- ------------------------------------------------------------ FOOTER -->
     <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand">
-          <span class="brand-word">CURSED</span>
-          <p>Your pointer. Possessed.</p>
-          <p class="footer-fine">
-            A Windows app that replaces every pointer role with a real cursor scheme, and
-            turns your own images into cursors.
-          </p>
-        </div>
+      <div class="footer-top">
+        <a class="footer-brand" href="#top">CURSED<sup>&reg;</sup></a>
 
-        <nav class="footer-col" aria-label="Product">
-          <h3>Product</h3>
-          <a href="#see">Screenshots</a>
-          <a href="#how">How it works</a>
-          <a href="#cursors">Cursors</a>
-          <a href="#download">Download</a>
+        <nav class="footer-nav" aria-label="Footer">
+          <span class="bracket" aria-hidden="true">[</span>
+          <ul>
+            <li><a href="#top">Home</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#download">Download</a></li>
+            <li>
+              <a href="https://github.com/notfeylo/cursed" rel="noopener noreferrer">Source</a>
+            </li>
+            <li>
+              <a href="https://github.com/notfeylo/cursed/releases" rel="noopener noreferrer"
+                >Releases</a
+              >
+            </li>
+          </ul>
+          <span class="bracket" aria-hidden="true">]</span>
         </nav>
 
-        <nav class="footer-col" aria-label="Project">
-          <h3>Project</h3>
-          <a href="https://github.com/notfeylo/cursed" rel="noopener noreferrer">Source</a>
-          <a href="https://github.com/notfeylo/cursed/releases" rel="noopener noreferrer"
-            >Releases</a
-          >
-          <a href="https://github.com/notfeylo/cursed/issues" rel="noopener noreferrer"
-            >Report a bug</a
-          >
+        <div class="footer-cta">
+          <p class="footer-cta-head">Get it for Windows</p>
           <a
-            href="https://github.com/notfeylo/cursed/blob/main/docs/LICENSES.md"
+            class="footer-pill"
+            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
+            download
             rel="noopener noreferrer"
-            >Licences</a
           >
-        </nav>
+            <span>Download the installer</span>
+            <span class="footer-pill-arrow" aria-hidden="true">&#8600;</span>
+          </a>
+        </div>
+      </div>
 
-        <nav class="footer-col" aria-label="Legal">
-          <h3>Legal</h3>
+      <p class="footer-wordmark" aria-hidden="true">CURSED</p>
+
+      <div class="footer-base">
+        <p class="footer-copy">&copy; 2026 feylo /<br />MIT licensed</p>
+
+        <nav class="footer-legal" aria-label="Legal">
           <a
             href="https://github.com/notfeylo/cursed/blob/main/docs/PRIVACY.md"
             rel="noopener noreferrer"
@@ -539,13 +400,23 @@
             rel="noopener noreferrer"
             >Security</a
           >
+          <a
+            href="https://github.com/notfeylo/cursed/blob/main/docs/LICENSES.md"
+            rel="noopener noreferrer"
+            >Licences</a
+          >
         </nav>
-      </div>
 
-      <div class="footer-base">
-        <p>© 2026 feylo · MIT licensed</p>
-        <p class="footer-fine">
-          Not affiliated with Microsoft. Windows is a trademark of Microsoft Corporation.
+        <nav class="footer-social" aria-label="Elsewhere">
+          <a href="https://github.com/notfeylo/cursed" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/notfeylo/cursed/issues" rel="noopener noreferrer"
+            >Report a bug</a
+          >
+        </nav>
+
+        <p class="footer-note">
+          Not affiliated with Microsoft.<br />Windows is a trademark of Microsoft
+          Corporation.
         </p>
       </div>
     </footer>

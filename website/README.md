@@ -25,6 +25,37 @@ The page still ships no JavaScript. The sync runs at build time, on Vercel's
 builder, and what reaches the browser is plain HTML with the numbers already in
 it. That is why the CSP can stay at `script-src 'none'`.
 
+## One page, four blocks
+
+The site is a single page: title, an about section, the download, the footer.
+There is no FAQ, no screenshot gallery and no separate routes — every anchor in
+the header and footer points at a section of this page.
+
+## The one animation, and why it is CSS
+
+Everything that used to move is gone: the drifting background blobs, the grid,
+the flying cursors, the orbit, the scroll reveals, the hover transitions. What
+is left is the laptop in the about section, whose lid is closed and swings open
+as you scroll it into view.
+
+That is a **scroll-driven CSS animation** (`animation-timeline: view()`), not
+JavaScript, because this site ships none. Two consequences worth knowing before
+editing `styles.css`:
+
+- The **open** lid is the default, and the closed state lives inside
+  `@supports (animation-timeline: view())` and
+  `@media (prefers-reduced-motion: no-preference)`. A browser without
+  scroll-driven animations, or a reader who has asked for less motion, gets a
+  laptop that is simply open. Written the other way round they would get one
+  permanently shut.
+- `body` must not set `overflow-x`. `overflow-x: hidden` makes the body a scroll
+  container, and a `view()` timeline measured against it stops working. The
+  footer clips its own oversized wordmark instead.
+
+Below 900px the laptop flattens into an ordinary bordered panel and the about
+text becomes normal page content — a phone-width screen with its own scrollbar
+inside it is worse than no laptop at all.
+
 ## Why there is no JavaScript
 
 The page explains the app and hands over an `.exe`. Nothing on it needs to run
@@ -55,10 +86,17 @@ Fonts get a one-year immutable cache; they are content-hashed by filename.
 
 ## Keeping it honest
 
-The version, size and SHA-256 shown in the download card describe a specific
-release artifact. When a new version ships, all three change — and the checksum
-must be the one you get by downloading the published asset and hashing it, not
-the one from a local build. A checksum nobody can reproduce is worse than none.
+The version, size and date shown in the download card describe a specific
+release artifact, and all three are rewritten at build time by the sync script
+above rather than typed.
+
+The requirements list next to it is not generated, so it is the part that goes
+stale. The Windows 10 1803 floor, the three architectures and the WebView2
+dependency all come from the app, not from this page — change them here only
+when they change there.
+
+Windows is the only platform that ships. Linux and macOS are listed as coming
+soon, and that is a statement about intent, not a date.
 
 The mark in the masthead is the same geometry as the app icon, generated from
 `src-tauri/src/packs/brand.rs`. Regenerate the favicon with:
