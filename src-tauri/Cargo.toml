@@ -72,16 +72,16 @@ image = { version = "0.25", default-features = false, features = [
     "gif",
     "tiff",
 ] }
-fast_image_resize = { version = "5", features = ["image"] }
-resvg = { version = "0.45", default-features = false }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+fast_image_resize = { version = "6", features = ["image"] }
+resvg = { version = "0.48", default-features = false }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 uuid = { version = "1", features = ["v4"] }
 minisign-verify = "0.2.5"
 ort = { version = "2.0.0-rc.10", default-features = false, features = ["load-dynamic"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.55"
-windows = { version = "0.61", features = [
+winreg = "0.56"
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Networking_WinHttp",
