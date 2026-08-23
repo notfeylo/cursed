@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CURSOR_SIZES } from "../lib/sizes";
 import { Check } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button, Card, Select, Slider, TextInput, Toggle } from "../components/ui";
@@ -169,12 +170,12 @@ export function Customise() {
             suffix="px"
             min={10}
             max={128}
-            step={2}
+            steps={CURSOR_SIZES}
             value={size}
             onChange={setSize}
           />
           <div className="mt-1 flex flex-wrap gap-1">
-            {[10, 16, 24, 32, 48, 64, 96, 128].map((preset) => (
+            {CURSOR_SIZES.map((preset) => (
               <button
                 key={preset}
                 type="button"

@@ -92,11 +92,20 @@ export function Toggle({
   );
 }
 
+/**
+ * `steps` makes this a discrete slider over exactly those values.
+ *
+ * The range input then runs over indices, so every notch is one of the values
+ * and there is nothing in between to land on. Used by the cursor size control,
+ * where a size that is not a rung of the ladder is a size Windows has to
+ * stretch a cursor into.
+ */
 export function Slider({
   value,
   min,
   max,
   step = 1,
+  steps,
   onChange,
   label,
   suffix,
@@ -105,10 +114,22 @@ export function Slider({
   min: number;
   max: number;
   step?: number;
+  steps?: readonly number[];
   onChange: (next: number) => void;
   label?: string;
   suffix?: string;
 }) {
+  // Index arithmetic only when a discrete set was given; otherwise the input is
+  // the plain continuous one it has always been.
+  const discrete = steps && steps.length > 0 ? steps : null;
+  const index = discrete
+    ? discrete.reduce(
+        (best, rung, i) =>
+          Math.abs(rung - value) < Math.abs((discrete[best] ?? rung) - value) ? i : best,
+        0,
+      )
+    : 0;
+
   return (
     <div className="w-full">
       {label && (
@@ -122,11 +143,14 @@ export function Slider({
       )}
       <input
         type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.currentTarget.value))}
+        min={discrete ? 0 : min}
+        max={discrete ? discrete.length - 1 : max}
+        step={discrete ? 1 : step}
+        value={discrete ? index : value}
+        onChange={(e) => {
+          const raw = Number(e.currentTarget.value);
+          onChange(discrete ? (discrete[raw] ?? value) : raw);
+        }}
         className="h-1 w-full cursor-default appearance-none rounded-full bg-border accent-[#2E8BFF] outline-none"
       />
     </div>

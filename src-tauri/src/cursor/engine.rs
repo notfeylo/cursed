@@ -277,15 +277,48 @@ pub fn revert_live() -> AppResult<()> {
 
 /// The system cursor size Windows is currently drawing at, in pixels.
 pub fn effective_size(configured: Option<u32>) -> u32 {
-    configured
+    let asked = configured
         .or_else(|| crate::cursor::scheme::read_base_size().ok())
         .unwrap_or(32)
-        .clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX)
+        .clamp(crate::state::settings::MIN_CURSOR_PX, crate::state::settings::MAX_CURSOR_PX);
+    // Snapped to a rung, for the same reason `Settings::sanitised` snaps: a
+    // `.cur` holds a fixed set of resolutions, and a size between two of them
+    // is one the shell has to scale the nearest entry into.
+    //
+    // Both places, not one. `sanitised` catches the size this app was told to
+    // use; this catches the one it inherits when it was told nothing and reads
+    // `CursorBaseSize` — which is where Windows' own accessibility slider puts
+    // its answer, and that slider does not know our ladder exists.
+    crate::build::pipeline::nearest_size(asked)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bug this snapping exists for: the size control moves in twos and the
+    /// ladder has rungs, so most positions asked Windows to scale a cursor that
+    /// could have been drawn exactly.
+    #[test]
+    fn every_size_that_can_be_asked_for_lands_on_a_rung() {
+        use crate::build::cur_writer::TARGET_SIZES;
+        use crate::state::settings::{MAX_CURSOR_PX, MIN_CURSOR_PX};
+        for asked in MIN_CURSOR_PX..=MAX_CURSOR_PX {
+            let got = effective_size(Some(asked));
+            assert!(
+                TARGET_SIZES.contains(&got),
+                "{asked} px became {got} px, which no cursor file carries"
+            );
+        }
+    }
+
+    /// 38 is what the machine that reported the blurry pointer was sitting on.
+    #[test]
+    fn the_size_that_was_reported_blurry_snaps_to_one_that_exists() {
+        assert_eq!(effective_size(Some(38)), 32);
+        assert_eq!(effective_size(Some(78)), 64);
+        assert_eq!(effective_size(Some(120)), 128);
+    }
 
     #[test]
     fn a_missing_file_is_an_error_not_a_panic() {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CURSOR_SIZES } from "../lib/sizes";
 import { FolderOpen, FolderPlus, Info, Trash2 } from "lucide-react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -318,7 +319,7 @@ export function SettingsScreen() {
               suffix="px"
               min={10}
               max={128}
-              step={2}
+              steps={CURSOR_SIZES}
               value={settings.cursorSize ?? systemSize}
               onChange={(v) => void patch({ cursorSize: v })}
             />

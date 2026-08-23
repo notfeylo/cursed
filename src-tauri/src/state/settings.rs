@@ -125,7 +125,29 @@ impl Default for Settings {
 impl Settings {
     /// Clamps anything a hand-edited settings file could put out of range.
     pub fn sanitised(mut self) -> Self {
-        self.cursor_size = self.cursor_size.map(|s| s.clamp(MIN_CURSOR_PX, MAX_CURSOR_PX));
+        // Clamped **and snapped to a rung of the size ladder**.
+        //
+        // A `.cur` carries a fixed set of resolutions and Windows draws it at
+        // whatever `CursorBaseSize` says. Land between two rungs and the shell
+        // scales the nearest one to fit — bilinear, unpremultiplied, no gamma
+        // correction — and the pointer arrives soft with its edge stepped. The
+        // size control moves in twos from 10 to 128, which is sixty positions
+        // against ten rungs: fifty-two of them were a stretch, and the eight
+        // that were not are exactly the preset chips underneath the slider.
+        // That is why picking a preset looked sharp and dragging the slider did
+        // not.
+        //
+        // Snapping here rather than in the UI means it holds for a hand-edited
+        // settings file, a preset restored from a `.cfpack`, and a size that
+        // arrived from an older build — and the number the app displays is the
+        // number Windows is given, which is the only version of this that is
+        // honest.
+        //
+        // The animated path never needed it: an `.ani` carries one resolution
+        // and is rendered at the exact size asked for.
+        self.cursor_size = self
+            .cursor_size
+            .map(|s| crate::build::pipeline::nearest_size(s.clamp(MIN_CURSOR_PX, MAX_CURSOR_PX)));
         self.animation_speed = self.animation_speed.clamp(0.5, 2.0);
         self.watchdog_interval_secs = self.watchdog_interval_secs.clamp(3, 30);
         if crate::util::parse_hex_color(&self.tint).is_none() {
