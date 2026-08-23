@@ -7,6 +7,64 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.23.0 — 2026-08-22
+
+### Turn and mirror your own artwork
+
+An arrow pointing the wrong way used to mean opening an image editor and
+importing it again. There is now an **Orientation** row on the custom import
+screen: rotate left, rotate right, mirror, flip, and reset.
+
+- Right angles only, on purpose. An arbitrary angle has to be resampled, and at
+  32 pixels that softens every edge of the thing you are making.
+- **The hotspot turns with the picture.** A click point placed on the tip of an
+  arrow is still on the tip after a quarter turn, rather than staying where it
+  was on screen and quietly coming to mean the middle of the shaft.
+- Animations turn frame by frame, so a turned animation does not jump on its
+  second frame.
+- Reset puts the artwork back the way it arrived, and brings the click point
+  home with it.
+
+### Photo mode could not load on a clean PC
+
+Photo mode reported *"the photo-mode runtime could not be loaded …
+LoadLibraryExW failed"* on any Windows that had never had developer tools
+installed on it — which is most of them.
+
+The ONNX Runtime is built against the Microsoft Visual C++ Runtime, and Windows
+does not include it. Cursed itself never needed it and still does not: it runs
+on a bare install of Windows, which is exactly why this only ever showed up in
+the one feature that reaches for something else. Every machine the feature was
+written on already had those files, because installing a compiler installs them.
+
+Photo mode now carries that runtime with it, per architecture, checked against
+the same published checksum and signature as everything else it downloads. The
+first-use download grows by about 0.9 MB on 64-bit.
+
+If you already have photo mode installed, installing it again fetches only the
+missing piece rather than the whole twenty megabytes.
+
+And when a library genuinely cannot load, the message now says what Windows
+said — including which file is missing — instead of four words that fit every
+possible cause equally badly.
+
+### Photo mode held half a gigabyte
+
+Removing one background committed **554 MB** and never gave it back, whatever
+the size of the picture: a 64x64 image cost exactly as much as a 19-megapixel
+one. That is ONNX Runtime's arena allocator, which takes memory as the model
+runs and keeps it for the next run — the right default for a server and the
+wrong one for something that sits in a tray.
+
+On a machine with room to spare it was waste. On a small one it was fatal, and
+it closed the app with nothing in the log to say why.
+
+One cutout now costs **26 MB** instead of 554, and gives it back afterwards. The
+model runs about 11 ms slower on a 91 ms inference, which is not a trade worth
+thinking twice about.
+
+---
+
 ## 1.22.0 — 2026-08-21
 
 ### Cursor files can be imported
