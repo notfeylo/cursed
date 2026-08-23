@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { FlipHorizontal, FlipVertical, Plus, RotateCcw, RotateCw, Undo2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -10,6 +10,15 @@ import type { ApplyMode, ImportedImage } from "../lib/types";
 import { useStore } from "../store";
 
 type Preview = { size: number; dataUri: string };
+
+/** The presses on offer, in the order they read along the row. */
+const TURNS: { turn: ipc.Turn; label: string; Icon: typeof RotateCw }[] = [
+  { turn: "rotateLeft", label: "Rotate left", Icon: RotateCcw },
+  { turn: "rotateRight", label: "Rotate right", Icon: RotateCw },
+  { turn: "flipHorizontal", label: "Mirror", Icon: FlipHorizontal },
+  { turn: "flipVertical", label: "Flip", Icon: FlipVertical },
+  { turn: "reset", label: "Reset", Icon: Undo2 },
+];
 
 const HOTSPOT_PRESETS = [
   { label: "Alpha centroid", value: "centroid" },
@@ -55,6 +64,15 @@ export function CustomImport() {
   // hint. Modal over the whole screen, because cutting an edge by hand needs
   // the pixels as large as they will go.
   const [editing, setEditing] = useState(false);
+  // How the artwork has been turned, and what it looks like turned.
+  //
+  // The transform is round-tripped rather than composed here: folding two of
+  // them together is not "add one to the count", and the backend owns that
+  // algebra. `turned` is what came back with it — the picture for the picker,
+  // and what the presets would now propose.
+  const [transform, setTransform] = useState<ipc.Transform>({});
+  const [turned, setTurned] = useState<ipc.Adjusted | null>(null);
+  const [turning, setTurning] = useState(false);
 
   const accept = useCallback(
     async (loader: () => Promise<ImportedImage>) => {
@@ -62,6 +80,9 @@ export function CustomImport() {
       try {
         const staged = await loader();
         setImage(staged);
+        // A new picture arrives the way up it was drawn.
+        setTransform({});
+        setTurned(null);
         setHotspot(staged.suggestedHotspot);
         setPreviews(await ipc.previewCustom(staged.token, outline));
       } catch (e) {
@@ -182,11 +203,39 @@ export function CustomImport() {
     }
   };
 
+  // A press of rotate or flip.
+  //
+  // The hotspot travels with the artwork, which is the whole point: a click
+  // point placed on the tip of an arrow is still on the tip after a quarter
+  // turn, rather than staying where it was on screen and quietly coming to mean
+  // the middle of the shaft.
+  const press = async (turn: ipc.Turn) => {
+    if (!image || turning) return;
+    setTurning(true);
+    try {
+      const next = await ipc.adjustCustom({
+        token: image.token,
+        transform,
+        turn,
+        hotspot,
+        outline,
+      });
+      setTransform(next.transform);
+      setTurned(next);
+      setHotspot(next.hotspot);
+      setPreviews(next.previews);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTurning(false);
+    }
+  };
+
   const refreshPreviews = async (nextOutline: boolean) => {
     setOutline(nextOutline);
     if (!image) return;
     try {
-      setPreviews(await ipc.previewCustom(image.token, nextOutline));
+      setPreviews(await ipc.previewCustom(image.token, nextOutline, transform));
     } catch {
       /* the ladder is cosmetic; a failed refresh is not worth a banner */
     }
@@ -202,6 +251,7 @@ export function CustomImport() {
         hotspot,
         outline,
         animationSpeed: settings.animationSpeed,
+        transform,
         handToken: hand?.token ?? null,
       });
       await ipc.applyCustomCursor({
@@ -230,6 +280,10 @@ export function CustomImport() {
           onApply={(next) => {
             setEditing(false);
             setImage(next);
+            // The editor works on the artwork as it arrived, so what comes back
+            // is the way up it arrived too.
+            setTransform({});
+            setTurned(null);
             setHotspot(next.suggestedHotspot);
             void ipc
               .previewCustom(next.token, outline)
@@ -245,6 +299,8 @@ export function CustomImport() {
             onClick={() => {
               setImage(null);
               setPreviews([]);
+              setTransform({});
+              setTurned(null);
             }}
             className="display text-[10px] text-text-dim hover:text-text"
           >
@@ -267,8 +323,41 @@ export function CustomImport() {
               — with nothing to say which control belonged to which decision.
               Three cards: what it looks like, what it is, where it goes. */}
           <div className="grid grid-cols-2 gap-3">
-            <HotspotPicker image={image} hotspot={hotspot} onChange={setHotspot} />
+            <HotspotPicker
+              src={turned?.dataUri ?? image.dataUri}
+              hotspot={hotspot}
+              onChange={setHotspot}
+            />
             <PreviewLadder previews={previews} />
+          </div>
+
+          <div className="panel mt-4 rounded-sm border border-border p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <span className="display text-[11px] text-text-muted">ORIENTATION</span>
+              <span className="mono shrink-0 text-[11px] text-text-dim">
+                {orientationLabel(transform)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {TURNS.map(({ turn, label, Icon }) => (
+                <button
+                  key={turn}
+                  type="button"
+                  disabled={turning || (turn === "reset" && asImported(transform))}
+                  onClick={() => void press(turn)}
+                  aria-label={label}
+                  className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <Icon size={13} strokeWidth={1.5} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+              Right angles only. An arbitrary angle has to be resampled, and at
+              cursor sizes that softens every edge. Animations turn frame by
+              frame, and the hotspot turns with the picture.
+            </p>
           </div>
 
           <div className="panel mt-4 rounded-sm border border-border p-4">
@@ -283,7 +372,14 @@ export function CustomImport() {
                 <button
                   key={preset.value}
                   type="button"
-                  onClick={() => setHotspot(presetHotspot(preset.value, image))}
+                  onClick={() =>
+                    setHotspot(
+                      presetHotspot(
+                        preset.value,
+                        turned?.suggestedHotspot ?? image.suggestedHotspot,
+                      ),
+                    )
+                  }
                   className="rounded-full border border-border px-3 py-1 text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
                 >
                   {preset.label}
@@ -465,7 +561,7 @@ export function CustomImport() {
 
 function presetHotspot(
   preset: (typeof HOTSPOT_PRESETS)[number]["value"],
-  image: ImportedImage,
+  suggested: [number, number],
 ): [number, number] {
   switch (preset) {
     case "center":
@@ -476,8 +572,25 @@ function presetHotspot(
       return [0, 0];
     case "centroid":
     default:
-      return image.suggestedHotspot;
+      return suggested;
   }
+}
+
+/** Whether the artwork is still the way up it arrived. */
+function asImported(transform: ipc.Transform): boolean {
+  return (
+    (transform.quarterTurns ?? 0) % 4 === 0 && !transform.flipH && !transform.flipV
+  );
+}
+
+/** A few words for what has been done, for the corner of the panel. */
+function orientationLabel(transform: ipc.Transform): string {
+  if (asImported(transform)) return "as imported";
+  const degrees = ((transform.quarterTurns ?? 0) % 4) * 90;
+  const mirrored = Boolean(transform.flipH || transform.flipV);
+  return [degrees ? degrees + "°" : null, mirrored ? "mirrored" : null]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
@@ -535,11 +648,12 @@ function AcceptedFormats() {
  * same thing at 32 px and at 256 px.
  */
 function HotspotPicker({
-  image,
+  src,
   hotspot,
   onChange,
 }: {
-  image: ImportedImage;
+  /** The artwork as it currently stands, which is not always as it arrived. */
+  src: string;
   hotspot: [number, number];
   onChange: (next: [number, number]) => void;
 }) {
@@ -583,7 +697,7 @@ function HotspotPicker({
       className="relative aspect-square overflow-hidden rounded-sm border border-border bg-[repeating-conic-gradient(#131722_0_25%,#0B0D12_0_50%)] bg-[length:12px_12px]"
     >
       <img
-        src={image.dataUri}
+        src={src}
         alt=""
         draggable={false}
         className="h-full w-full object-contain [image-rendering:pixelated]"

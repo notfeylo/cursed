@@ -620,7 +620,7 @@ fn transfer_alpha(proxy: &Bitmap, bounds: (u32, u32, u32, u32), region: &mut Bit
 /// rotate, then flip, then invert. Cropping first means the rectangle the user
 /// drew on the preview is the rectangle taken, regardless of what is done to it
 /// afterwards; inverting last means it applies to whatever survived.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Transform {
     /// Quarter turns clockwise, 0–3. Right angles only — an arbitrary angle
@@ -633,7 +633,114 @@ pub struct Transform {
     pub crop: Option<[f32; 4]>,
 }
 
+/// One press of a button on the preview, rather than a matrix.
+///
+/// **The stored transform cannot record the order things were done in**, and
+/// the order changes the answer: turning a mirrored picture is not the same as
+/// mirroring a turned one. Rotate-then-flip-then-rotate and
+/// flip-then-rotate-twice are different pictures, and a naive
+/// `quarter_turns += 1` produces the second when the user asked for the first.
+///
+/// So presses arrive one at a time and `Transform::then` folds each into the
+/// stored form, which keeps what is on screen equal to what the user watched
+/// happen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Turn {
+    RotateRight,
+    RotateLeft,
+    FlipHorizontal,
+    FlipVertical,
+    /// Back to the artwork as it arrived, keeping any crop and inversion.
+    Reset,
+}
+
 impl Transform {
+    /// This transform written as a turn followed by at most one mirror.
+    ///
+    /// **Every one of the eight ways a rectangle can be laid down is either
+    /// `R^q` or `H·R^q`**, so a separate vertical flip is never needed:
+    /// mirroring top to bottom is mirroring left to right and turning half way
+    /// round. Folding it away leaves one shape to reason about rather than
+    /// eight, and `apply` still reads the fields it always did.
+    ///
+    /// `apply` turns first and mirrors after, so as a function on points this
+    /// transform is `V^v · H^h · R^q` — read right to left.
+    fn canonical(&self) -> (u32, bool) {
+        let q = self.quarter_turns % 4;
+        match (self.flip_h, self.flip_v) {
+            (false, false) => (q, false),
+            (true, false) => (q, true),
+            // V·R^q = H·R^(q+2), because V = H·R².
+            (false, true) => ((q + 2) % 4, true),
+            // V·H·R^q = R^(q+2), because V·H is a half turn.
+            (true, true) => ((q + 2) % 4, false),
+        }
+    }
+
+    /// Folds one more press into this transform.
+    ///
+    /// The whole table rests on one identity: **`R^k·H = H·R^(4-k)`**. A turn
+    /// applied to a mirrored picture is that turn *backwards* on the picture
+    /// behind the mirror, which is exactly why the turn cannot simply be
+    /// incremented once a flip is in play.
+    pub fn then(&self, turn: Turn) -> Transform {
+        if turn == Turn::Reset {
+            return Transform {
+                quarter_turns: 0,
+                flip_h: false,
+                flip_v: false,
+                invert: self.invert,
+                crop: self.crop,
+            };
+        }
+        let (q, h) = self.canonical();
+        let (q, h) = match turn {
+            Turn::RotateRight => (if h { q + 3 } else { q + 1 }, h),
+            Turn::RotateLeft => (if h { q + 1 } else { q + 3 }, h),
+            Turn::FlipHorizontal => (q, !h),
+            // V = H·R²: mirroring top to bottom is a half turn and a mirror.
+            Turn::FlipVertical => (q + 2, !h),
+            Turn::Reset => unreachable!("handled above"),
+        };
+        Transform {
+            quarter_turns: q % 4,
+            flip_h: h,
+            flip_v: false,
+            invert: self.invert,
+            crop: self.crop,
+        }
+    }
+
+    /// Where a point on the artwork lands after one press.
+    ///
+    /// Applied to the hotspot the moment the button is pressed, so the click
+    /// point **travels with the picture** instead of staying where it was on
+    /// screen and quietly coming to mean somewhere else. Fractions, so it does
+    /// not matter that a quarter turn swaps width and height.
+    pub fn move_point(turn: Turn, (x, y): (f32, f32)) -> (f32, f32) {
+        match turn {
+            Turn::RotateRight => (1.0 - y, x),
+            Turn::RotateLeft => (y, 1.0 - x),
+            Turn::FlipHorizontal => (1.0 - x, y),
+            Turn::FlipVertical => (x, 1.0 - y),
+            Turn::Reset => (x, y),
+        }
+    }
+
+    /// The point in the artwork as it arrived that this transform put at
+    /// `point`. What "reset" needs, so the hotspot comes home rather than
+    /// staying at whatever fraction it happened to reach.
+    pub fn unmap_point(&self, (x, y): (f32, f32)) -> (f32, f32) {
+        let (q, h) = self.canonical();
+        // Undoing `H·R^q` is `R^(4-q)·H`: take the mirror off first.
+        let mut point = if h { (1.0 - x, y) } else { (x, y) };
+        for _ in 0..((4 - q) % 4) {
+            point = (1.0 - point.1, point.0);
+        }
+        point
+    }
+
     pub fn is_identity(&self) -> bool {
         self.quarter_turns % 4 == 0
             && !self.flip_h
@@ -966,6 +1073,131 @@ pub fn preview_ladder(master: &Bitmap, options: &Finish) -> AppResult<Vec<(u32, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A picture with no symmetry at all: not square, and every pixel its own
+    /// colour. Anything that confuses the two axes, or a turn with its
+    /// opposite, changes it visibly.
+    fn a_lopsided_picture() -> Bitmap {
+        let mut bitmap = Bitmap::new(7, 3);
+        for y in 0..3u32 {
+            for x in 0..7u32 {
+                bitmap.set_pixel(x, y, [(10 + x * 30) as u8, (10 + y * 80) as u8, 7, 255]);
+            }
+        }
+        bitmap
+    }
+
+    /// Every sequence of presses up to three long.
+    fn every_short_sequence() -> Vec<Vec<Turn>> {
+        let presses = [
+            Turn::RotateRight,
+            Turn::RotateLeft,
+            Turn::FlipHorizontal,
+            Turn::FlipVertical,
+        ];
+        let mut all: Vec<Vec<Turn>> = vec![vec![]];
+        let mut frontier: Vec<Vec<Turn>> = vec![vec![]];
+        for _ in 0..3 {
+            let mut next = Vec::new();
+            for sequence in &frontier {
+                for press in presses {
+                    let mut extended = sequence.clone();
+                    extended.push(press);
+                    next.push(extended);
+                }
+            }
+            all.extend(next.iter().cloned());
+            frontier = next;
+        }
+        all
+    }
+
+    /// **Composition is checked against the pixels, not against the algebra.**
+    ///
+    /// Each sequence is folded into one transform and applied once, and applied
+    /// again one press at a time, and the two pictures must be identical. That
+    /// is the property that actually matters — what is on screen is what the
+    /// user built — and it is what fails the moment any entry of the
+    /// `R^k·H = H·R^(4-k)` table is wrong.
+    ///
+    /// The naive version of `then` — increment `quarter_turns`, toggle the
+    /// flips — agrees on every sequence that never mixes a turn with a mirror,
+    /// and is wrong for **20 of the 84 sequences here**: 4 of the 16 two-press
+    /// ones and 16 of the 64 three-press ones. It is the kind of bug that looks
+    /// like the buttons work.
+    #[test]
+    fn folding_presses_together_matches_doing_them_one_at_a_time() {
+        let source = a_lopsided_picture();
+        for sequence in every_short_sequence() {
+            let mut folded = Transform::default();
+            let mut one_at_a_time = source.clone();
+            for &press in &sequence {
+                folded = folded.then(press);
+                one_at_a_time = Transform::default().then(press).apply(&one_at_a_time);
+            }
+            let all_at_once = folded.apply(&source);
+            assert_eq!(
+                (all_at_once.width, all_at_once.height),
+                (one_at_a_time.width, one_at_a_time.height),
+                "{sequence:?} came out a different shape"
+            );
+            assert_eq!(all_at_once.pixels, one_at_a_time.pixels, "{sequence:?}");
+        }
+    }
+
+    /// **The click point travels with the artwork.**
+    ///
+    /// One pixel is marked, and after every sequence the fraction the hotspot
+    /// has been carried to must land on that same pixel. A hotspot that stays
+    /// where it was on screen is the failure this prevents: the cursor still
+    /// looks right and clicks somewhere else, which is close to the worst way
+    /// for a cursor to be wrong.
+    #[test]
+    fn the_click_point_follows_the_picture_it_was_placed_on() {
+        const MARK: [u8; 4] = [255, 0, 255, 255];
+        for sequence in every_short_sequence() {
+            for (mx, my) in [(0u32, 0u32), (6, 0), (0, 2), (6, 2), (4, 1)] {
+                let mut picture = a_lopsided_picture();
+                picture.set_pixel(mx, my, MARK);
+                // The centre of the marked pixel, as a fraction.
+                let mut point = (
+                    (mx as f32 + 0.5) / picture.width as f32,
+                    (my as f32 + 0.5) / picture.height as f32,
+                );
+                for &press in &sequence {
+                    picture = Transform::default().then(press).apply(&picture);
+                    point = Transform::move_point(press, point);
+                }
+                let x = (point.0 * picture.width as f32).floor() as u32;
+                let y = (point.1 * picture.height as f32).floor() as u32;
+                assert_eq!(
+                    picture.pixel(x.min(picture.width - 1), y.min(picture.height - 1)),
+                    MARK,
+                    "{sequence:?} left the click point at ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    /// Reset undoes the turns and brings the click point home with them.
+    #[test]
+    fn reset_returns_the_point_it_was_given() {
+        for sequence in every_short_sequence() {
+            let mut folded = Transform::default();
+            let mut point = (0.2f32, 0.7f32);
+            let home = point;
+            for &press in &sequence {
+                folded = folded.then(press);
+                point = Transform::move_point(press, point);
+            }
+            let back = folded.unmap_point(point);
+            assert!(
+                (back.0 - home.0).abs() < 1e-5 && (back.1 - home.1).abs() < 1e-5,
+                "{sequence:?} came back to {back:?} rather than {home:?}"
+            );
+            assert!(folded.then(Turn::Reset).is_identity(), "{sequence:?}");
+        }
+    }
 
     /// A `.cur` dropped on the window has to arrive as an animation-free cursor
     /// **with the hotspot the file states**, not one guessed from its shape.

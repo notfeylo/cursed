@@ -453,6 +453,7 @@ pub fn run() {
             commands::import_image,
             commands::import_image_bytes,
             commands::preview_custom,
+            commands::adjust_custom,
             commands::build_custom_cursor,
             commands::apply_custom_cursor,
             commands::delete_custom_cursor,

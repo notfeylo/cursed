@@ -206,18 +206,81 @@ export const openMatteEditor = (token: string) =>
 export const previewMatte = (token: string, tolerance: number) =>
   call<string>("preview_matte", { token, tolerance });
 
+/**
+ * How the artwork has been turned. Opaque on this side **on purpose**.
+ *
+ * Composing two of these is not "add one to the count": turning a mirrored
+ * picture is not the same as mirroring a turned one, and folding presses
+ * together in a fixed order gets 20 of the 84 short sequences wrong. The
+ * backend owns that algebra — see `Transform::then` — and the frontend only
+ * ever hands back whatever it was last given.
+ */
+export interface Transform {
+  quarterTurns?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+  invert?: boolean;
+  crop?: [number, number, number, number] | null;
+}
+
+/** One press of a button on the preview. */
+export type Turn =
+  | "rotateRight"
+  | "rotateLeft"
+  | "flipHorizontal"
+  | "flipVertical"
+  | "reset";
+
+export interface Adjusted {
+  transform: Transform;
+  /** The click point, carried across so it stays on the pixel it was put on. */
+  hotspot: [number, number];
+  /** What the picker would propose for the artwork as it now stands. */
+  suggestedHotspot: [number, number];
+  width: number;
+  height: number;
+  /** The turned artwork, for the hotspot picker. */
+  dataUri: string;
+  previews: { size: number; dataUri: string }[];
+}
+
+/**
+ * Turns or mirrors a staged image.
+ *
+ * One call, because the picture, the size ladder and the hotspot have to change
+ * together — fetched separately there is a frame where the crosshair is still
+ * on the old spot.
+ */
+export const adjustCustom = (args: {
+  token: string;
+  transform: Transform;
+  turn: Turn;
+  hotspot: [number, number];
+  outline: boolean;
+}) => call<Adjusted>("adjust_custom", { args });
+
 export interface BuildArgs {
   token: string;
   name: string;
   hotspot: [number, number];
   outline: boolean;
   animationSpeed: number;
+  /** How the artwork was turned or mirrored on the preview. */
+  transform?: Transform;
   /** A second staged image, used for the link/hover cursor. */
   handToken?: string | null;
 }
 
-export const previewCustom = (token: string, outline: boolean) =>
-  call<{ size: number; dataUri: string }[]>("preview_custom", { token, outline });
+export const previewCustom = (
+  token: string,
+  outline: boolean,
+  transform?: Transform,
+) =>
+  call<{ size: number; dataUri: string }[]>("preview_custom", {
+    token,
+    outline,
+    transform,
+  });
 
 export const buildCustomCursor = (args: BuildArgs) =>
   call<BuiltCursor>("build_custom_cursor", { args });

@@ -282,6 +282,70 @@ pub fn preview(
         .collect())
 }
 
+/// What the picker needs after a turn: the artwork, the ladder, and the point.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Adjusted {
+    /// The folded transform, to be handed back with the next press and with the
+    /// build. **The frontend never composes these itself** — `Transform::then`
+    /// documents why that is not as easy as adding one to a counter.
+    pub transform: pipeline::Transform,
+    pub hotspot: (f32, f32),
+    /// What the picker would propose for the artwork *as it now stands*.
+    ///
+    /// Recomputed rather than turned, because that is what the presets mean: an
+    /// alpha centroid is a property of the pixels in front of you, and a turned
+    /// picture has its own.
+    pub suggested_hotspot: (f32, f32),
+    pub width: u32,
+    pub height: u32,
+    /// The turned artwork, for the hotspot picker to draw.
+    pub data_uri: String,
+    pub previews: Vec<Preview>,
+}
+
+/// Turns or mirrors a staged image and reports everything that moved with it.
+///
+/// **One call rather than three**, because the three answers have to agree. The
+/// picture in the picker, the ladder of real sizes beside it and the hotspot
+/// are one state; fetched separately there is a frame in which the crosshair
+/// still sits where it was, on a picture that has already turned.
+pub fn adjust(
+    token: &str,
+    transform: &pipeline::Transform,
+    turn: pipeline::Turn,
+    hotspot: (f32, f32),
+    outline: bool,
+) -> AppResult<Adjusted> {
+    let next = transform.then(turn);
+    let moved = match turn {
+        // Reset puts the artwork back as it arrived, so the click point travels
+        // home with it rather than staying at whatever fraction it reached.
+        pipeline::Turn::Reset => transform.unmap_point(hotspot),
+        _ => pipeline::Transform::move_point(turn, hotspot),
+    };
+
+    let source = transformed(take_staged(token)?, &next);
+    let first = source.first()?;
+    let finish = Finish {
+        tint: None,
+        opacity: 1.0,
+        outline,
+    };
+    Ok(Adjusted {
+        transform: next,
+        hotspot: (moved.0.clamp(0.0, 1.0), moved.1.clamp(0.0, 1.0)),
+        suggested_hotspot: hotspot::compute(first, hotspot::suggest(first)),
+        width: first.width,
+        height: first.height,
+        data_uri: first.to_png_data_uri()?,
+        previews: pipeline::preview_ladder(first, &finish)?
+            .into_iter()
+            .map(|(size, data_uri)| Preview { size, data_uri })
+            .collect(),
+    })
+}
+
 /// Applies the user's edits to every frame.
 ///
 /// Every frame, not just the first: a flipped animation whose later frames were
@@ -653,6 +717,172 @@ mod tests {
         ani_writer::write_ani(&frames, 1.0, &AniMetadata::default()).expect("an ani")
     }
 
+    /// **Staging is a shared table of six**, and a test that needs its image to
+    /// still be there on the next call cannot run beside one that fills it.
+    /// `staging_does_not_grow_without_bound` exists to overflow it on purpose,
+    /// so anything holding a token across more than one call takes this first.
+    fn a_token_that_survives() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// A picture that is obvious about which way up it is: one bright corner
+    /// on an otherwise plain subject, on a flat background the cut can find.
+    fn a_picture_with_a_marked_corner() -> Vec<u8> {
+        use crate::build::bitmap::Bitmap;
+
+        let mut art = Bitmap::new(64, 64);
+        for y in 0..64u32 {
+            for x in 0..64u32 {
+                art.set_pixel(x, y, [255, 255, 255, 255]);
+            }
+        }
+        // The subject, filling most of the frame so the trim keeps its shape.
+        for y in 8..56u32 {
+            for x in 8..56u32 {
+                art.set_pixel(x, y, [30, 60, 90, 255]);
+            }
+        }
+        // The mark, in the subject's top-left.
+        for y in 10..20u32 {
+            for x in 10..20u32 {
+                art.set_pixel(x, y, [255, 0, 255, 255]);
+            }
+        }
+        art.to_png(image::codecs::png::CompressionType::Fast)
+            .expect("a png")
+    }
+
+    /// Where the brightest magenta sits, as fractions of the picture.
+    fn where_the_mark_is(bitmap: &crate::build::bitmap::Bitmap) -> (f32, f32) {
+        let (mut sx, mut sy, mut n) = (0f32, 0f32, 0f32);
+        for y in 0..bitmap.height {
+            for x in 0..bitmap.width {
+                let [r, g, b, a] = bitmap.pixel(x, y);
+                if a > 128 && r > 200 && g < 80 && b > 200 {
+                    // Pixel **centres**, not indices. A quarter turn sends
+                    // index i to n-1-i, so averaging indices puts the centroid
+                    // half a pixel out in one axis and only in one axis —
+                    // which reads exactly like a hotspot that does not quite
+                    // follow the picture.
+                    sx += x as f32 + 0.5;
+                    sy += y as f32 + 0.5;
+                    n += 1.0;
+                }
+            }
+        }
+        assert!(n > 0.0, "the mark did not survive staging");
+        (
+            (sx / n) / bitmap.width as f32,
+            (sy / n) / bitmap.height as f32,
+        )
+    }
+
+    /// **Turning the artwork turns the artwork, and takes the hotspot with it.**
+    ///
+    /// The whole point of the feature, checked end to end rather than in the
+    /// algebra: a marked corner is followed through a quarter turn in the real
+    /// staged image, and the hotspot that was sitting on that mark has to still
+    /// be sitting on it afterwards. A hotspot that stayed where it was on screen
+    /// would leave a cursor that looks right and clicks somewhere else.
+    #[test]
+    fn a_quarter_turn_carries_the_hotspot_with_the_picture() {
+        let _held = a_token_that_survives();
+        let staged = stage(a_picture_with_a_marked_corner()).expect("it stages");
+        let before = take_staged(&staged.token).expect("staged");
+        let mark = where_the_mark_is(before.first().expect("a frame"));
+
+        let turned = adjust(
+            &staged.token,
+            &pipeline::Transform::default(),
+            pipeline::Turn::RotateRight,
+            mark,
+            false,
+        )
+        .expect("it turns");
+
+        // Where the mark actually went, read out of the turned pixels.
+        let after = transformed(
+            take_staged(&staged.token).expect("staged"),
+            &turned.transform,
+        );
+        let moved = where_the_mark_is(after.first().expect("a frame"));
+
+        assert!(
+            (turned.hotspot.0 - moved.0).abs() < 0.02
+                && (turned.hotspot.1 - moved.1).abs() < 0.02,
+            "the hotspot went to {:?} and the mark went to {moved:?}",
+            turned.hotspot
+        );
+        // And it is genuinely somewhere else than it started, or the assertion
+        // above would hold for a transform that did nothing at all.
+        assert!(
+            (mark.0 - moved.0).abs() > 0.1 || (mark.1 - moved.1).abs() > 0.1,
+            "a quarter turn left the mark where it was, at {mark:?}"
+        );
+        assert_eq!(turned.transform.quarter_turns, 1);
+        assert!(!turned.previews.is_empty(), "the ladder is rebuilt");
+    }
+
+    /// Four quarter turns is where you started, and reset brings the click
+    /// point home rather than leaving it at whatever fraction it reached.
+    #[test]
+    fn turning_all_the_way_round_comes_back_to_the_beginning() {
+        let _held = a_token_that_survives();
+        let staged = stage(a_picture_with_a_marked_corner()).expect("it stages");
+        let start = (0.31f32, 0.72f32);
+
+        let mut transform = pipeline::Transform::default();
+        let mut hotspot = start;
+        for _ in 0..4 {
+            let step = adjust(
+                &staged.token,
+                &transform,
+                pipeline::Turn::RotateRight,
+                hotspot,
+                false,
+            )
+            .expect("it turns");
+            transform = step.transform;
+            hotspot = step.hotspot;
+        }
+        assert!(transform.is_identity(), "four turns is not the way it started");
+        assert!((hotspot.0 - start.0).abs() < 1e-4 && (hotspot.1 - start.1).abs() < 1e-4);
+
+        // And a reset from a mirrored, turned state also comes home.
+        let mirrored = adjust(
+            &staged.token,
+            &transform,
+            pipeline::Turn::FlipHorizontal,
+            start,
+            false,
+        )
+        .expect("it mirrors");
+        let turned = adjust(
+            &staged.token,
+            &mirrored.transform,
+            pipeline::Turn::RotateLeft,
+            mirrored.hotspot,
+            false,
+        )
+        .expect("it turns");
+        let home = adjust(
+            &staged.token,
+            &turned.transform,
+            pipeline::Turn::Reset,
+            turned.hotspot,
+            false,
+        )
+        .expect("it resets");
+
+        assert!(home.transform.is_identity());
+        assert!(
+            (home.hotspot.0 - start.0).abs() < 1e-4 && (home.hotspot.1 - start.1).abs() < 1e-4,
+            "reset left the click point at {:?} rather than {start:?}",
+            home.hotspot
+        );
+    }
+
     /// **The regression for the message that made this feature look broken.**
     ///
     /// An animated cursor pack is the single most likely thing to be dropped on
@@ -667,6 +897,7 @@ mod tests {
     /// the app said something was.
     #[test]
     fn an_animation_that_is_already_cut_out_is_not_called_a_photograph() {
+        let _held = a_token_that_survives();
         let staged = stage(a_cut_out_animation()).expect("an animated cursor stages");
 
         assert!(staged.animated, "a four-frame .ani is an animation");
@@ -687,6 +918,7 @@ mod tests {
     /// and this is what keeps it that way.
     #[test]
     fn a_cursor_file_is_not_called_a_photograph_either() {
+        let _held = a_token_that_survives();
         use crate::build::bitmap::Bitmap;
         use crate::build::cur_writer::{self, CursorImage};
 
@@ -814,6 +1046,7 @@ mod tests {
     /// staging path, not just PNG.
     #[test]
     fn every_advertised_input_format_stages_successfully() {
+        let _held = a_token_that_survives();
         for format in [
             image::ImageFormat::Png,
             image::ImageFormat::Jpeg,
@@ -856,6 +1089,7 @@ mod tests {
 
     #[test]
     fn staging_returns_a_token_and_a_preview() {
+        let _held = a_token_that_survives();
         let staged = stage(png(32, 32)).unwrap();
         assert!(!staged.token.is_empty());
         assert!(staged.data_uri.starts_with("data:image/png;base64,"));
@@ -883,6 +1117,7 @@ mod tests {
 
     #[test]
     fn staging_does_not_grow_without_bound() {
+        let _held = a_token_that_survives();
         for _ in 0..(MAX_STAGED + 3) {
             let _ = stage(png(16, 16));
         }

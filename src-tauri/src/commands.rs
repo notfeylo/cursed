@@ -536,6 +536,34 @@ pub struct BuildArgs {
     pub hand_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustArgs {
+    pub token: String,
+    /// What the artwork has already been turned by. Round-tripped rather than
+    /// held here: two windows on one staged image would otherwise fight.
+    #[serde(default)]
+    pub transform: crate::build::pipeline::Transform,
+    pub turn: crate::build::pipeline::Turn,
+    pub hotspot: (f32, f32),
+    pub outline: bool,
+}
+
+/// One press of rotate or flip on a staged image.
+#[tauri::command]
+pub fn adjust_custom(args: AdjustArgs) -> AppResult<custom::Adjusted> {
+    custom::adjust(
+        &args.token,
+        &args.transform,
+        args.turn,
+        (
+            args.hotspot.0.clamp(0.0, 1.0),
+            args.hotspot.1.clamp(0.0, 1.0),
+        ),
+        args.outline,
+    )
+}
+
 #[tauri::command]
 pub fn preview_custom(
     token: String,
