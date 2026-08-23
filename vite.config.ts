@@ -13,7 +13,9 @@ export default defineConfig({
   },
   build: {
     target: "chrome110",
-    minify: "esbuild",
+    // Vite 8 bundles with rolldown and no longer ships esbuild; "oxc" is the
+    // minifier that replaces it.
+    minify: "oxc",
     sourcemap: false,
     chunkSizeWarningLimit: 900,
   },
