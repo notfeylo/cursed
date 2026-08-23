@@ -980,6 +980,78 @@ fn as_alpha(map: &[f32], width: u32, height: u32) -> AppResult<Bitmap> {
 ///
 /// Returns the same report shape a keyed cut produces, so the caller does not
 /// care which of the two ran.
+/// How far to look for the background a fringe pixel was mixed with.
+///
+/// Four pixels at the working resolution. The matte's soft edge is one to two
+/// pixels wide, so this reaches past it to pixels the model was confident about
+/// while staying local enough that a subject against two different backgrounds
+/// — sky above, grass below — is unmixed against the right one on each side.
+const BACKDROP_REACH: i32 = 4;
+
+/// The fewest fully-transparent neighbours worth averaging into a backdrop.
+///
+/// One neighbour is a guess. Below this the pixel is left exactly as it was,
+/// which is the old behaviour and is never worse than unmixing against noise.
+const BACKDROP_MIN: u32 = 3;
+
+/// Takes the background's colour back out of the fringe the matte left behind.
+///
+/// For every partly-transparent pixel, the local background is averaged from
+/// nearby pixels the matte cleared outright, and the blend is undone against
+/// it: `F = (C - (1 - a) * B) / a`, the same unmix the keyed path does against
+/// its sampled key colour.
+///
+/// Safe to run in place. It reads only pixels whose alpha is exactly 0 and
+/// writes only pixels whose alpha is strictly between 0 and 255, so no pixel it
+/// writes can ever be sampled as a backdrop by another.
+fn decontaminate(bitmap: &mut Bitmap) {
+    let (w, h) = (bitmap.width as i32, bitmap.height as i32);
+    let mut fixed = 0usize;
+
+    for y in 0..h {
+        for x in 0..w {
+            let pixel = bitmap.pixel(x as u32, y as u32);
+            let alpha = pixel[3];
+            if alpha == 0 || alpha == 255 {
+                continue;
+            }
+
+            let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
+            for dy in -BACKDROP_REACH..=BACKDROP_REACH {
+                for dx in -BACKDROP_REACH..=BACKDROP_REACH {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let neighbour = bitmap.pixel(nx as u32, ny as u32);
+                    if neighbour[3] != 0 {
+                        continue;
+                    }
+                    r += neighbour[0] as u32;
+                    g += neighbour[1] as u32;
+                    b += neighbour[2] as u32;
+                    n += 1;
+                }
+            }
+            if n < BACKDROP_MIN {
+                continue;
+            }
+
+            let backdrop = [(r / n) as u8, (g / n) as u8, (b / n) as u8, 255];
+            bitmap.set_pixel(
+                x as u32,
+                y as u32,
+                crate::build::matte::unblend(pixel, backdrop, alpha),
+            );
+            fixed += 1;
+        }
+    }
+
+    if fixed > 0 {
+        log::debug!("photo mode: unmixed {fixed} fringe pixels from their background");
+    }
+}
+
 pub fn remove_background_learned(bitmap: &mut Bitmap) -> AppResult<MatteReport> {
     let keyability = crate::build::matte::assess(bitmap);
     let before = std::time::Instant::now();
@@ -1010,6 +1082,18 @@ pub fn remove_background_learned(bitmap: &mut Bitmap) -> AppResult<MatteReport> 
             bitmap.set_pixel(x, y, [r, g, b, combined]);
         }
     }
+
+    // **The edge still carries the background's colour, and that is the bug
+    // this fixes.** The model hands back coverage and nothing else, so a pixel
+    // it calls 30% subject keeps the RGB it always had — which is 30% subject
+    // mixed with 70% of whatever was behind it. Composited on a dark desktop
+    // that is invisible; composited on a white one it is a grey rim that reads
+    // as a drop shadow, and it is the difference between a cut-out and a
+    // sticker with a halo.
+    //
+    // The keyed path has undone this since it was written; the learned path
+    // never did.
+    decontaminate(bitmap);
 
     let removed = if total == 0 {
         0.0
@@ -1050,6 +1134,75 @@ pub fn release() {
     }
 }
 
+
+#[cfg(test)]
+mod decontamination_tests {
+    use super::*;
+
+    /// A red subject photographed against black, with a one-pixel edge the
+    /// matte called half-covered. Half of black is what darkened it.
+    fn fringed() -> Bitmap {
+        let mut b = Bitmap::new(9, 9);
+        for y in 0..9u32 {
+            for x in 0..9u32 {
+                let edge = x == 2 || x == 6 || y == 2 || y == 6;
+                let inside = (3..=5).contains(&x) && (3..=5).contains(&y);
+                if inside {
+                    b.set_pixel(x, y, [200, 40, 40, 255]);
+                } else if edge && (2..=6).contains(&x) && (2..=6).contains(&y) {
+                    // 50% of the subject over black: the colour is halved, and
+                    // the alpha says so.
+                    b.set_pixel(x, y, [100, 20, 20, 128]);
+                } else {
+                    b.set_pixel(x, y, [0, 0, 0, 0]);
+                }
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn the_fringe_loses_the_background_it_was_mixed_with() {
+        let mut bitmap = fringed();
+        let before = bitmap.pixel(2, 4);
+        assert_eq!(before, [100, 20, 20, 128], "the fixture is the mixed pixel");
+
+        decontaminate(&mut bitmap);
+
+        let after = bitmap.pixel(2, 4);
+        assert_eq!(after[3], 128, "coverage is never touched, only colour");
+        // Unmixing 50% of [200,40,40] over black gives the subject back.
+        assert!(
+            after[0] >= 190 && after[1] >= 30 && after[1] <= 50,
+            "expected the subject's colour back, got {after:?}"
+        );
+    }
+
+    #[test]
+    fn opaque_and_cleared_pixels_are_left_exactly_alone() {
+        let mut bitmap = fringed();
+        let solid = bitmap.pixel(4, 4);
+        let gone = bitmap.pixel(0, 0);
+        decontaminate(&mut bitmap);
+        assert_eq!(bitmap.pixel(4, 4), solid);
+        assert_eq!(bitmap.pixel(0, 0), gone);
+    }
+
+    /// With nothing cleared nearby there is no backdrop to unmix against, and
+    /// guessing one is worse than leaving the pixel as it arrived.
+    #[test]
+    fn a_fringe_with_no_background_near_it_is_left_as_it_was() {
+        let mut bitmap = Bitmap::new(3, 3);
+        for y in 0..3 {
+            for x in 0..3 {
+                bitmap.set_pixel(x, y, [100, 20, 20, 128]);
+            }
+        }
+        let before = bitmap.pixel(1, 1);
+        decontaminate(&mut bitmap);
+        assert_eq!(bitmap.pixel(1, 1), before);
+    }
+}
 
 #[cfg(test)]
 mod tests {

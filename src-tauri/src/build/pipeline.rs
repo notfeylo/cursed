@@ -1610,9 +1610,12 @@ mod tests {
         assert_eq!(nearest_size(1), 10);
         assert_eq!(nearest_size(11), 10);
         assert_eq!(nearest_size(14), 16);
-        // And stops at 128, which is the largest Windows will draw for a
-        // pointer in practice. Asking for more produces a file nothing reads.
-        assert_eq!(nearest_size(1_000), 128);
+        // 192 exists now, so a request between the two rungs no longer has to
+        // fall all the way back to 128.
+        assert_eq!(nearest_size(170), 192);
+        // And stops at 256, which is where `CursorBaseSize` stops. Asking for
+        // more than the registry can hold lands on the largest rung there is.
+        assert_eq!(nearest_size(1_000), 256);
     }
 
     /// Every size the settings slider can produce must land on a real rung,
@@ -1639,6 +1642,10 @@ mod tests {
         }
         let file = build_cur(&master, (0.0, 0.0), &Finish::default(), &TARGET_SIZES).unwrap();
         assert_eq!(u16::from_le_bytes([file[2], file[3]]), 2, "is a cursor");
-        assert_eq!(u16::from_le_bytes([file[4], file[5]]), 8, "eight resolutions");
+        assert_eq!(
+            u16::from_le_bytes([file[4], file[5]]),
+            TARGET_SIZES.len() as u16,
+            "one entry per rung of the ladder"
+        );
     }
 }

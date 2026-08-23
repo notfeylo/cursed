@@ -997,9 +997,14 @@ mod tests {
         // An exact rung is taken exactly.
         assert!(best_animation(&dir, "", 48).expect("a rung").ends_with("48.ani"));
 
-        // Above every rung there is nothing to shrink, so the largest wins and
-        // the enlargement is as small as it can be.
-        assert!(best_animation(&dir, "", 200).expect("a rung").ends_with("128.ani"));
+        // 200 used to be above every rung and had to stretch the 128 px file.
+        // The ladder reaches 256 now, so it shrinks that instead — which is the
+        // whole point of the two rungs that were added.
+        assert!(best_animation(&dir, "", 200).expect("a rung").ends_with("256.ani"));
+
+        // Past the top there is still nothing to shrink, so the largest wins
+        // and the enlargement is as small as it can be.
+        assert!(best_animation(&dir, "", 400).expect("a rung").ends_with("256.ani"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

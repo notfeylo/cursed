@@ -231,9 +231,25 @@ pub fn build_multi_resolution(
 ///
 /// Reaches down to 10 px because the size control does: a cursor asked for at
 /// 10 px and only offered a 32 px image is downscaled by Windows, and a
-/// downscale of an already-small glyph is mud. The top is 128 px, which is the
-/// largest Windows will draw for a pointer on any DPI in practice.
-pub const TARGET_SIZES: [u32; 8] = [10, 16, 24, 32, 48, 64, 96, 128];
+/// downscale of an already-small glyph is mud.
+///
+/// **The top is 256 px because that is where `CursorBaseSize` stops, not where
+/// our own slider does.** Ours offers 128; Windows' accessibility pointer-size
+/// setting writes the same registry value and goes to 256, and
+/// `scheme::write_base_size` has always clamped to 256 rather than 128. A
+/// machine sitting at 200 px was therefore handed a 128 px bitmap and Windows
+/// stretched it — bilinear, no premultiplication, no gamma — which is precisely
+/// the "zoomed in and pixelated" pointer people report and could never be
+/// reproduced by anyone whose pointer was the default size.
+///
+/// Raster imports do not automatically get the top rungs: `sizes_for_source`
+/// still refuses to enlarge a source past `MAX_UPSCALE`. Vector packs get all
+/// ten, because a rung rendered from an SVG costs nothing but the render.
+///
+/// The cost is cache, not install: packs ship as SVG and are rasterised into
+/// `%APPDATA%\Cursed\cache`, where the two new rungs roughly quadruple a
+/// cursor's bytes. Nothing in the installer changes.
+pub const TARGET_SIZES: [u32; 10] = [10, 16, 24, 32, 48, 64, 96, 128, 192, 256];
 
 #[cfg(test)]
 mod tests {
@@ -348,7 +364,7 @@ mod tests {
     #[test]
     fn hotspots_scale_with_every_generated_size() {
         let images = build_multi_resolution(&solid(256), (0.5, 0.25), &TARGET_SIZES, false).unwrap();
-        assert_eq!(images.len(), 8);
+        assert_eq!(images.len(), TARGET_SIZES.len());
         for image in &images {
             let max = (image.bitmap.width - 1) as f32;
             assert_eq!(image.hotspot.0, (0.5 * max).round() as u16);

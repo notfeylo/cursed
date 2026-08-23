@@ -1767,7 +1767,7 @@ fn graded_alpha(distance: i32, tolerance: i32, soft: i32) -> u8 {
 /// that blend is what stops a cut-out having a bright halo everywhere its edge
 /// used to touch the background. This is the same correction compositors call
 /// despill, done against the sampled background rather than a fixed key colour.
-fn unblend(pixel: [u8; 4], background: [u8; 4], alpha: u8) -> [u8; 4] {
+pub(crate) fn unblend(pixel: [u8; 4], background: [u8; 4], alpha: u8) -> [u8; 4] {
     if alpha == 0 || alpha == 255 {
         return [pixel[0], pixel[1], pixel[2], alpha];
     }
