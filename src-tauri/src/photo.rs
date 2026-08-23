@@ -1266,6 +1266,11 @@ mod tests {
     #[test]
     fn the_model_produces_a_matte_when_it_is_installed() {
         if !the_model_and_runtime_are_here() {
+            // Loudly. A test that returns early is indistinguishable from a
+            // test that passed, and a silent skip is how "photo mode is
+            // covered" stays true on paper long after it stopped being true on
+            // the machine doing the covering.
+            eprintln!("SKIPPED: the model or the runtime is not on this machine");
             return;
         }
         let _serialised = one_at_a_time();
@@ -1280,6 +1285,41 @@ mod tests {
         );
         // The subject survives: the middle is opaque and the corners are gone.
         assert_eq!(bitmap.alpha(255, 255), 255, "the subject was eaten");
+
+        // **The edge does not keep the background's colour.** This is the
+        // halo, tested against the real model rather than against a fixture
+        // that assumes what the model does.
+        //
+        // The assertion is directional on purpose. A soft matte puts partial
+        // alpha on some pixels that were pure background, and unmixing those
+        // correctly leaves them exactly where they were — so "every soft pixel
+        // is bright" would be false for a working implementation. What must be
+        // true is that the pass never drags a pixel *towards* the backdrop:
+        // here the subject is bright and the backdrop dark, so the soft band
+        // can only have got lighter.
+        let reference = a_subject_on_noise();
+        let (mut after, mut before, mut n) = (0u64, 0u64, 0u64);
+        for y in 0..bitmap.height {
+            for x in 0..bitmap.width {
+                let pixel = bitmap.pixel(x, y);
+                if pixel[3] == 0 || pixel[3] == 255 {
+                    continue;
+                }
+                after += pixel[0] as u64;
+                before += reference.pixel(x, y)[0] as u64;
+                n += 1;
+            }
+        }
+        assert!(n > 0, "the model returned a hard matte, so nothing was unmixed");
+        // Strictly greater, not `>=`. Decontamination leaves RGB untouched when
+        // it does nothing, so `>=` is satisfied by the bug it is meant to catch
+        // — deleting the pass entirely would keep a `>=` assertion green.
+        assert!(
+            after > before,
+            "the soft band was not lightened at all: {} -> {} over {n} pixels,              which is what deleting the unmix looks like",
+            before / n,
+            after / n
+        );
         assert_eq!(bitmap.alpha(2, 2), 0, "the background stayed");
     }
 
