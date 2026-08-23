@@ -704,8 +704,14 @@ mod tests {
         assert_ne!(base.key(true), bigger.key(true));
         assert_ne!(base.key(false), plain.key(false));
         assert_ne!(base.key(false), red.key(false));
-        assert_eq!(base.key(true), format!("v{RENDER_VERSION}-2e8bff-32-o"));
-        assert_eq!(base.key(false), format!("v{RENDER_VERSION}-2e8bff-o"));
+        // **The suffix is read, not written in.** `key` consults one global
+        // preference — whether the hand and I-beam scale — and a literal here
+        // asserts the machine's settings rather than the format. It passed on a
+        // machine with that preference off and failed on a machine with it on,
+        // which made a green suite a fact about the person running it.
+        let scaled = if scale_all_roles() { "-a" } else { "" };
+        assert_eq!(base.key(true), format!("v{RENDER_VERSION}-2e8bff-32-o{scaled}"));
+        assert_eq!(base.key(false), format!("v{RENDER_VERSION}-2e8bff-o{scaled}"));
 
         // The renderer's version is in the key, not only the user's choices. A
         // change to how a pixel is produced leaves every existing entry stale
