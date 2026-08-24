@@ -657,6 +657,12 @@ fn log_startup_record() {
         }
     }
 
+    // Once, before the catalog is counted: cursors imported before the library
+    // learned to rebuild a lone resolution are brought up to the size ladder, so
+    // the improvement reaches a collection somebody already has rather than only
+    // the next thing they import.
+    import::upgrade_thin_ladders();
+
     let built_in = packs::styles::all().len();
     let imported = import::list().map(|v| v.len()).unwrap_or(0);
     log::info!("catalog: {built_in} built-in, {imported} imported");

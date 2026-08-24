@@ -53,6 +53,21 @@ fn main() {
                 "  master opaque   = {:.1}%",
                 m_opaque as f32 / (master.width * master.height) as f32 * 100.0
             );
+            // Also write the cursor the current ladder produces, so it can be
+            // handed straight to `cursorprobe` and asked what Windows makes of
+            // it. Building it here rather than reading one off disk is the
+            // point: this is *this build's* ladder, not one written months ago.
+            let cur = out.join("ladder.cur");
+            let sizes = cursorforge_lib::build::cur_writer::TARGET_SIZES;
+            match pipeline::build_cur(&master, (0.5, 0.5), &pipeline::Finish::default(), &sizes) {
+                Ok(bytes) => {
+                    std::fs::write(&cur, &bytes).unwrap();
+                    println!("  ladder          = {sizes:?}");
+                    println!("  wrote {}", cur.display());
+                }
+                Err(e) => println!("  build_cur failed: {e}"),
+            }
+
             let png = out.join("master.png");
             std::fs::write(&png, master.to_png(image::codecs::png::CompressionType::Fast).unwrap())
                 .unwrap();

@@ -701,6 +701,127 @@ fn expand_zip(archive: &Path, scratch: &Path) -> AppResult<PathBuf> {
     Ok(target)
 }
 
+/// How many resolutions a `.cur`/`.ico` declares, read from its directory.
+///
+/// The count is the only part of the header needed to decide whether the file is
+/// worth rebuilding, and reading just it avoids decoding a file that is about to
+/// be copied unchanged.
+fn declared_entries(bytes: &[u8]) -> Option<usize> {
+    if !crate::build::icon_reader::looks_like_an_icon(bytes) {
+        return None;
+    }
+    Some(u16::from_le_bytes([*bytes.get(4)?, *bytes.get(5)?]) as usize)
+}
+
+/// Rebuilds a static cursor file onto our size ladder, or `None` to leave it be.
+///
+/// The author's hotspot travels with it as a fraction of the artwork, which is
+/// the only form that survives being redrawn at ten sizes. The bitmap is used
+/// exactly as decoded — no matte, no trim, no squaring — because an existing
+/// cursor already carries its own alpha, and moving the artwork inside its
+/// canvas would move the hotspot off the point the author chose.
+fn rebuilt_onto_the_ladder(path: &Path) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(path).ok()?;
+    let declared = declared_entries(&bytes)?;
+
+    let icon = crate::build::icon_reader::decode_icon(&bytes).ok()?;
+    let (w, h) = (icon.bitmap.width, icon.bitmap.height);
+    if w != h || w == 0 {
+        return None; // resizing a non-square cursor to a square one distorts it
+    }
+
+    // **Only a file with exactly one entry.**
+    //
+    // Anything with two or more has resolutions the author chose, and small
+    // cursors are very often hand-tuned rather than downscaled — a 16 px arrow
+    // drawn pixel by pixel beats any resample of the 32 px one. Rebuilding those
+    // would trade the author's work for ours and could easily look worse.
+    //
+    // A single-entry file has nothing to lose: the one resolution it has is
+    // regenerated at its own size (a resample at scale 1.0), and every other
+    // rung is new.
+    if declared != 1 {
+        return None;
+    }
+    let sizes = pipeline::sizes_for_source(w, h);
+    if sizes.len() <= 1 {
+        return None;
+    }
+
+    let spot = crate::build::icon_reader::hotspot_fraction(&bytes).unwrap_or((0.0, 0.0));
+    let finish = Finish {
+        tint: None,
+        opacity: 1.0,
+        outline: false,
+    };
+    let built = pipeline::build_cur(&icon.bitmap, spot, &finish, &sizes).ok()?;
+    log::info!(
+        "{}: rebuilt a lone {w}px entry onto {} rungs",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        sizes.len()
+    );
+    Some(built)
+}
+
+/// Rebuilds single-entry cursors already sitting in the library.
+///
+/// Without this the improvement above only reaches packs imported after it
+/// shipped, and a library of thirty-odd packs collected over months keeps its
+/// ceiling until every one of them is imported again by hand. Nobody does that.
+///
+/// Runs once. The marker is written whatever happens, including when nothing
+/// needed doing, because the alternative is walking the whole library on every
+/// launch to discover the same nothing.
+///
+/// Every failure is skipped rather than propagated: this is an improvement to
+/// files that already work, so the worst outcome it may cause is that they carry
+/// on working exactly as they did.
+pub fn upgrade_thin_ladders() {
+    let Ok(root) = imported_dir() else { return };
+    let marker = root.join(".ladders-v1");
+    if marker.exists() {
+        return;
+    }
+
+    let mut rebuilt = 0usize;
+    let mut looked_at = 0usize;
+    if let Ok(packs) = std::fs::read_dir(&root) {
+        for pack in packs.flatten() {
+            let Ok(files) = std::fs::read_dir(pack.path()) else { continue };
+            for file in files.flatten() {
+                let path = file.path();
+                if extension_of(&path) != "cur" {
+                    continue;
+                }
+                looked_at += 1;
+                let Some(bytes) = rebuilt_onto_the_ladder(&path) else { continue };
+
+                // Written beside the original and renamed over it, so a crash
+                // mid-write cannot leave a half a cursor where a whole one was.
+                let temp = path.with_extension("cur.rebuilding");
+                if std::fs::write(&temp, &bytes).is_err() {
+                    continue;
+                }
+                if crate::cursor::engine::verify_loadable(&temp).is_err() {
+                    let _ = std::fs::remove_file(&temp);
+                    continue;
+                }
+                if std::fs::rename(&temp, &path).is_ok() {
+                    rebuilt += 1;
+                } else {
+                    let _ = std::fs::remove_file(&temp);
+                }
+            }
+        }
+    }
+
+    let _ = std::fs::write(&marker, b"rebuilt single-entry cursors onto the size ladder
+");
+    if rebuilt > 0 {
+        log::info!("imported library: rebuilt {rebuilt} of {looked_at} cursors onto the ladder");
+    }
+}
+
 /// Turns one candidate file into a cursor inside `dir`, returning its filename.
 fn install_file(candidate: &Candidate, dir: &Path) -> AppResult<(String, bool)> {
     let ext = extension_of(&candidate.path);
@@ -711,6 +832,36 @@ fn install_file(candidate: &Candidate, dir: &Path) -> AppResult<(String, bool)> 
         crate::cursor::engine::verify_loadable(&candidate.path)?;
         let animated = ext == "ani";
         let file_name = format!("{}.{ext}", if animated { "role-ani" } else { "role" });
+
+        // A static cursor with a thin ladder is worth rebuilding onto ours.
+        //
+        // Most `.cur` files in circulation carry **one** entry, almost always
+        // 32 px, because that is what cursor editors have always written. Copied
+        // in as-is, such a file is exact at 32 and stretched by the shell at
+        // every other size — and the shell's stretch is bilinear, unpremultiplied
+        // and not gamma corrected. Measured on one machine's library, 36 of 37
+        // imported packs were in this state, which is a quality ceiling sitting
+        // over almost everything the app draws.
+        //
+        // Rebuilding is not inventing detail: `sizes_for_source` still refuses
+        // to enlarge past `MAX_UPSCALE`, and where an enlargement does happen it
+        // is Lanczos3 in linear light with premultiplied alpha instead of the
+        // shell's. Somebody has to do it; it should not be Windows.
+        //
+        // Left alone when the author already shipped a full ladder, when the
+        // artwork is not square (resizing to a square would distort it), and on
+        // any failure at all — a worse-looking cursor beats a missing one.
+        if !animated {
+            if let Some(built) = rebuilt_onto_the_ladder(&candidate.path) {
+                let target = dir.join(&file_name);
+                std::fs::write(&target, &built)?;
+                if crate::cursor::engine::verify_loadable(&target).is_ok() {
+                    return Ok((file_name, false));
+                }
+                log::debug!("{}: rebuilt ladder was refused, keeping the original", candidate.name);
+            }
+        }
+
         std::fs::copy(&candidate.path, dir.join(&file_name))?;
         return Ok((file_name, animated));
     }
@@ -1006,6 +1157,114 @@ pub fn remove_all() -> AppResult<()> {
     }
     std::fs::create_dir_all(&dir)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod ladder_tests {
+    use super::*;
+    use crate::build::bitmap::Bitmap;
+    use crate::build::cur_writer::{write_cur, CursorImage};
+
+    /// The shape most `.cur` files in circulation have: one entry, 32 px.
+    fn one_entry_32px() -> Vec<u8> {
+        let mut art = Bitmap::new(32, 32);
+        for y in 0..32u32 {
+            for x in 0..32u32 {
+                if x + y > 8 && x < 24 && y < 26 {
+                    art.set_pixel(x, y, [230, 230, 240, 255]);
+                }
+            }
+        }
+        write_cur(&[CursorImage::new(art, (2, 2))]).expect("a cursor")
+    }
+
+    fn scratch(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join("cursorforge-ladder-tests");
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).expect("write");
+        path
+    }
+
+    fn entry_count(bytes: &[u8]) -> usize {
+        u16::from_le_bytes([bytes[4], bytes[5]]) as usize
+    }
+
+    #[test]
+    fn a_single_entry_cursor_is_rebuilt_onto_the_ladder() {
+        let original = one_entry_32px();
+        assert_eq!(entry_count(&original), 1, "the fixture is the sparse case");
+        let path = scratch("sparse.cur", &original);
+
+        let rebuilt = rebuilt_onto_the_ladder(&path).expect("worth rebuilding");
+        let expected = pipeline::sizes_for_source(32, 32).len();
+        assert_eq!(entry_count(&rebuilt), expected, "one rung per size the source can fill");
+        assert!(expected > 1, "a 32 px source can fill more than one rung");
+
+        // The only authority on whether these bytes are a cursor.
+        let out = scratch("sparse-rebuilt.cur", &rebuilt);
+        assert!(crate::cursor::engine::verify_loadable(&out).is_ok());
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&out);
+    }
+
+    /// The author's hotspot is the one thing a rebuild must not lose: it is the
+    /// pixel the click lands on, and the artwork is being redrawn around it.
+    #[test]
+    fn the_authors_hotspot_survives_the_rebuild() {
+        let path = scratch("hotspot.cur", &one_entry_32px());
+        let rebuilt = rebuilt_onto_the_ladder(&path).expect("worth rebuilding");
+
+        // 2/31 of the way across a 32 px cursor, carried onto every rung.
+        for i in 0..entry_count(&rebuilt) {
+            let e = 6 + 16 * i;
+            let width = if rebuilt[e] == 0 { 256u32 } else { rebuilt[e] as u32 };
+            let hx = u16::from_le_bytes([rebuilt[e + 4], rebuilt[e + 5]]) as f32;
+            let expected = (2.0 / 31.0) * (width - 1) as f32;
+            assert!(
+                (hx - expected).abs() <= 1.0,
+                "{width}px rung put the hotspot at {hx}, expected about {expected}"
+            );
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A file that already carries a full ladder is the author's work and is
+    /// left exactly as it is.
+    /// Two entries is the author making a choice, and a hand-drawn 16 px arrow
+    /// beats any resample of the 32 px one.
+    #[test]
+    fn a_cursor_with_more_than_one_entry_is_the_authors_work() {
+        let mut art = Bitmap::new(16, 16);
+        art.set_pixel(0, 0, [255, 255, 255, 255]);
+        let mut big = Bitmap::new(32, 32);
+        big.set_pixel(0, 0, [255, 255, 255, 255]);
+        let two = write_cur(&[CursorImage::new(art, (0, 0)), CursorImage::new(big, (0, 0))])
+            .expect("a cursor");
+        let path = scratch("two.cur", &two);
+        assert!(
+            rebuilt_onto_the_ladder(&path).is_none(),
+            "two entries means the author picked them"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_rich_ladder_is_left_alone() {
+        let mut images = Vec::new();
+        for size in crate::build::cur_writer::TARGET_SIZES {
+            let mut art = Bitmap::new(size, size);
+            art.set_pixel(0, 0, [255, 255, 255, 255]);
+            images.push(CursorImage::new(art, (0, 0)));
+        }
+        let rich = write_cur(&images).expect("a cursor");
+        let path = scratch("rich.cur", &rich);
+        assert!(
+            rebuilt_onto_the_ladder(&path).is_none(),
+            "an author's full ladder must not be replaced with ours"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
 }
 
 #[cfg(test)]
