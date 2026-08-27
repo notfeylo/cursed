@@ -209,6 +209,19 @@ impl ApplyArgs {
 /// they are trying to browse. Anything worth investigating goes to the log.
 #[tauri::command]
 pub fn preview_pack(args: ApplyArgs) -> AppResult<()> {
+    // A hover must not fight another channel for the pointer.
+    //
+    // Both channels write the same `HKCU\Control Panel\Cursors`, and the lock
+    // is what keeps one of them out of it. The watchdog has always asked; apply
+    // and preview never did. So a dev build running beside the released one
+    // would preview over the other's cursors on every hover, and the other's
+    // watchdog would put them back seconds later — on the one machine that had
+    // both installed, and nowhere else.
+    if !crate::cursor::crosschannel::owns_pointer() {
+        log::debug!("preview skipped: another channel holds the pointer");
+        return Ok(());
+    }
+
     let spec = args.spec();
     let attempt = build_set_for(&args, &spec).and_then(|(set, _)| cursor::preview(&set, spec.size));
 
@@ -259,6 +272,19 @@ fn build_set_for(
 
 #[tauri::command]
 pub fn apply_pack(app: AppHandle, args: ApplyArgs) -> AppResult<()> {
+    // An explicit apply is the user saying *this* app owns the pointer, so it
+    // takes the lock if it is free. `try_claim` never steals from a live holder,
+    // so when it fails another channel really is running and really will revert
+    // this within a watchdog tick. Applying anyway is right — the user asked —
+    // but doing it silently is how "I applied a cursor and it changed back"
+    // becomes unexplainable.
+    if !crate::cursor::crosschannel::try_claim() {
+        match crate::cursor::crosschannel::deferral_notice() {
+            Some(notice) => log::warn!("applying anyway, but {notice}"),
+            None => log::warn!("applying while another channel holds the pointer"),
+        }
+    }
+
     let spec = args.spec();
     let (set, name) = build_set_for(&args, &spec)?;
     let name = name.as_str();
