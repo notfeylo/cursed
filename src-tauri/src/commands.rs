@@ -37,10 +37,18 @@ fn effective_size(requested: u32) -> u32 {
     if requested == 0 {
         return cursor::engine::effective_size(settings::get().cursor_size);
     }
-    requested.clamp(
+    // Clamped **and snapped**, the same as the other two ways a size reaches the
+    // renderer.
+    //
+    // 1.25.0 snapped `Settings::sanitised` and `engine::effective_size` and
+    // missed this one, which is the path the UI actually uses — every apply and
+    // every hover arrives here with an explicit number. A size between two rungs
+    // is one Windows has to stretch a cursor into, and it did not stop being
+    // that because it came from the front end rather than from disk.
+    crate::build::pipeline::nearest_size(requested.clamp(
         crate::state::settings::MIN_CURSOR_PX,
         crate::state::settings::MAX_CURSOR_PX,
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -50,13 +58,37 @@ mod size_tests {
 
     /// The regression: every size below 32 was discarded, so the small end of
     /// the slider did nothing at all.
+    ///
+    /// Still the point, now stated against the ladder: a small request must come
+    /// back small. It no longer has to come back *identical*, because a size
+    /// between two rungs is one Windows would have to stretch a cursor into and
+    /// is snapped to the nearest one — but snapping to 10 or 16 is honouring the
+    /// request, and falling back to the settings value is not.
     #[test]
     fn a_small_size_is_honoured_rather_than_swallowed() {
         for requested in [MIN_CURSOR_PX, 12, 16, 24, 31] {
-            assert_eq!(
-                effective_size(requested),
-                requested,
-                "{requested} px should survive"
+            let got = effective_size(requested);
+            assert!(
+                got <= 32,
+                "{requested} px came back as {got} px, which is the settings value, not the request"
+            );
+            assert!(
+                crate::build::cur_writer::TARGET_SIZES.contains(&got),
+                "{requested} px snapped to {got} px, which no cursor file carries"
+            );
+        }
+    }
+
+    /// Every size the front end can send lands on a rung. This is the entry
+    /// point 1.25.0 missed: it snapped the settings file and the value inherited
+    /// from Windows, and left the one the UI actually calls.
+    #[test]
+    fn every_size_the_front_end_can_send_lands_on_a_rung() {
+        for requested in MIN_CURSOR_PX..=MAX_CURSOR_PX {
+            let got = effective_size(requested);
+            assert!(
+                crate::build::cur_writer::TARGET_SIZES.contains(&got),
+                "{requested} px became {got} px, which no cursor file carries"
             );
         }
     }
@@ -178,8 +210,7 @@ impl ApplyArgs {
 #[tauri::command]
 pub fn preview_pack(args: ApplyArgs) -> AppResult<()> {
     let spec = args.spec();
-    let attempt = catalog::build_preview_set(&args.pack_id, &spec)
-        .and_then(|set| cursor::preview(&set, spec.size));
+    let attempt = build_set_for(&args, &spec).and_then(|(set, _)| cursor::preview(&set, spec.size));
 
     if let Err(e) = attempt {
         log::debug!("preview of {} skipped: {e}", args.pack_id);
@@ -192,27 +223,44 @@ pub fn clear_preview() -> AppResult<()> {
     cursor::clear_preview()
 }
 
+/// The set a pack applies to, built once and used by both apply and preview.
+///
+/// **Shared on purpose.** Preview used to build a cut-down set — the arrow
+/// alone — on the theory that hovering had to be cheap. The result was that what
+/// you saw while browsing was not what you would get, and on one machine the
+/// difference was visible as a blurry pointer that lasted exactly as long as the
+/// app held focus and corrected itself the moment it did not.
+///
+/// A preview that looks worse than the result is worse than no preview, and the
+/// speed it was buying is not there: a full seventeen-role pack renders in about
+/// 50 ms at all ten rungs, measured off the cache directory's own timestamps,
+/// against a 120 ms hover debounce. There was nothing to save.
+fn build_set_for(
+    args: &ApplyArgs,
+    spec: &RenderSpec,
+) -> AppResult<(crate::cursor::scheme::CursorSet, String)> {
+    // An imported pack defines a role or two; the rest come from a built-in so
+    // the pointer set stays coherent. That blend is also what fills in an
+    // imported pack with no arrow of its own — which is what the preview path
+    // used to paper over by installing whichever role happened to sort first as
+    // the pointer.
+    if catalog::is_imported(&args.pack_id) {
+        let pack = crate::import::get(&args.pack_id)?;
+        let base = settings::get().blend_pack;
+        return Ok((catalog::build_imported(&args.pack_id, &base, spec)?, pack.name));
+    }
+    Ok((
+        catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), spec)?,
+        catalog::display_name(&args.pack_id)
+            .ok_or(AppError::UnknownPack)?
+            .to_owned(),
+    ))
+}
+
 #[tauri::command]
 pub fn apply_pack(app: AppHandle, args: ApplyArgs) -> AppResult<()> {
     let spec = args.spec();
-
-    // An imported pack defines a role or two; the rest come from a built-in so
-    // the pointer set stays coherent.
-    let (set, name) = if catalog::is_imported(&args.pack_id) {
-        let pack = crate::import::get(&args.pack_id)?;
-        let base = settings::get().blend_pack;
-        (
-            catalog::build_imported(&args.pack_id, &base, &spec)?,
-            pack.name,
-        )
-    } else {
-        (
-            catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), &spec)?,
-            catalog::display_name(&args.pack_id)
-                .ok_or(AppError::UnknownPack)?
-                .to_owned(),
-        )
-    };
+    let (set, name) = build_set_for(&args, &spec)?;
     let name = name.as_str();
 
     cursor::commit(

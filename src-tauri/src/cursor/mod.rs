@@ -144,7 +144,7 @@ pub fn commit(
     // registry and still correct after the next reload, so this is a warning
     // about *when* the pointer changes, not whether. Failing the command here
     // would report a durable, successful change as an error.
-    if let Err(e) = engine::apply_live(&set, size) {
+    if let Err(e) = engine::apply_live(&set, size, engine::Source::Commit) {
         log::warn!("scheme committed, but the in-session override was partial: {e}");
     }
 
@@ -186,7 +186,7 @@ pub fn adopt(
 /// Live layer only — no registry write, no broadcast. This is what catalog
 /// hover uses, and it is why hovering costs nothing and reverts cleanly.
 pub fn preview(set: &CursorSet, size: u32) -> AppResult<()> {
-    engine::apply_live(set, size)
+    engine::apply_live(set, size, engine::Source::Preview)
 }
 
 /// Drops a hover preview. Reloading from the registry restores whatever is
@@ -208,7 +208,7 @@ pub fn reapply() -> AppResult<bool> {
         return Ok(false);
     };
     scheme::write(&state.set, &state.scheme_name)?;
-    engine::apply_live(&state.set, state.size)?;
+    engine::apply_live(&state.set, state.size, engine::Source::Watchdog)?;
     Ok(true)
 }
 

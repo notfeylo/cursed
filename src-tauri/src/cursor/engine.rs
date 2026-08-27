@@ -247,19 +247,51 @@ pub fn set_role(role: Role, path: &Path, size: u32) -> AppResult<()> {
     }
 }
 
+/// Which caller installed a live override.
+///
+/// Carried into the log so a pointer that is wrong for a while can be traced to
+/// the code that made it wrong. "It is blurry while the app has focus and
+/// correct once it does not" is a sentence about *which* of these ran last, and
+/// without the label the log cannot answer it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// Hovering a tile in the catalog. Reverted by `clear_preview`.
+    Preview,
+    /// A committed apply: registry written and broadcast first.
+    Commit,
+    /// The watchdog putting a scheme back that something else changed.
+    Watchdog,
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Source::Preview => "preview",
+            Source::Commit => "commit",
+            Source::Watchdog => "watchdog",
+        })
+    }
+}
+
 /// Applies a whole set to the live session.
 ///
 /// A single failing role does not abort the run — a half-applied scheme with one
 /// stock cursor is strictly better than a half-applied scheme that stopped
 /// mid-way. Failures are collected and reported once.
-pub fn apply_live(set: &CursorSet, size: u32) -> AppResult<()> {
+pub fn apply_live(set: &CursorSet, size: u32, source: Source) -> AppResult<()> {
     let mut failures = Vec::new();
+    log::debug!("{source}: installing {} roles at {size}px", set.files.len());
     for (role, path) in &set.files {
         // Per role, not one size for the set. A static `.cur` carries the whole
         // resolution ladder, so which image Windows draws is decided by the size
         // asked for here — passing the pointer's size would hand back a 128 px
         // I-beam out of a file that also contains a 32 px one.
-        if let Err(e) = set_role(*role, path, crate::packs::catalog::glyph_size(*role, size)) {
+        let rung = crate::packs::catalog::glyph_size(*role, size);
+        log::debug!(
+            "{source}: {role} <- {} at {rung}px",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        );
+        if let Err(e) = set_role(*role, path, rung) {
             failures.push(format!("{role}: {e}"));
         }
     }

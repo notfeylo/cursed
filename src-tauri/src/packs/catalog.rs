@@ -526,27 +526,6 @@ pub fn build_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
     }
     Ok(set)
 }
-
-/// Builds only the Arrow.
-///
-/// Catalog hover has to feel instant, and a full 17-role build is real work. The
-/// pointer a user is looking at while browsing is the arrow, so preview renders
-/// exactly that and nothing else — then the commit builds the rest.
-pub fn build_preview_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
-    if is_imported(pack_id) {
-        // An imported pack's files already exist, so hovering costs a lookup
-        // rather than a render.
-        let pack = crate::import::get(pack_id)?;
-        let files = crate::import::role_files(&pack)?;
-        let mut set = CursorSet::default();
-        if let Some(path) = files.get(&Role::Arrow).or_else(|| files.values().next()) {
-            set.insert(Role::Arrow, path.clone());
-        }
-        return Ok(set);
-    }
-    build_roles(pack_id, &[Role::Arrow], spec)
-}
-
 pub fn display_name(pack_id: &str) -> Option<&'static str> {
     styles::find(pack_id).map(|pack| pack.name)
 }
