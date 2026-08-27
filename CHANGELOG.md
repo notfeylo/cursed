@@ -7,6 +7,57 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.26.0 — 2026-08-27
+
+Six fixes, all of them about the same complaint: cursors that look soft, blocky
+or wrong. Several only ever showed on some machines, which is why they lasted.
+
+### The preview was a different cursor from the one you were choosing
+
+Hovering a cursor in the catalog installed a cut-down version — the arrow alone,
+built separately for speed. So what you saw while browsing was not what you would
+get, and on some machines the difference was a visibly worse pointer that lasted
+exactly as long as the app had focus and corrected itself the moment you clicked
+away.
+
+Preview and apply now build the same thing. The speed it was buying was not
+real: a full seventeen-role pack renders in about 50 milliseconds.
+
+### Sizes that no cursor exists at
+
+The size the app sent when you applied or hovered was never snapped to a real
+cursor resolution — 1.25.0 fixed that for the settings file and missed the path
+the buttons actually use. A size between two real ones is one Windows stretches.
+
+### Cursors kept their old shape after an update
+
+Cursors are cached once and reused. When 1.24.0 changed which resolutions get
+made, the cache did not notice, so machines that had already used a pack kept
+serving the old shape while a fresh install got the new one — same version, two
+different results. The cache now notices by itself, and clears out what an older
+version left behind.
+
+### Your own pictures were enlarged past what they could fill
+
+A cursor made from a small image was still written out at every size up to
+256 px, inventing detail that was never there and producing files of half a
+megabyte from a picture of a few hundred bytes. It now stops where the picture
+does.
+
+### Downloaded cursors with only one size
+
+Many `.cur` files carry a single 32 px picture. Used as-is, they are sharp at one
+size and stretched at every other. Those are now rebuilt across the full range on
+import, and once over cursors already in your library. Files that came with
+several sizes are left exactly alone — those are the author's own work.
+
+### Catalog thumbnails
+
+Were being resized by Windows rather than by us, and generated too small for a
+high-resolution screen. Both fixed.
+
+---
+
 ## 1.25.0 — 2026-08-23
 
 ### A pointer that looked soft, stepped, or zoomed in
