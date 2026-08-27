@@ -663,6 +663,11 @@ fn log_startup_record() {
     // the next thing they import.
     import::upgrade_thin_ladders();
 
+    // Entries rendered by an older renderer are already unreachable by key; this
+    // is what stops them sitting on disk forever behind the ones that replaced
+    // them.
+    packs::catalog::sweep_stale_cache();
+
     let built_in = packs::styles::all().len();
     let imported = import::list().map(|v| v.len()).unwrap_or(0);
     log::info!("catalog: {built_in} built-in, {imported} imported");

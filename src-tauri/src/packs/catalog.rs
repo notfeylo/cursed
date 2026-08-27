@@ -57,6 +57,48 @@ pub struct RenderSpec {
 /// v2: the hand and the I-beam stopped growing with the pointer.
 const RENDER_VERSION: u32 = 2;
 
+/// A fingerprint of the size ladder, folded into the cache key.
+///
+/// **This exists because the paragraph above came true.** 1.24.0 added the 192
+/// and 256 rungs and did not touch this file, so every machine that had already
+/// rendered a pack kept serving eight-rung cursors while a machine installing
+/// fresh got ten — the same app, the same pack, two different results, and the
+/// difference invisible to anyone whose cache was empty. It was found on a
+/// machine whose cache entries were dated two days before the release that was
+/// supposed to have changed them.
+///
+/// Bumping `RENDER_VERSION` by hand would have prevented it, and did not,
+/// because remembering is not a mechanism. The ladder is the input most likely
+/// to change and the easiest to change without thinking about the cache, so it
+/// now keys itself: edit `TARGET_SIZES` and every cached cursor is invalidated
+/// whether or not anybody remembered to say so.
+///
+/// FNV-1a, truncated to sixteen bits. This is a cache key and not a security
+/// boundary — it only has to change when the ladder does.
+const fn ladder_tag() -> u16 {
+    fingerprint(&TARGET_SIZES)
+}
+
+/// Taken over a slice rather than over the constant directly, so a test can ask
+/// what a *different* ladder would key to. A property this cache depends on is
+/// worth being able to state as an assertion instead of by inspection.
+const fn fingerprint(sizes: &[u32]) -> u16 {
+    let mut hash: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < sizes.len() {
+        let mut value = sizes[i];
+        let mut byte = 0;
+        while byte < 4 {
+            hash ^= value & 0xff;
+            hash = hash.wrapping_mul(0x0100_0193);
+            value >>= 8;
+            byte += 1;
+        }
+        i += 1;
+    }
+    (hash & 0xffff) as u16
+}
+
 /// Whether the user has asked for every role to follow the size control.
 fn scale_all_roles() -> bool {
     crate::state::settings::get().scale_all_roles
@@ -106,7 +148,8 @@ impl RenderSpec {
             String::new()
         };
         format!(
-            "v{RENDER_VERSION}-{}{}-{}{}",
+            "v{RENDER_VERSION}.{:04x}-{}{}-{}{}",
+            ladder_tag(),
             self.tint.trim_start_matches('#').to_ascii_lowercase(),
             size,
             if self.outline { "o" } else { "n" },
@@ -543,6 +586,46 @@ pub fn clear_cache() -> AppResult<u64> {
     Ok(freed)
 }
 
+/// Deletes cache directories rendered by a different version of the renderer.
+///
+/// Invalidation by key is what makes a stale entry unreachable; it is not what
+/// makes it go away. Without this, every renderer change leaves the previous
+/// generation on disk forever — and the ladder change that prompted all of this
+/// roughly quadrupled what one entry costs, so the next generation is the
+/// expensive one to keep a dead copy of.
+///
+/// Matched on the key prefix rather than by listing what is live: a directory
+/// this build would never write is one this build cannot need. Failures are
+/// ignored throughout — a cache that could not be tidied is not a reason to fail
+/// a launch.
+pub fn sweep_stale_cache() {
+    let Ok(root) = paths::cache_dir() else { return };
+    let current = format!("v{RENDER_VERSION}.{:04x}-", ladder_tag());
+    let mut removed = 0usize;
+
+    let Ok(packs) = std::fs::read_dir(&root) else { return };
+    for pack in packs.flatten() {
+        let Ok(variants) = std::fs::read_dir(pack.path()) else { continue };
+        for variant in variants.flatten() {
+            if !variant.file_type().map(|k| k.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let name = variant.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with(&current) {
+                continue;
+            }
+            if std::fs::remove_dir_all(variant.path()).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+
+    if removed > 0 {
+        log::info!("cache: removed {removed} directories from an older renderer");
+    }
+}
+
 /// Exports a pack's SVG masters and manifest, for the repo's `assets/packs`
 /// tree. The runtime never reads these — they exist so the artwork is reviewable
 /// and contributable rather than buried in a binary.
@@ -694,6 +777,48 @@ mod tests {
         }
     }
 
+    /// **The regression test for the one-machine blocky pointer.**
+    ///
+    /// 1.24.0 added the 192 and 256 rungs without touching this file, so a
+    /// machine that had already rendered a pack went on serving eight-rung
+    /// cursors — stale, topping out at 128 — while a fresh install got ten. Same
+    /// app, same pack, two different results, and invisible to anyone whose
+    /// cache was empty.
+    ///
+    /// The key now carries a fingerprint of the ladder, so this cannot recur
+    /// silently. If you have changed `TARGET_SIZES` and this test fails, it has
+    /// done its job: the expected tag below is the new one.
+    #[test]
+    fn changing_the_ladder_invalidates_every_cached_cursor() {
+        let current = fingerprint(&TARGET_SIZES);
+
+        // One rung more, one fewer, and one moved. None may key the same.
+        let longer: Vec<u32> = TARGET_SIZES.iter().copied().chain([384]).collect();
+        let shorter: Vec<u32> = TARGET_SIZES[..TARGET_SIZES.len() - 1].to_vec();
+        let mut moved = TARGET_SIZES;
+        moved[3] += 1;
+
+        assert_ne!(current, fingerprint(&longer), "an added rung must invalidate");
+        assert_ne!(current, fingerprint(&shorter), "a removed rung must invalidate");
+        assert_ne!(current, fingerprint(&moved), "a changed rung must invalidate");
+
+        // And the same ladder must key the same, or every launch rebuilds.
+        assert_eq!(current, fingerprint(&TARGET_SIZES), "stable for one ladder");
+    }
+
+    /// The ladder that shipped in 1.23.0, which is what the stale entries on the
+    /// reporting machine were rendered against. Its key must differ from
+    /// today's, which is the precise statement of the bug.
+    #[test]
+    fn the_pre_1_24_ladder_keys_differently_from_the_current_one() {
+        const BEFORE: [u32; 8] = [10, 16, 24, 32, 48, 64, 96, 128];
+        assert_ne!(
+            fingerprint(&BEFORE),
+            fingerprint(&TARGET_SIZES),
+            "an eight-rung cache entry must not satisfy a ten-rung key"
+        );
+    }
+
     #[test]
     fn cache_keys_separate_every_visual_choice() {
         let base = spec();
@@ -710,8 +835,8 @@ mod tests {
         // machine with that preference off and failed on a machine with it on,
         // which made a green suite a fact about the person running it.
         let scaled = if scale_all_roles() { "-a" } else { "" };
-        assert_eq!(base.key(true), format!("v{RENDER_VERSION}-2e8bff-32-o{scaled}"));
-        assert_eq!(base.key(false), format!("v{RENDER_VERSION}-2e8bff-o{scaled}"));
+        assert_eq!(base.key(true), format!("v{RENDER_VERSION}.{:04x}-2e8bff-32-o{scaled}", ladder_tag()));
+        assert_eq!(base.key(false), format!("v{RENDER_VERSION}.{:04x}-2e8bff-o{scaled}", ladder_tag()));
 
         // The renderer's version is in the key, not only the user's choices. A
         // change to how a pixel is produced leaves every existing entry stale
@@ -719,7 +844,7 @@ mod tests {
         // applied that cursor — invisible on a developer's empty cache and
         // permanent on a user's full one.
         assert!(
-            base.key(false).starts_with(&format!("v{RENDER_VERSION}-")),
+            base.key(false).starts_with(&format!("v{RENDER_VERSION}.")),
             "the render version has to be part of the cache key"
         );
     }
