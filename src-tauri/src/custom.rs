@@ -404,9 +404,21 @@ pub fn build(
     std::fs::write(dir.join("source.png"), &master_png)?;
 
     let animated = source.is_animated();
+
+    // **Only the rungs the artwork can actually fill.**
+    //
+    // This built the whole ladder regardless of what it was given, while the
+    // imported-pack path has always asked `sizes_for_source`. A cursor made from
+    // a 37 px picture was therefore written out to 256 px — a 6.9x enlargement,
+    // every pixel of it invented — and the file came to 550 KB from a 144-byte
+    // source. Enlarging past `MAX_UPSCALE` does not add detail; it adds bytes
+    // and a rung that looks worse than the one below it.
+    let first = source.first()?;
+    let sizes = pipeline::sizes_for_source(first.width, first.height);
+
     match &source {
         Source::Static(master) => {
-            let bytes = pipeline::build_cur(master, hotspot, &finish, &TARGET_SIZES)?;
+            let bytes = pipeline::build_cur(master, hotspot, &finish, &sizes)?;
             write_verified(&dir.join("cursor.cur"), &bytes)?;
         }
         Source::Animated(frames) => {
@@ -414,7 +426,7 @@ pub fn build(
                 name: Some(name.to_owned()),
                 author: None,
             };
-            for size in TARGET_SIZES {
+            for size in sizes.iter().copied() {
                 let bytes =
                     pipeline::build_ani(frames, hotspot, &finish, size, speed, &metadata)?;
                 write_verified(&dir.join(format!("{size}.ani")), &bytes)?;
@@ -440,9 +452,10 @@ pub fn build(
                 let hand_source = transformed(source, transform);
                 let first = hand_source.first()?.clone();
                 let spot = hotspot::compute(&first, hotspot::suggest(&first));
+                let hand_sizes = pipeline::sizes_for_source(first.width, first.height);
                 match &hand_source {
                     Source::Static(master) => {
-                        let bytes = pipeline::build_cur(master, spot, &finish, &TARGET_SIZES)?;
+                        let bytes = pipeline::build_cur(master, spot, &finish, &hand_sizes)?;
                         write_verified(&dir.join("hand.cur"), &bytes)?;
                     }
                     Source::Animated(frames) => {
@@ -450,7 +463,7 @@ pub fn build(
                             name: Some(format!("{name} (hover)")),
                             author: None,
                         };
-                        for size in TARGET_SIZES {
+                        for size in hand_sizes.iter().copied() {
                             let bytes =
                                 pipeline::build_ani(frames, spot, &finish, size, speed, &metadata)?;
                             write_verified(&dir.join(format!("hand-{size}.ani")), &bytes)?;
