@@ -1132,13 +1132,53 @@ pub fn role_files(pack: &ImportedPack) -> AppResult<BTreeMap<Role, PathBuf>> {
 }
 
 /// A tile preview, rendered from the pack's own arrow.
+/// The pixel size a catalog thumbnail is generated at.
+///
+/// The grid draws it at 40 CSS px, 44 while hovered. 128 is that with room for a
+/// 200% display, where 40 CSS px is 80 device px and a 64 px source would be
+/// enlarged by the browser. Generating above what is shown costs a few kilobytes
+/// in a `data:` URI and removes the only case where the thumbnail is upscaled by
+/// something other than us.
+const THUMBNAIL_PX: u32 = 128;
+
+/// A `data:` URI of a pack's arrow, for the catalog grid.
+///
+/// **Decoded from the file's own bytes rather than through `LoadImageW`.**
+/// `cur_reader` asks Windows to produce the bitmap at a size, and Windows
+/// resizes with a bilinear filter, on straight alpha, with no gamma correction —
+/// the same resize the rest of this codebase exists to avoid. It was the one
+/// user-facing image left going through it.
+///
+/// Now the largest resolution in the file is read out whole and brought down by
+/// `Bitmap::resized`: Lanczos3, in linear light, on premultiplied alpha.
+///
+/// Falls back to the old path on anything it cannot parse. A thumbnail is not
+/// worth failing a catalog over.
 pub fn preview(pack: &ImportedPack) -> AppResult<String> {
     let files = role_files(pack)?;
     let path = files
         .get(&Role::Arrow)
         .or_else(|| files.values().next())
         .ok_or_else(|| AppError::invalid("nothing to preview"))?;
-    cur_reader::read(path, 64)?.to_png_data_uri()
+
+    let best = std::fs::read(path).ok().and_then(|bytes| {
+        if crate::build::icon_reader::looks_like_an_ani(&bytes) {
+            crate::build::icon_reader::decode_ani(&bytes)
+                .ok()?
+                .into_iter()
+                .next()
+                .map(|(frame, _)| frame)
+        } else if crate::build::icon_reader::looks_like_an_icon(&bytes) {
+            crate::build::icon_reader::decode_icon(&bytes).ok().map(|icon| icon.bitmap)
+        } else {
+            None
+        }
+    });
+
+    match best {
+        Some(bitmap) => bitmap.resized(THUMBNAIL_PX, THUMBNAIL_PX)?.to_png_data_uri(),
+        None => cur_reader::read(path, THUMBNAIL_PX)?.to_png_data_uri(),
+    }
 }
 
 pub fn remove(id: &str) -> AppResult<()> {
