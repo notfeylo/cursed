@@ -57,7 +57,7 @@ impl Manifest {
             return Err(AppError::invalid("the pack name is empty or too long"));
         }
         if crate::util::parse_hex_color(&self.tint).is_none() {
-            return Err(AppError::invalid("the pack's tint is not a colour"));
+            return Err(AppError::invalid("the pack's tint is not a color"));
         }
         if !(32..=256).contains(&self.size) {
             return Err(AppError::invalid("the pack's size is out of range"));

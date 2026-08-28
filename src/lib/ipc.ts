@@ -3,6 +3,7 @@ import { ROLES } from "./types";
 import type {
   ActiveState,
   ApplyMode,
+  HoverStyle,
   BuiltCursor,
   ImportedImage,
   PackSummary,
@@ -57,6 +58,7 @@ export interface ApplyArgs {
   size: number;
   outline: boolean;
   applyMode: ApplyMode;
+  hoverStyle: HoverStyle;
 }
 
 /** Live layer only: SetSystemCursor, no registry write. */
@@ -75,7 +77,7 @@ export interface SchemeStatus {
    * True when the machine's pre-Cursed pointers were destroyed before Cursed
    * could record them — which is what every in-app update up to and including
    * v1.20.0 did. Restore still works and still returns a normal Windows
-   * pointer; it just cannot return a customisation that predates Cursed.
+   * pointer; it just cannot return a customization that predates Cursed.
    */
   originalLost: boolean;
   /** Whether the user has already been told, and dismissed it. */
@@ -147,37 +149,25 @@ export const importImageBytes = (bytes: number[], cut: Cut = "auto") =>
 /* ── photo mode ────────────────────────────────────────────── */
 
 /**
- * The optional learned matte, downloaded on request.
+ * The learned matte, which ships in the installer.
  *
- * `cut: "photo"` is what runs it, and it is only ever offered once
- * `installed` is true — asking for it without the model is an error rather
- * than a slow no-op.
+ * It used to be an optional download, and `cut: "photo"` was only offered once
+ * it had been fetched from Settings. It is simply present now, so the only
+ * questions left are whether this processor has a build and whether the install
+ * is intact.
  */
 export interface PhotoStatus {
   available: boolean;
-  installed: boolean;
-  /** What a first use would cost, in bytes. A measured figure. */
-  downloadBytes: number;
-  /** What removing it would give back. */
-  installedBytes: number;
+  /** Whether the files the installer places are actually there. */
+  ready: boolean;
   unavailableReason: string | null;
 }
 
-export interface PhotoProgress {
-  running: boolean;
-  received: number;
-  total: number;
-  /** True once the download has finished and been verified. */
-  installed: boolean;
-  error: string | null;
-}
-
 export const getPhotoStatus = () => call<PhotoStatus>("get_photo_status");
-export const installPhotoMode = () => call<void>("install_photo_mode");
-export const getPhotoProgress = () => call<PhotoProgress>("get_photo_progress");
-export const cancelPhotoInstall = () => call<void>("cancel_photo_install");
-/** Returns the bytes reclaimed. */
-export const removePhotoMode = () => call<number>("remove_photo_mode");
+
+/** Whether the backend can actually register this accelerator. */
+export const hotkeyIsRegisterable = (accelerator: string) =>
+  call<boolean>("hotkey_is_registerable", { accelerator });
 
 /* ── the matte editor ──────────────────────────────────────── */
 
@@ -254,10 +244,24 @@ export interface Adjusted {
 export const adjustCustom = (args: {
   token: string;
   transform: Transform;
-  turn: Turn;
+  /** Omitted for a crop-only round, which turns nothing. */
+  turn?: Turn | null;
+  /** A rectangle drawn on the picture **as it is currently shown**, or a
+   *  request to take the crop off. Omitted leaves the crop alone. */
+  crop?: CropChange | null;
   hotspot: [number, number];
   outline: boolean;
 }) => call<Adjusted>("adjust_custom", { args });
+
+/**
+ * A change to the crop rectangle.
+ *
+ * Tagged rather than a nullable rectangle, because `null` would have to mean
+ * both "leave it alone" and "remove it" and those are different requests.
+ */
+export type CropChange =
+  | { kind: "set"; rect: [number, number, number, number] }
+  | { kind: "clear" };
 
 export interface BuildArgs {
   token: string;
@@ -317,12 +321,9 @@ export const applyCustomCursor = (args: ApplyCustomArgs) =>
 
 export const getStorageDir = () => call<string>("get_storage_dir");
 export const openStorageDir = () => call<void>("open_storage_dir");
-export const getCacheSize = () => call<number>("get_cache_size");
-export const clearCache = () => call<number>("clear_cache");
 export const getLegalDoc = (kind: "terms" | "privacy" | "licenses") =>
   call<string>("get_legal_doc", { kind });
 /** A pasteable plain-text support report. */
-export const getDiagnostics = () => call<string>("get_diagnostics");
 
 /**
  * What one version changed, as Markdown, read from the changelog compiled into

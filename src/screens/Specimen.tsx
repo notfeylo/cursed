@@ -60,7 +60,7 @@ import { Mark } from "../components/Mark";
 const TYPE_SCALE = [10, 11, 12, 14, 16, 20, 28, 40] as const;
 const SPACE_SCALE = [4, 8, 12, 16, 24, 32, 48] as const;
 
-const COLOURS: { token: string; value: string; note?: string }[] = [
+const COLORS: { token: string; value: string; note?: string }[] = [
   { token: "bg", value: "#050507", note: "window" },
   { token: "surface", value: "#0b0d12", note: "cards" },
   { token: "elevated", value: "#131722", note: "raised" },
@@ -177,10 +177,10 @@ export function Specimen() {
           </div>
         </header>
 
-        {/* ── colour ─────────────────────────────────────── */}
-        <Block title="Colour tokens">
+        {/* ── color ─────────────────────────────────────── */}
+        <Block title="Color tokens">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            {COLOURS.map((c) => (
+            {COLORS.map((c) => (
               <div key={c.token} className="rounded-sm border border-border">
                 <div className="h-12 rounded-t-sm" style={{ background: c.value }} />
                 <div className="px-2 py-1.5">
@@ -351,7 +351,7 @@ export function Specimen() {
                 checked={toggleA}
                 onChange={setToggleA}
                 label="Launch on Windows startup"
-                hint="Starts minimised to the notification area"
+                hint="Starts minimized to the notification area"
               />
               <Toggle checked={toggleB} onChange={setToggleB} label="Off state, no hint" />
               <div className="pt-2">

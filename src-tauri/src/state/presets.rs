@@ -2,6 +2,7 @@ use crate::cursor::roles::Role;
 use crate::error::{AppError, AppResult};
 use crate::paths;
 use crate::util::iso_now;
+use crate::state::settings::HoverStyle;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -24,6 +25,18 @@ pub struct Preset {
     pub hotkey: Option<String>,
     #[serde(default)]
     pub is_default: bool,
+    /// What the link hand is. A preset stores the whole pointer, and after
+    /// `HoverStyle` existed the hand became part of "the whole pointer".
+    ///
+    /// Defaulted rather than versioned: every preset written before this field
+    /// existed described a pack showing its own hand, which is exactly what
+    /// `Pack` means.
+    #[serde(default = "default_hover")]
+    pub hover_style: HoverStyle,
+}
+
+fn default_hover() -> HoverStyle {
+    HoverStyle::Pack
 }
 
 impl Preset {
@@ -39,6 +52,9 @@ impl Preset {
             outline,
             hotkey: None,
             is_default: false,
+            // Whatever is in effect now, so saving a cursor saves the pointer
+            // that is on screen rather than a variant of it.
+            hover_style: crate::state::settings::get().hover_style,
         }
     }
 }

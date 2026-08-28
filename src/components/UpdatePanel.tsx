@@ -230,17 +230,15 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
             <>
               <p className="text-[11px] text-text-muted">
                 That release doesn&apos;t include an installer for this PC&apos;s processor.
-                The releases page has every build.
+                The download page has every build.
               </p>
               <Button
                 full
                 onClick={() =>
-                  void ipc
-                    .openExternal("https://github.com/notfeylo/cursed/releases/latest")
-                    .catch(() => undefined)
+                  void ipc.openExternal("https://cursorforge.vercel.app/").catch(() => undefined)
                 }
               >
-                OPEN THE RELEASES PAGE
+                OPEN THE DOWNLOAD PAGE
               </Button>
             </>
           ) : phase === "ready" ? (
@@ -324,21 +322,19 @@ export function UpdatePanel({ autoCheck = false }: { autoCheck?: boolean }) {
             TRY AGAIN
           </Button>
           {/* Never a dead end. Whatever went wrong — no network, a proxy, an
-              antivirus holding the installer — the releases page still works in
+              antivirus holding the installer — the download page still works in
               a browser, so the user is one click from the same file. */}
           <Button
             full
             variant="ghost"
             onClick={() =>
-              void ipc
-                .openExternal("https://github.com/notfeylo/cursed/releases/latest")
-                .catch(() => undefined)
+              void ipc.openExternal("https://cursorforge.vercel.app/").catch(() => undefined)
             }
           >
             DOWNLOAD IT MANUALLY
           </Button>
           <p className="text-center text-[10px] text-text-dim">
-            Opens the releases page in your browser.
+            Opens the download page in your browser.
           </p>
         </div>
       )}

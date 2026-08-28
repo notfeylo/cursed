@@ -20,7 +20,7 @@ export function TitleBar() {
   };
 
   const close = async () => {
-    // Honouring "close minimizes to tray" is the backend's decision, not ours:
+    // Honoring "close minimizes to tray" is the backend's decision, not ours:
     // it owns the setting and the tray. We just ask the window to close.
     if (isDesktop()) await getCurrentWindow().close();
   };

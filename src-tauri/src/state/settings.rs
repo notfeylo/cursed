@@ -30,17 +30,29 @@ pub struct Settings {
     pub cursor_size: Option<u32>,
     pub tint: String,
     pub outline: bool,
-    /// Whether the size control moves the hand and the text I-beam as well.
+    /// Whether the size control moves the hand and the text cursor as well.
     ///
-    /// Off by default, and the default is the point. The pointer is what a large
-    /// cursor is *for* — it is the thing being tracked across the screen. The
-    /// hand appears under whatever is already being pointed at, and the I-beam
-    /// sits between two characters of text; scaling those to 128 px covers the
-    /// very thing they exist to indicate. Anyone who wants all three to grow
-    /// together can ask for it, but nobody should have to ask for the sensible
-    /// one.
+    /// **On by default, changed from off.** The argument for off is still true
+    /// and is still worth reading: the pointer is what a large cursor is *for*,
+    /// while the hand appears under whatever is already being pointed at and the
+    /// text cursor sits between two characters — so scaling those to 128 px
+    /// covers the very thing they exist to indicate.
+    ///
+    /// It was the wrong default anyway, because it is not the question the user
+    /// is answering. Somebody who sets a big pointer has said "I want a big
+    /// cursor", and a hand that stays small reads as the setting not having
+    /// worked. The considered reason it stayed small was invisible; the
+    /// inconsistency was not. The switch is still there for anyone who wants the
+    /// old behaviour, and the sentence above it now explains the trade instead
+    /// of leaving it to be inferred from a pointer that half-changed.
     pub scale_all_roles: bool,
     pub apply_mode: ApplyMode,
+    /// What the link hand is. See [`HoverStyle`].
+    ///
+    /// `Pack` by default: it is what every existing install already does, and a
+    /// pack whose hand is genuinely part of the design should keep it unless
+    /// somebody says otherwise.
+    pub hover_style: HoverStyle,
     /// Fills the roles a custom or imported cursor does not define, so a
     /// one-role import does not leave fifteen stock Windows pointers behind it.
     pub blend_pack: String,
@@ -78,6 +90,28 @@ pub struct Settings {
     pub scheme_loss_acknowledged: bool,
 }
 
+/// What the hand — the pointer Windows shows over a link — is made of.
+///
+/// **This exists because of a complaint that kept coming back.** A lot of the
+/// catalog is character artwork, and a pack's hand is often a second, unrelated
+/// drawing: pick a cursor you like and the moment you hover a link it becomes
+/// something else. People read that as the cursor breaking, and the only way out
+/// was to not use those packs.
+///
+/// Deleting the hand artwork was never the answer — plenty of packs have a hand
+/// that is the whole point of the pack, and those users would have lost it. So
+/// it is a choice, made where the cursor is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HoverStyle {
+    /// Whatever the pack draws for it. What every pack did before this existed.
+    Pack,
+    /// The pack's own pointer, used for the hand as well, so hovering a link
+    /// changes nothing at all.
+    Pointer,
+    /// The Cursed mark.
+    Mark,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApplyMode {
     ArrowOnly,
@@ -100,8 +134,9 @@ impl Default for Settings {
             cursor_size: None,
             tint: "#2E8BFF".to_owned(),
             outline: true,
-            scale_all_roles: false,
+            scale_all_roles: true,
             apply_mode: ApplyMode::Blend,
+            hover_style: HoverStyle::Pack,
             blend_pack: "precision-gap-cross".to_owned(),
             tint_previews: false,
             animation_speed: 1.0,
@@ -319,8 +354,17 @@ mod tests {
         assert!(loaded.debug_logging);
         assert!(loaded.first_run_done);
 
-        // Fields that did not exist yet take their defaults.
-        assert!(!loaded.scale_all_roles);
+        // Fields that did not exist yet take their defaults — which is worth
+        // stating rather than just asserting, because this one is a visible
+        // change on upgrade. A file this old predates `scaleAllRoles`, so it
+        // takes the current default of **on**, and the hand and text cursor a
+        // v1.6 user was seeing at 32 px will grow with their 64 px pointer the
+        // first time this build runs. That is the intended behaviour and the
+        // switch to undo it is in the same panel as the size.
+        assert!(
+            loaded.scale_all_roles,
+            "a file predating the field takes the current default"
+        );
         assert!(
             !loaded.scheme_loss_acknowledged,
             "an older user has not been shown the notice yet"

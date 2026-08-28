@@ -45,7 +45,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "createUpdaterArtifacts": false,
     "publisher": "feylo",
     "copyright": "Copyright (c) 2026 feylo",
@@ -69,11 +71,16 @@
         "installMode": "currentUser",
         "installerIcon": "icons/icon.ico",
         "displayLanguageSelector": false,
-        "languages": ["English"],
+        "languages": [
+          "English"
+        ],
         "compression": "lzma",
         "installerHooks": "installer-hooks.nsh",
         "startMenuFolder": "Cursed"
       }
+    },
+    "resources": {
+      "photo-runtime/*": "photo/"
     }
   },
   "plugins": {}

@@ -37,3 +37,6 @@ logo-sheets/
 
 # Soak output: a day of samples per run, regenerated on demand.
 docs/verification/soak/*.csv
+
+# Staged by build.rs from assets/photo for the current architecture.
+src-tauri/photo-runtime/

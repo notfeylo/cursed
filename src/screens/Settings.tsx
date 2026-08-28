@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CURSOR_SIZES } from "../lib/sizes";
 import { FolderOpen, FolderPlus, Info, Trash2 } from "lucide-react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { UpdatePanel } from "../components/UpdatePanel";
-import { PhotoModePanel } from "../components/PhotoModePanel";
+import { ColorPicker } from "../components/ColorPicker";
+import { HotkeyField } from "../components/HotkeyField";
 import {
   Button,
   Card,
@@ -12,12 +13,27 @@ import {
   SectionTitle,
   Select,
   Slider,
-  TextInput,
   Toggle,
 } from "../components/ui";
 import * as ipc from "../lib/ipc";
 import type { ApplyMode } from "../lib/types";
 import { useStore } from "../store";
+
+/** A starting point, not the whole choice — the gradient above them is. */
+const SWATCHES = [
+  "#EDF1F7",
+  "#2E8BFF",
+  "#5CB8FF",
+  "#8AE9FF",
+  "#33D6A6",
+  "#7DFF3D",
+  "#FFD23D",
+  "#FF7A2E",
+  "#FF4D5E",
+  "#FF3DD8",
+  "#A24BFF",
+  "#8A94A6",
+];
 import type { ApplyMode as _ApplyMode } from "../lib/types";
 
 export function SettingsScreen() {
@@ -31,9 +47,28 @@ export function SettingsScreen() {
   const packs = useStore((s) => s.packs);
 
   const [storageDir, setStorageDir] = useState("");
-  const [cacheBytes, setCacheBytes] = useState(0);
   const [systemSize, setSystemSize] = useState(32);
   const [confirmRestore, setConfirmRestore] = useState(false);
+
+  /* The accent color, held locally while it is being dragged.
+   *
+   * Every pointer move through the gradient is a new color, and saving each one
+   * would be a settings write and a re-render of the cursor per frame. The
+   * picker shows the color immediately; the save follows once the hand stops. */
+  const [tintDraft, setTintDraft] = useState(settings.tint);
+  const tintTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    setTintDraft(settings.tint);
+  }, [settings.tint]);
+
+  useEffect(() => () => window.clearTimeout(tintTimer.current), []);
+
+  const setTint = (hex: string) => {
+    setTintDraft(hex);
+    window.clearTimeout(tintTimer.current);
+    tintTimer.current = window.setTimeout(() => void patch({ tint: hex }), 180);
+  };
 
   const [imported, setImported] = useState<ipc.ImportedPack[]>([]);
   const [importing, setImporting] = useState(false);
@@ -49,7 +84,6 @@ export function SettingsScreen() {
   useEffect(() => {
     if (!ipc.isDesktop()) return;
     void ipc.getStorageDir().then(setStorageDir).catch(() => undefined);
-    void ipc.getCacheSize().then(setCacheBytes).catch(() => undefined);
     void ipc.getCursorBaseSize().then(setSystemSize).catch(() => undefined);
     void ipc.getSchemeStatus().then(setSchemeStatus).catch(() => undefined);
     refreshImported();
@@ -167,7 +201,7 @@ export function SettingsScreen() {
         </button>
       </ScreenHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         {showSchemeLoss && (
           <div className="mt-3 rounded-xs border border-danger/50 bg-danger/5 p-3">
             <p className="text-[11px] font-medium text-danger">
@@ -182,7 +216,7 @@ export function SettingsScreen() {
             </p>
             <p className="mt-1 text-[11px] text-text-muted">
               Restore Windows default still works and still gives you a normal Windows pointer.
-              It just cannot give you back a pointer you had customised before Cursed. This was
+              It just cannot give you back a pointer you had customized before Cursed. This was
               our bug, it is fixed in this version, and it will not happen again.
             </p>
             <div className="mt-2 flex justify-end">
@@ -195,9 +229,6 @@ export function SettingsScreen() {
 
         <SectionTitle>Updates</SectionTitle>
         <UpdatePanel autoCheck />
-
-        <SectionTitle>Background removal</SectionTitle>
-        <PhotoModePanel />
 
         <SectionTitle>My cursors</SectionTitle>
         <Card>
@@ -315,7 +346,7 @@ export function SettingsScreen() {
         <Card>
           <div className="pb-2">
             <Slider
-              label="CURSOR SIZE"
+              label="POINTER SIZE"
               suffix="px"
               min={10}
               max={128}
@@ -323,28 +354,30 @@ export function SettingsScreen() {
               value={settings.cursorSize ?? systemSize}
               onChange={(v) => void patch({ cursorSize: v })}
             />
-            {settings.cursorSize === null ? (
-              <p className="mt-1 text-[11px] text-text-dim">
-                Following Windows ({systemSize}px). Move the slider to override.
-              </p>
-            ) : (
+            <p className="mt-1 text-[11px] text-text-dim">
+              {settings.cursorSize === null
+                ? `Matching the Windows setting, which is ${systemSize} pixels. Move the slider to choose your own.`
+                : `${settings.cursorSize} pixels across. The normal Windows size is 32.`}
+            </p>
+            {settings.cursorSize !== null && (
               <button
                 type="button"
                 onClick={() => void patch({ cursorSize: null })}
                 className="mt-1 text-[11px] text-accent-hi hover:underline"
               >
-                Follow the Windows size again
+                Go back to matching Windows
               </button>
             )}
 
-            {/* Said plainly, because otherwise it reads as the slider being
-                broken rather than as a decision — and the toggle sits directly
-                underneath, so the answer is where the question gets asked. */}
+            {/* Said plainly, because otherwise a hand that did not grow reads as
+                the slider being broken rather than as a choice — and the switch
+                sits directly underneath, so the answer is where the question
+                gets asked. */}
             {(settings.cursorSize ?? systemSize) > 32 && (
               <p className="mt-2 text-[11px] leading-relaxed text-text-dim">
                 {settings.scaleAllRoles
-                  ? "The link hand and the text I-beam grow with the pointer. At this size an I-beam can be hard to place between two characters."
-                  : "The link hand and the text I-beam stay at 32px. A pointer this size is fine to aim with; an I-beam this size cannot be placed between two characters."}
+                  ? "The hand and the text cursor grow with the pointer. At this size the text cursor can be hard to place between two letters."
+                  : "The hand and the text cursor stay at 32 pixels. A big pointer is easy to follow; a big text cursor is hard to place between two letters."}
               </p>
             )}
 
@@ -352,17 +385,17 @@ export function SettingsScreen() {
               <Toggle
                 checked={settings.scaleAllRoles}
                 onChange={(v) => void patch({ scaleAllRoles: v })}
-                label="Resize the hand and I-beam too"
-                hint="Off, only the pointer follows the size above"
+                label="Resize the hand and text cursor as well"
+                hint="The hand appears over links; the text cursor is the thin bar you click text with"
               />
             </div>
           </div>
 
           <Field
-            label="Accent / tint colour"
-            hint="Also colours the link hand and the text caret"
+            label="Accent color"
+            hint="Used for the pointer, the link hand and the text caret"
           >
-            <TintField value={settings.tint} onCommit={(v) => void patch({ tint: v })} />
+            <ColorPicker value={tintDraft} onChange={setTint} swatches={SWATCHES} />
           </Field>
 
           <Toggle
@@ -453,37 +486,49 @@ export function SettingsScreen() {
 
         <SectionTitle>Hotkeys</SectionTitle>
         <Card>
-          <Field label="Toggle custom ↔ Windows default">
-            <TextInput
-              mono
+          <p className="pb-2 text-[11px] text-text-muted">
+            Click a shortcut and press the keys you want. These work anywhere in
+            Windows, not just while Cursed is open.
+          </p>
+          <Field label="Switch between your cursor and the Windows default">
+            <HotkeyField
+              label="Switch between your cursor and the Windows default"
               value={settings.hotkeyToggle}
               onChange={(v) => void patch({ hotkeyToggle: v })}
             />
           </Field>
           <Field label="Open Cursed">
-            <TextInput
-              mono
+            <HotkeyField
+              label="Open Cursed"
               value={settings.hotkeyOpen}
               onChange={(v) => void patch({ hotkeyOpen: v })}
             />
           </Field>
-          <div className="grid grid-cols-5 gap-1 pt-1">
-            {settings.hotkeyPresets.map((accelerator, index) => (
-              <TextInput
-                key={index}
-                mono
-                value={accelerator}
-                onChange={(v) => {
-                  const next = [...settings.hotkeyPresets];
-                  next[index] = v;
-                  void patch({ hotkeyPresets: next });
-                }}
-              />
-            ))}
-          </div>
-          <p className="pt-1 text-[11px] text-text-dim">
-            Preset slots 1–5, in the order they appear under SAVED.
-          </p>
+          <Field
+            label="Saved cursors"
+            hint="One shortcut per saved cursor, in the order they appear under SAVED"
+          >
+            <div className="space-y-1">
+              {settings.hotkeyPresets.map((accelerator, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="mono w-4 shrink-0 text-[11px] text-text-dim">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <HotkeyField
+                      label={`Saved cursor ${index + 1}`}
+                      value={accelerator}
+                      onChange={(v) => {
+                        const next = [...settings.hotkeyPresets];
+                        next[index] = v;
+                        void patch({ hotkeyPresets: next });
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Field>
         </Card>
 
         <SectionTitle>Advanced</SectionTitle>
@@ -521,26 +566,6 @@ export function SettingsScreen() {
             {backupMsg && <p className="mt-2 text-[11px] text-text-muted">{backupMsg}</p>}
           </Field>
 
-          <Field label="Generated cursor cache">
-            <div className="flex items-center gap-2">
-              <span className="mono flex-1 text-[11px] text-text-dim">
-                {formatBytes(cacheBytes)}
-              </span>
-              <Button
-                variant="ghost"
-                onClick={() =>
-                  void ipc
-                    .clearCache()
-                    .then(() => ipc.getCacheSize())
-                    .then(setCacheBytes)
-                    .catch(() => undefined)
-                }
-              >
-                CLEAR
-              </Button>
-            </div>
-          </Field>
-
           <Toggle
             checked={settings.debugLogging}
             onChange={(v) => void patch({ debugLogging: v })}
@@ -548,7 +573,6 @@ export function SettingsScreen() {
             hint="Local rotating file; takes effect on next launch"
           />
 
-          <Diagnostics />
 
           <div className="pt-3">
             {confirmRestore ? (
@@ -582,140 +606,8 @@ export function SettingsScreen() {
   );
 }
 
-/**
- * A copyable support report.
- *
- * "It doesn't work" is unanswerable, and asking a non-technical user to find
- * their AppData folder or read a registry key never ends well. One button that
- * produces pasteable text turns every future report into something actionable.
- */
-function Diagnostics() {
-  const [report, setReport] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
-
-  const load = async () => {
-    setFailed(null);
-    try {
-      setReport(await ipc.getDiagnostics());
-    } catch (e) {
-      setFailed(e instanceof Error ? e.message : "The report could not be built.");
-    }
-  };
-
-  const copy = async () => {
-    if (!report) return;
-    try {
-      await navigator.clipboard.writeText(report);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // Clipboard access can be refused; the text is on screen and
-      // selectable either way, so this is not worth an error banner.
-    }
-  };
-
-  return (
-    <Field label="Diagnostics" hint="Paste this into a bug report">
-      {report === null ? (
-        <Button full variant="ghost" onClick={() => void load()}>
-          BUILD REPORT
-        </Button>
-      ) : (
-        <div className="space-y-2">
-          <pre className="mono max-h-44 overflow-auto rounded-xs border border-border bg-bg p-2 text-[10px] leading-relaxed whitespace-pre text-text-dim select-text">
-            {report}
-          </pre>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="ghost" onClick={() => void load()}>
-              REFRESH
-            </Button>
-            <Button onClick={() => void copy()}>{copied ? "COPIED" : "COPY REPORT"}</Button>
-          </div>
-        </div>
-      )}
-      {failed && <p className="mt-1 text-[11px] text-danger">{failed}</p>}
-    </Field>
-  );
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/**
- * A hex colour field that can be typed into.
- *
- * The old one saved on every keystroke, and the backend rejects anything that
- * is not a complete colour by resetting it to the default. So typing "#2" was
- * immediately rewritten to "#2E8BFF" and the caret jumped — the field was
- * unusable and looked frozen on blue.
- *
- * The backend sanitiser is right and stays. What was wrong was sending it half a
- * value: the draft lives here until it is a colour, and only then is it saved.
- */
-function TintField({
-  value,
-  onCommit,
-}: {
-  value: string;
-  onCommit: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [focused, setFocused] = useState(false);
-
-  // Adopt external changes (a preset applying, say) but never while the user is
-  // mid-edit — that is the same interruption in a different disguise.
-  useEffect(() => {
-    if (!focused) setDraft(value);
-  }, [value, focused]);
-
-  const complete = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(draft);
-
-  const commit = (text: string) => {
-    const trimmed = text.trim();
-    const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(withHash)) {
-      setDraft(withHash);
-      onCommit(withHash);
-    } else {
-      setDraft(value); // put back what is actually in effect
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-3">
-      <span
-        className="h-9 w-9 shrink-0 rounded-xs border border-border"
-        style={{ background: complete ? draft : value }}
-        title={complete ? draft : value}
-      />
-      <input
-        value={draft}
-        maxLength={7}
-        spellCheck={false}
-        placeholder="#2E8BFF"
-        onFocus={() => setFocused(true)}
-        onChange={(e) => {
-          setDraft(e.currentTarget.value);
-          // Saved the moment it becomes a colour, so the cursor updates as you
-          // finish typing rather than only when you click away.
-          const next = e.currentTarget.value.trim();
-          if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(next)) onCommit(next);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          commit(e.currentTarget.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-        }}
-        className={`mono h-9 w-full rounded-xs border bg-bg px-3 text-[12px] text-text outline-none transition-colors duration-150 placeholder:text-text-dim focus:border-accent ${
-          draft.length > 0 && !complete ? "border-danger/60" : "border-border"
-        }`}
-      />
-    </div>
-  );
 }

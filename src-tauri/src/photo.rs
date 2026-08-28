@@ -28,7 +28,6 @@
 //! Nothing here runs at launch and nothing downloads without being asked.
 
 use crate::error::{AppError, AppResult};
-use crate::paths;
 use serde::Serialize;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -42,13 +41,6 @@ fn wide(path: &Path) -> Vec<u16> {
         .chain(std::iter::once(0))
         .collect()
 }
-
-/// The release these artifacts come from.
-///
-/// A pinned tag, never `latest`. A copy of the app compiled today must keep
-/// fetching the artifact it was tested against, even after a later release
-/// publishes a different runtime.
-const ARTIFACT_TAG: &str = "photo-v1";
 
 /// One file photo mode needs on disk.
 #[derive(Debug, Clone, Copy)]
@@ -237,6 +229,13 @@ pub const fn crt() -> &'static [Artifact] {
 /// deciding whether the feature is installed can never disagree about what the
 /// feature *is*. Adding the C++ runtime to this list is what makes an existing
 /// install notice that it is now missing something.
+/// Only the tests need the whole list now.
+///
+/// Nothing at run time cares about the full set: loading needs the runtime,
+/// `status` needs `required`, and the C++ runtime is preloaded from `crt`
+/// directly. What does care is the check that every file the installer carries
+/// is the file it was supposed to carry, which has to name all of them.
+#[cfg(test)]
 fn artifacts() -> Vec<Artifact> {
     let mut all = required();
     all.extend_from_slice(crt());
@@ -261,21 +260,47 @@ fn required() -> Vec<Artifact> {
 
 /// Whether this build can use photo mode at all.
 ///
-/// The offline installer exists so an air-gapped machine works, and photo mode
-/// is the one feature that cannot: it is defined by fetching something. The
-/// build says so plainly rather than offering a button that always fails.
+/// Now a question about the processor and nothing else. It used to exclude the
+/// offline installer too, because photo mode was defined by fetching something
+/// and an air-gapped machine cannot fetch. It ships in the installer now, so the
+/// offline build has it for the same reason every other build does — which is
+/// the whole point of the change.
 pub const fn available() -> bool {
-    !cfg!(feature = "offline-build")
+    runtime().is_some()
 }
 
-/// The sentence shown when it is not.
-pub const UNAVAILABLE: &str =
-    "Photo mode needs a one-time download and isn't available in the offline build.";
-
-/// Where the artifacts live.
+/// Where the artifacts live: beside the executable, put there by the installer.
+///
+/// **They used to be downloaded into `%APPDATA%` on request, and that was the
+/// problem.** Photo mode was a button in Settings, which meant the people most
+/// likely to want it — the ones importing a photograph of their cat — were
+/// exactly the ones never opening Settings to find it. It is in the installer
+/// now, so there is nothing to find and nothing to wait for.
+///
+/// One consequence worth stating: this directory is **read-only to us**. It sits
+/// under Program Files or the per-user install root, the installer owns it, and
+/// nothing here creates or writes it. That is why there is no `create_dir_all`
+/// and why a missing directory is reported rather than repaired — if these files
+/// are absent the install is damaged, and quietly making an empty folder would
+/// turn that into a confusing failure much later, inside `LoadLibraryExW`.
 pub fn models_dir() -> AppResult<PathBuf> {
-    let dir = paths::root()?.join("models");
-    std::fs::create_dir_all(&dir)?;
+    // Development and `cargo test` run from `target/`, where the bundler has
+    // never been. `build.rs` stages the same files and hands over the path, so
+    // the feature works in a dev run exactly as it does in an install.
+    #[cfg(debug_assertions)]
+    {
+        let staged = PathBuf::from(env!("CURSED_PHOTO_STAGE"));
+        if staged.is_dir() {
+            return Ok(staged);
+        }
+    }
+
+    let exe = std::env::current_exe()
+        .map_err(|e| AppError::storage(format!("could not locate the application: {e}")))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| AppError::storage("the application has no containing directory"))?
+        .join("photo");
     Ok(dir)
 }
 
@@ -284,365 +309,90 @@ fn artifact_path(artifact: &Artifact) -> AppResult<PathBuf> {
 }
 
 /// What the UI needs in order to decide what to offer.
+///
+/// Three booleans where there used to be sizes and a progress bar. Nothing is
+/// downloaded, nothing is removable, and there is no figure a user could act on
+/// — so the only questions left are whether this processor has a runtime and
+/// whether the install actually contains it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhotoStatus {
+    /// Whether a build exists for this processor at all.
     pub available: bool,
-    pub installed: bool,
-    /// What a first use would cost. Measured figures, not estimates.
-    pub download_bytes: u64,
-    /// What removing it would reclaim.
-    pub installed_bytes: u64,
+    /// Whether the files are where the installer should have put them.
+    pub ready: bool,
+    /// Set only when something is wrong, and written to be read by the person
+    /// holding the mouse rather than by us.
     pub unavailable_reason: Option<String>,
 }
 
 pub fn status() -> PhotoStatus {
-    let unavailable = |why: &str| PhotoStatus {
-        available: false,
-        installed: false,
-        download_bytes: 0,
-        installed_bytes: 0,
-        unavailable_reason: Some(why.to_owned()),
-    };
-
-    let Some(_library) = runtime() else {
-        return unavailable("Photo mode has no build for this processor architecture.");
-    };
     if !available() {
-        return unavailable(UNAVAILABLE);
+        return PhotoStatus {
+            available: false,
+            ready: false,
+            unavailable_reason: Some(
+                "Background removal has no build for this processor.".to_owned(),
+            ),
+        };
     }
 
-    let on_disk = |a: &Artifact| {
+    let present = |a: &Artifact| {
         artifact_path(a)
             .ok()
             .and_then(|p| std::fs::metadata(p).ok())
             .map(|m| m.len())
             .unwrap_or(0)
+            > 0
     };
-    let all = artifacts();
-    let installed_bytes: u64 = all.iter().map(on_disk).sum();
-    // Judged on what photo mode cannot work without. A machine that has the
-    // model and the runtime *is* installed, whether or not the C++ runtime came
-    // down beside them — see `required`.
-    let complete = required().iter().all(|a| on_disk(a) > 0);
 
-    // A removal waiting on the next launch is a removal as far as anyone using
-    // the app is concerned: the button worked, and offering "Remove" again for
-    // files that are already on their way out would be a button that cannot do
-    // anything.
-    let pending = removal_is_pending();
+    // Judged on what photo mode cannot work without — the model and the ONNX
+    // Runtime. The C++ runtime is carried beside them and is deliberately not
+    // counted: almost every machine resolves those from System32 and never
+    // touches our copies, so a missing one is not a broken feature. See
+    // `required`.
+    let ready = required().iter().all(present);
 
     PhotoStatus {
         available: true,
-        installed: !pending && complete,
-        download_bytes: all.iter().map(|a| a.bytes).sum(),
-        installed_bytes: if pending { 0 } else { installed_bytes },
-        unavailable_reason: None,
+        ready,
+        unavailable_reason: (!ready).then(|| {
+            "Background removal is missing files it needs. Reinstalling Cursed will              put them back."
+                .to_owned()
+        }),
     }
 }
 
-/// Checksum **and** signature, both before anything is written or loaded.
+/// Whether these bytes are the ones this build was written against.
 ///
-/// The checksum catches a corrupted transfer and cannot catch a substitution,
-/// because it is published by the same host as the file. That is the reasoning
-/// that put a signature on the installer, and it applies harder to a library
-/// that gets loaded into this process.
+/// **The signature check that used to live here is gone, and nothing was lost
+/// by it.** These files arrived over the network once, from the same host that
+/// published their checksums — which is why a checksum alone was not enough and
+/// a release-key signature sat beside it. They now arrive inside the installer,
+/// under the same signature as the executable that loads them: whatever
+/// guarantee `Cursed.exe` has, they have, because they are the same download.
+///
+/// What is left is the guarantee a checksum is actually good at — that these
+/// bytes are the exact ones the code was tested against, not a runtime somebody
+/// swapped in while staging a build. It is checked at build time by
+/// `every_bundled_artifact_matches_its_published_checksum`, which is the only
+/// moment at which it can still be wrong.
 fn verify(artifact: &Artifact, bytes: &[u8]) -> AppResult<()> {
     if artifact.sha256.is_empty() {
         // Nothing to check against. Refusing is the only safe answer: the
         // alternative is loading a library on the strength of its filename.
         return Err(AppError::msg(
-            "this build has no published checksum for the photo-mode download, \
-             so it will not use one",
+            "this build has no published checksum for the photo-mode runtime,              so it will not use one",
         ));
     }
     let actual = crate::hash::sha256_hex(bytes);
     if !crate::hash::hex_eq(&actual, artifact.sha256) {
         return Err(AppError::msg(format!(
-            "the downloaded {} does not match the checksum published with it",
+            "the bundled {} does not match the checksum recorded for it",
             artifact.name
         )));
     }
-    if crate::signing::enforced() {
-        let signature = signature_for(artifact)?;
-        crate::signing::verify(bytes, &signature).map_err(|_| {
-            AppError::msg(format!(
-                "the downloaded {} is not signed by this project's release key",
-                artifact.name
-            ))
-        })?;
-    } else {
-        log::warn!("photo mode: {}", crate::signing::describe());
-    }
     Ok(())
-}
-
-fn asset_path(name: &str) -> String {
-    format!("/notfeylo/cursed/releases/download/{ARTIFACT_TAG}/{name}")
-}
-
-fn signature_for(artifact: &Artifact) -> AppResult<String> {
-    let bytes = crate::updates::get_with_progress(
-        crate::updates::DOWNLOAD_HOST,
-        &asset_path(&format!("{}.minisig", artifact.asset)),
-        64 * 1024,
-        true,
-        &mut |_, _| {},
-    )?;
-    String::from_utf8(bytes)
-        .map_err(|_| AppError::msg("the signature for that download could not be read"))
-}
-
-
-// --- the download, as the UI sees it ----------------------------
-//
-// A twenty-megabyte download cannot block the window, so `install` runs on its
-// own thread and reports through here. The shape is deliberately the same as
-// the updater's: one shared state the UI polls, so a button press and a
-// background task can never show two different answers.
-
-/// How the download is going.
-#[derive(Debug, Clone, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Progress {
-    pub running: bool,
-    pub received: u64,
-    pub total: u64,
-    /// Set once the download has finished successfully.
-    pub installed: bool,
-    /// Verbatim, because a paraphrased error is a useless error.
-    pub error: Option<String>,
-}
-
-fn progress_slot() -> &'static std::sync::Mutex<Progress> {
-    static P: std::sync::OnceLock<std::sync::Mutex<Progress>> = std::sync::OnceLock::new();
-    P.get_or_init(|| std::sync::Mutex::new(Progress::default()))
-}
-
-/// Set when the user asks to stop. Checked between artifacts and inside the
-/// byte loop, so a cancel takes effect within a chunk rather than at the end.
-static CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-pub fn progress() -> Progress {
-    progress_slot().lock().map(|p| p.clone()).unwrap_or_default()
-}
-
-pub fn cancel() {
-    CANCELLED.store(true, std::sync::atomic::Ordering::SeqCst);
-}
-
-pub fn cancelled() -> bool {
-    CANCELLED.load(std::sync::atomic::Ordering::SeqCst)
-}
-
-/// Called from the download thread on every chunk.
-pub fn report_progress(received: u64, total: u64) {
-    if let Ok(mut p) = progress_slot().lock() {
-        p.running = true;
-        p.received = received;
-        p.total = total;
-        p.error = None;
-    }
-}
-
-/// Called from the download thread when it stops, either way.
-pub fn finish(result: AppResult<()>) {
-    if let Ok(mut p) = progress_slot().lock() {
-        p.running = false;
-        match result {
-            Ok(()) => {
-                p.installed = true;
-                p.error = None;
-            }
-            Err(e) => {
-                p.installed = false;
-                p.error = Some(e.to_string());
-            }
-        }
-    }
-    CANCELLED.store(false, std::sync::atomic::Ordering::SeqCst);
-}
-
-/// Fetches one artifact, verifies it, and only then puts it in place.
-///
-/// Written under a temporary name and renamed after it passes, so an
-/// interrupted download can never be mistaken for an installed artifact by the
-/// next launch — which for a library that gets loaded is the difference between
-/// a retry and executing unverified bytes.
-fn fetch(artifact: &Artifact, progress: &mut dyn FnMut(u64, u64)) -> AppResult<()> {
-    let destination = artifact_path(artifact)?;
-    let cap = (artifact.bytes as usize).saturating_mul(2).max(1024 * 1024);
-    let bytes = crate::updates::get_with_progress(
-        crate::updates::DOWNLOAD_HOST,
-        &asset_path(artifact.asset),
-        cap,
-        true,
-        progress,
-    )?;
-
-    verify(artifact, &bytes)?;
-
-    let temporary = destination.with_extension("part");
-    std::fs::write(&temporary, &bytes)?;
-    std::fs::rename(&temporary, &destination)?;
-    // Installing cancels a removal that never finished, or the next launch
-    // would sweep away the file that has just been downloaded.
-    if let Ok(marker) = removal_marker() {
-        let _ = std::fs::remove_file(marker);
-    }
-    log::info!("photo mode: {} verified and installed", artifact.name);
-    Ok(())
-}
-
-/// Downloads both artifacts. Long-running; call it off the UI thread.
-pub fn install(progress: &mut dyn FnMut(u64, u64)) -> AppResult<()> {
-    if !available() {
-        return Err(AppError::invalid(UNAVAILABLE));
-    }
-    if runtime().is_none() {
-        return Err(AppError::invalid(
-            "photo mode has no build for this processor architecture",
-        ));
-    }
-
-    // One figure across every file, so the UI shows a single bar that only
-    // moves forwards rather than one that restarts at zero per artifact.
-    let all = artifacts();
-    let total: u64 = all.iter().map(|a| a.bytes).sum();
-    let optional: Vec<&'static str> = crt().iter().map(|a| a.name).collect();
-    let mut done = 0u64;
-    for artifact in &all {
-        if cancelled() {
-            return Err(AppError::invalid("the download was cancelled"));
-        }
-        // **Skipped when it is already here and already right.** Adding the C++
-        // runtime to the list would otherwise make everybody who already has
-        // photo mode fetch twenty megabytes again to be handed the eight
-        // hundred kilobytes they were actually missing.
-        if already_installed(artifact) {
-            log::info!("photo mode: {} is already installed", artifact.name);
-            done += artifact.bytes;
-            progress(done, total);
-            continue;
-        }
-        match fetch(artifact, &mut |got, _| progress(done + got, total)) {
-            Ok(()) => {}
-            // **A missing C++ runtime is not a failed install.** Most machines
-            // resolve those from System32 and never touch these copies, so
-            // refusing the whole install because one of them could not be
-            // fetched would break photo mode for everyone in order to fix it
-            // for the few. What it costs is one honest sentence later:
-            // `diagnose` names the file if the runtime then will not load.
-            Err(e) if optional.contains(&artifact.name) => {
-                log::warn!(
-                    "photo mode: {} could not be downloaded ({e}); \
-                     carrying on, because this PC may already have it",
-                    artifact.name
-                );
-            }
-            Err(e) => return Err(e),
-        }
-        done += artifact.bytes;
-    }
-    Ok(())
-}
-
-/// Whether this artifact is on disk *and* is the artifact it claims to be.
-///
-/// By hash rather than by size, because the point of it is to skip a download
-/// safely: a file that hashes to the constant compiled into this build is
-/// byte-for-byte the file that passed both the checksum and the signature when
-/// it was written. A size match alone would wave through a truncated or
-/// substituted file, which for a library this process is about to load is the
-/// one mistake worth never making.
-fn already_installed(artifact: &Artifact) -> bool {
-    if artifact.sha256.is_empty() {
-        return false;
-    }
-    let Ok(path) = artifact_path(artifact) else {
-        return false;
-    };
-    let Ok(bytes) = std::fs::read(&path) else {
-        return false;
-    };
-    bytes.len() as u64 == artifact.bytes
-        && crate::hash::hex_eq(&crate::hash::sha256_hex(&bytes), artifact.sha256)
-}
-
-/// Deletes both artifacts and reports what was reclaimed.
-///
-/// A twenty-megabyte download the user cannot get rid of is a bad citizen.
-///
-/// **Windows will not delete a DLL that is loaded**, and after one cutout this
-/// one is. The session is dropped first, which is necessary and not sufficient:
-/// the runtime itself stays mapped for the life of the process. So a file that
-/// will not go is recorded rather than ignored — photo mode reports itself
-/// uninstalled from that moment, and the leftover is swept up by the next
-/// launch. The alternative is a Remove button that appears to do nothing and a
-/// size that never drops.
-pub fn remove() -> AppResult<u64> {
-    release();
-
-    let mut freed = 0u64;
-    let mut stubborn = false;
-    for artifact in artifacts() {
-        let path = artifact_path(&artifact)?;
-        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-        match std::fs::remove_file(&path) {
-            Ok(()) => freed += size,
-            Err(e) if path.exists() => {
-                log::warn!("photo mode: {} could not be deleted yet: {e}", artifact.name);
-                stubborn = true;
-            }
-            Err(_) => {}
-        }
-    }
-
-    if stubborn {
-        mark_pending_removal();
-    }
-    log::info!("photo mode: removed, {freed} bytes reclaimed");
-    Ok(freed)
-}
-
-/// The marker that says "these files are on their way out".
-fn removal_marker() -> AppResult<PathBuf> {
-    Ok(models_dir()?.join("removed"))
-}
-
-fn mark_pending_removal() {
-    if let Ok(marker) = removal_marker() {
-        let _ = std::fs::write(&marker, b"photo mode was removed while its runtime was loaded\n");
-    }
-}
-
-fn removal_is_pending() -> bool {
-    removal_marker().map(|marker| marker.is_file()).unwrap_or(false)
-}
-
-/// Finishes a removal that could not complete while the library was loaded.
-///
-/// Called once at startup, before anything can load it again. Silent: there is
-/// nothing for the user to do about it either way.
-pub fn sweep_pending_removal() {
-    if !removal_is_pending() {
-        return;
-    }
-    let mut left = false;
-    for artifact in artifacts() {
-        let Ok(path) = artifact_path(&artifact) else {
-            continue;
-        };
-        if std::fs::remove_file(&path).is_err() && path.exists() {
-            left = true;
-        }
-    }
-    if !left {
-        if let Ok(marker) = removal_marker() {
-            let _ = std::fs::remove_file(marker);
-        }
-        log::info!("photo mode: the pending removal completed");
-    }
 }
 
 /// Where the runtime is loaded from, once it has been verified.
@@ -730,6 +480,28 @@ fn load_runtime_once() -> AppResult<()> {
 
     let path = runtime_path()?;
     log::info!("photo mode: loading the runtime from {}", path.display());
+
+    // **Read and checksummed before it is loaded, once per process.**
+    //
+    // This is the last point at which a wrong file is still only a file. A
+    // moment later it is executable code mapped into this process, and the
+    // failure mode stops being "background removal is unavailable" and starts
+    // being anything at all. Sixteen megabytes of SHA-256 costs about fifty
+    // milliseconds, once, against a feature that is already doing inference.
+    //
+    // It is not a defence against an attacker who can write to the install
+    // directory — one who can replace the DLL can replace the executable that
+    // checks it. It catches the case that actually happens: a half-written
+    // file from a failed install, a partial copy, disk corruption, or a build
+    // staged against the wrong architecture's runtime.
+    let library = runtime().ok_or_else(|| {
+        AppError::invalid("background removal has no build for this processor")
+    })?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| AppError::msg(format!("the runtime could not be read: {e}")))?;
+    verify(&library, &bytes)?;
+    drop(bytes);
+
     // Before the runtime, the runtime's own dependencies. See `preload_crt`.
     preload_crt();
     // `init_from` is the `load-dynamic` entry point: it resolves the library
@@ -1601,26 +1373,9 @@ mod tests {
         }
     }
 
-    /// The trust boundary again, on the other road into it.
-    ///
-    /// `already_installed` exists to *skip* a download, so a build with no
-    /// published checksum must be unable to skip one — otherwise the checksum
-    /// that `verify` refuses to do without could be sidestepped by the file
-    /// simply being there already.
-    #[test]
-    fn an_artifact_with_no_published_checksum_is_never_taken_from_disk() {
-        let unpublished = Artifact {
-            name: MODEL.name,
-            asset: MODEL.asset,
-            sha256: "",
-            bytes: MODEL.bytes,
-        };
-        assert!(!already_installed(&unpublished));
-    }
-
     /// **The trust boundary.** A library that gets loaded into this process
     /// must never arrive on the strength of its filename. A build with no
-    /// published checksum has nothing to check against, and the safe answer is
+    /// recorded checksum has nothing to check against, and the safe answer is
     /// to do without photo mode entirely.
     #[test]
     fn an_artifact_with_no_published_checksum_is_refused() {
@@ -1644,43 +1399,85 @@ mod tests {
         assert!(verify(&artifact, b"different bytes entirely").is_err());
     }
 
-    /// Pinned, so a later release cannot move the artifact a shipped build
-    /// expects out from under it.
+    /// **Every file the installer carries is the file it was meant to carry.**
+    ///
+    /// This is the check the download used to do on the user's machine, moved
+    /// to the only place it can still catch anything. These files are staged by
+    /// `build.rs` out of `assets/photo/<arch>` and handed to the bundler; if the
+    /// wrong architecture's runtime is staged, or a copy is truncated, or
+    /// somebody refreshes one of them from upstream without updating the
+    /// constant beside it, this is what says so — on the machine building the
+    /// release, rather than on somebody's PC as `LoadLibraryExW failed`.
+    ///
+    /// It reads roughly twenty megabytes and hashes it. That is a slow test by
+    /// the standards of this suite and it is worth it once per run.
     #[test]
-    fn the_artifact_release_is_pinned() {
-        assert_ne!(ARTIFACT_TAG, "latest");
-        assert!(!ARTIFACT_TAG.is_empty());
+    fn every_bundled_artifact_matches_its_published_checksum() {
+        if !available() {
+            return; // no runtime for this processor; nothing is staged
+        }
+        let dir = models_dir().expect("the bundled artifacts have a location");
+        assert!(
+            dir.is_dir(),
+            "nothing is staged at {} — build.rs should have filled it",
+            dir.display()
+        );
+
+        for artifact in artifacts() {
+            let path = dir.join(artifact.name);
+            let bytes = std::fs::read(&path)
+                .unwrap_or_else(|e| panic!("{} is not bundled ({e})", path.display()));
+            assert_eq!(
+                bytes.len() as u64,
+                artifact.bytes,
+                "{} is {} bytes and should be {}",
+                artifact.name,
+                bytes.len(),
+                artifact.bytes
+            );
+            verify(&artifact, &bytes)
+                .unwrap_or_else(|e| panic!("the bundled {} is not the one recorded: {e}", artifact.name));
+        }
     }
 
     /// The advertised size is the measured one.
     #[test]
     fn the_advertised_size_is_the_measured_one() {
         assert_eq!(MODEL.bytes, 4_574_861, "u2netp.onnx, weighed rather than guessed");
-        let status = status();
-        if status.available {
+    }
+
+    /// **Photo mode does not reach the network, at all, ever.**
+    ///
+    /// The inverse of the test this replaces. That one allowed exactly one
+    /// download and checked it was reachable only from a button; there is now no
+    /// download to allow, and the useful assertion is that none comes back.
+    /// Everything it needs is in the installer, so a call to the updater's HTTP
+    /// helper appearing in this file would be a regression to a design that was
+    /// deliberately removed — and one nobody would notice, because it would only
+    /// show up as a request on a machine that was supposed to be able to work
+    /// offline.
+    #[test]
+    fn photo_mode_never_reaches_the_network() {
+        // The shipped half only. The test module below names these strings in
+        // order to look for them, and a test that fails on its own source is
+        // not a test of anything.
+        let source = include_str!("photo.rs");
+        let shipped = source.split("#[cfg(test)]").next().expect("the module has a body");
+        for forbidden in ["get_with_progress", "DOWNLOAD_HOST", "://"] {
             assert!(
-                status.download_bytes > MODEL.bytes,
-                "the runtime is the larger half and has to be counted"
+                !shipped.contains(forbidden),
+                "photo.rs mentions {forbidden}, so it may be downloading something again"
             );
         }
     }
 
-    /// Nothing downloads unasked: there is one fetch, reachable only from
-    /// `install`, which is reachable only from a command the user pressed.
-    #[test]
-    fn nothing_downloads_without_being_asked() {
-        let source = include_str!("photo.rs");
-        assert_eq!(source.matches("\nfn fetch(").count(), 1);
-        assert!(source.contains("pub fn install("));
-    }
-
-    /// An uninstalled photo mode says so rather than handing out a path to a
-    /// file that is not there.
+    /// A damaged install says so rather than handing out a path to a file that
+    /// is not there.
     #[test]
     fn the_runtime_path_is_only_given_when_it_exists() {
         if runtime_path().is_ok() {
-            return; // installed on this machine, which is a valid state
+            return; // the ordinary case: the installer put it there
         }
-        assert!(!status().installed);
+        assert!(!status().ready);
     }
 }

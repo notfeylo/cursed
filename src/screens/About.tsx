@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, FileText, Scale, ShieldCheck } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button, Card, SectionTitle } from "../components/ui";
-import { Markdown, sections, slug } from "../components/Markdown";
+import { Markdown } from "../components/Markdown";
 import { Mark } from "../components/Mark";
 import * as ipc from "../lib/ipc";
 
@@ -23,8 +23,8 @@ const DOCS: { kind: Doc; title: string; blurb: string; icon: React.ReactNode }[]
   },
   {
     kind: "licenses",
-    title: "LICENCES",
-    blurb: "Cursed, the bundled fonts, and every dependency",
+    title: "LICENSES",
+    blurb: "What is ours, and what belongs to somebody else",
     icon: <FileText size={14} />,
   },
 ];
@@ -102,34 +102,6 @@ export function About() {
         <p className="mt-2 px-1 text-[11px] text-text-dim">
           All three render from inside the app — no network, no browser.
         </p>
-
-        <SectionTitle>Project</SectionTitle>
-        <Card>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="ghost"
-              onClick={() =>
-                void ipc.openExternal("https://github.com/notfeylo/cursed").catch(() => undefined)
-              }
-            >
-              GITHUB
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                void ipc
-                  .openExternal("https://github.com/notfeylo/cursed/issues")
-                  .catch(() => undefined)
-              }
-            >
-              REPORT A BUG
-            </Button>
-          </div>
-          <p className="mt-3 text-[11px] text-text-dim">
-            MIT licensed. © 2026 feylo. Cursed changes only per-user pointer settings
-            and is not affiliated with Microsoft.
-          </p>
-        </Card>
       </div>
     </div>
   );
@@ -209,19 +181,9 @@ function UpdateStatusLine() {
   return (
     <Card>
       <p className={`text-[11px] break-words ${tone}`}>{line}</p>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Button variant="ghost" onClick={() => void check()} disabled={busy}>
+      <div className="mt-2">
+        <Button full variant="ghost" onClick={() => void check()} disabled={busy}>
           {busy ? "CHECKING" : "CHECK NOW"}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() =>
-            void ipc
-              .openExternal("https://github.com/notfeylo/cursed/releases/latest")
-              .catch(() => undefined)
-          }
-        >
-          DOWNLOAD MANUALLY
         </Button>
       </div>
     </Card>
@@ -231,10 +193,12 @@ function UpdateStatusLine() {
 /**
  * One legal document, read inside the app.
  *
- * Two things make a wall of legal text usable in a 420px window: knowing how
- * much is left, and being able to skip to the clause you came for. Hence the
- * progress rule under the header and the numbered section index — everything
- * else is the renderer's job.
+ * It used to need a section index to be usable, because Terms was seven
+ * numbered pages of prose in a 420px window. The documents were cut to five
+ * short sections each, which removed the problem rather than navigating around
+ * it — so the index went with it. The progress rule under the header stays: it
+ * costs nothing and it is the difference between a document that looks finite
+ * and one that does not.
  */
 function DocView({ kind, onBack }: { kind: Doc; onBack: () => void }) {
   const [text, setText] = useState("");
@@ -256,13 +220,6 @@ function DocView({ kind, onBack }: { kind: Doc; onBack: () => void }) {
     const span = el.scrollHeight - el.clientHeight;
     setProgress(span > 8 ? Math.min(1, el.scrollTop / span) : 1);
   };
-
-  const jump = (id: string) => {
-    const target = scroller.current?.querySelector(`#${CSS.escape(id)}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const index = text ? sections(text) : [];
 
   return (
     <div className="screen-in flex h-full flex-col">
@@ -289,30 +246,21 @@ function DocView({ kind, onBack }: { kind: Doc; onBack: () => void }) {
         </div>
       </div>
 
-      {index.length >= 3 && (
-        <div className="border-b border-border px-3 py-2">
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-            {index.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                title={s.text}
-                onClick={() => jump(slug(s.text))}
-                className="mono max-w-28 shrink-0 truncate rounded-full border border-border px-2 py-0.5 text-[10px] text-text-dim transition-colors duration-150 hover:border-accent hover:text-accent-hi"
-              >
-                {/^\d+\./.test(s.text) ? s.text.split(".")[0] : s.text}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* No tab strip.
+          There was one, built from the document's own headings, and it earned
+          its place when Terms was seven numbered pages: a wall of prose with no
+          way to reach the part you came for. All three documents are five short
+          sections now and fit in one scroll, so the strip was navigation for a
+          journey nobody takes — and it was the one control in the app that
+          scrolled sideways, in a typeface and a shape used nowhere else. */}
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       >
-        <Markdown source={text} />
+        <div className="mx-auto max-w-prose">
+          <Markdown source={text} />
+        </div>
         <div className="h-6" />
       </div>
     </div>

@@ -3,6 +3,7 @@ import { FlipHorizontal, FlipVertical, Plus, RotateCcw, RotateCw, Undo2 } from "
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { CropBox } from "../components/CropBox";
 import { MatteEditor } from "../components/MatteEditor";
 import { Button, Select, Slider, TextInput, Toggle } from "../components/ui";
 import * as ipc from "../lib/ipc";
@@ -209,7 +210,7 @@ export function CustomImport() {
   // point placed on the tip of an arrow is still on the tip after a quarter
   // turn, rather than staying where it was on screen and quietly coming to mean
   // the middle of the shaft.
-  const press = async (turn: ipc.Turn) => {
+  const press = async (turn: ipc.Turn | null, crop?: ipc.CropChange) => {
     if (!image || turning) return;
     setTurning(true);
     try {
@@ -217,6 +218,7 @@ export function CustomImport() {
         token: image.token,
         transform,
         turn,
+        crop,
         hotspot,
         outline,
       });
@@ -362,6 +364,28 @@ export function CustomImport() {
 
           <div className="panel mt-4 rounded-sm border border-border p-4">
             <div className="mb-3 flex items-baseline justify-between gap-3">
+              <span className="display text-[11px] text-text-muted">FRAMING</span>
+              <span className="mono shrink-0 text-[11px] text-text-dim">
+                {transform.crop ? "cropped" : "whole picture"}
+              </span>
+            </div>
+            <CropBox
+              src={turned?.dataUri ?? image.dataUri}
+              cropped={Boolean(transform.crop)}
+              busy={turning}
+              onCrop={(rect) => void press(null, { kind: "set", rect })}
+              onClear={() => void press(null, { kind: "clear" })}
+            />
+            <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+              Drag a box over the part you want. A cursor is a small square, so
+              cropping to the subject is usually the difference between artwork
+              that reads at 32 pixels and one that does not. The hotspot moves
+              into the new frame with the picture.
+            </p>
+          </div>
+
+          <div className="panel mt-4 rounded-sm border border-border p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
               <span className="display text-[11px] text-text-muted">HOTSPOT</span>
               <span className="mono shrink-0 text-[11px] text-text-dim">
                 {hotspot[0].toFixed(2)} · {hotspot[1].toFixed(2)}
@@ -411,21 +435,13 @@ export function CustomImport() {
                     probably will not look good.
                   </p>
                 )}
-                {/* The way out, and for a photograph there is now a better one
-                    than doing it by hand. The refusal says this is a photo;
-                    photo mode is the thing that cuts photos, so it is offered
-                    here rather than left to be discovered in Settings. */}
-                {!image.keyable && photo?.available && (
-                  <Button
-                    full
-                    onClick={() =>
-                      photo.installed ? void recut("photo") : go("settings")
-                    }
-                    disabled={busy}
-                  >
-                    {photo.installed
-                      ? "CUT IT OUT WITH PHOTO MODE"
-                      : `GET PHOTO MODE — ${(photo.downloadBytes / 1_048_576).toFixed(1)} MB`}
+                {/* The way out, and for a photograph a better one than doing
+                    it by hand. This used to send people to Settings to start a
+                    download; there is nothing to download, so the button now
+                    does the thing it names. */}
+                {!image.keyable && photo?.available && photo.ready && (
+                  <Button full onClick={() => void recut("photo")} disabled={busy}>
+                    CUT IT OUT AUTOMATICALLY
                   </Button>
                 )}
                 <Button full variant="ghost" onClick={() => setEditing(true)}>
@@ -598,7 +614,7 @@ function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
     <div className="p-4">
       {/* One invitation and nothing else inside the target.
           The format list used to sit under the label inside the same button, so
-          three unrelated lines of text competed at the centre of the screen and
+          three unrelated lines of text competed at the center of the screen and
           the actual instruction was the least prominent of them. The list is
           reference material — it belongs at the bottom of the screen, out of the
           way, not in the middle of the thing you are meant to click. */}
@@ -623,7 +639,7 @@ function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
 /**
  * What the importer accepts, in one line.
  *
- * This was a titled block with two labelled rows of chips and a paragraph — a
+ * This was a titled block with two labeled rows of chips and a paragraph — a
  * quarter of the screen spent on a list nobody reads twice, and read as clutter
  * rather than as reference. It says the same thing now: the formats, the size
  * limit, and that backgrounds come off by themselves.
@@ -644,7 +660,7 @@ function AcceptedFormats() {
 }
 
 /**
- * The hotspot is stored normalised, so dragging the crosshair here means the
+ * The hotspot is stored normalized, so dragging the crosshair here means the
  * same thing at 32 px and at 256 px.
  */
 function HotspotPicker({

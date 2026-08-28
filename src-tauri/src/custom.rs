@@ -282,6 +282,17 @@ pub fn preview(
         .collect())
 }
 
+/// A change to the crop rectangle, in the coordinates of what is on screen.
+///
+/// An `Option<[f32; 4]>` could not say this: `None` would have to mean both
+/// "leave the crop alone" and "remove it", and those are different requests.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "rect")]
+pub enum CropChange {
+    Set([f32; 4]),
+    Clear,
+}
+
 /// What the picker needs after a turn: the artwork, the ladder, and the point.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -313,16 +324,56 @@ pub struct Adjusted {
 pub fn adjust(
     token: &str,
     transform: &pipeline::Transform,
-    turn: pipeline::Turn,
+    turn: Option<pipeline::Turn>,
+    crop: Option<CropChange>,
     hotspot: (f32, f32),
     outline: bool,
 ) -> AppResult<Adjusted> {
-    let next = transform.then(turn);
-    let moved = match turn {
-        // Reset puts the artwork back as it arrived, so the click point travels
-        // home with it rather than staying at whatever fraction it reached.
-        pipeline::Turn::Reset => transform.unmap_point(hotspot),
-        _ => pipeline::Transform::move_point(turn, hotspot),
+    // **The crop is folded in before the turn, and that order is the whole
+    // reason this is one function.** A rectangle is drawn on the picture as it
+    // stands; a turn pressed in the same round would change what "as it stands"
+    // means. Cropping against the transform that was on screen when the
+    // rectangle was drawn keeps the two honest, and in practice the UI only ever
+    // sends one of them at a time.
+    let mut current = transform.clone();
+    let mut hotspot = hotspot;
+    match crop {
+        Some(CropChange::Set(rect)) => {
+            let sorted = [
+                rect[0].min(rect[2]).clamp(0.0, 1.0),
+                rect[1].min(rect[3]).clamp(0.0, 1.0),
+                rect[0].max(rect[2]).clamp(0.0, 1.0),
+                rect[1].max(rect[3]).clamp(0.0, 1.0),
+            ];
+            // The click point moves into the new frame with everything else.
+            // Left where it was it would still be a fraction, and so would come
+            // to mean a different place on a smaller picture.
+            hotspot = pipeline::Transform::move_point_into_crop(sorted, hotspot);
+            current.crop = Some(current.composed_crop(sorted));
+        }
+        Some(CropChange::Clear) => {
+            // The hotspot is not brought back with it: there is nowhere obvious
+            // to put it, and `suggested_hotspot` in the result gives the picker
+            // something to propose for the picture that is now there.
+            current.crop = None;
+        }
+        None => {}
+    }
+
+    let (next, moved) = match turn {
+        Some(turn) => (
+            current.then(turn),
+            match turn {
+                // Reset puts the artwork back as it arrived, so the click point
+                // travels home with it rather than staying at whatever fraction
+                // it reached.
+                pipeline::Turn::Reset => current.unmap_point(hotspot),
+                _ => pipeline::Transform::move_point(turn, hotspot),
+            },
+        ),
+        // A crop-only round. Nothing turned, so nothing moves beyond what the
+        // crop already did.
+        None => (current, hotspot),
     };
 
     let source = transformed(take_staged(token)?, &next);
@@ -808,7 +859,8 @@ mod tests {
         let turned = adjust(
             &staged.token,
             &pipeline::Transform::default(),
-            pipeline::Turn::RotateRight,
+            Some(pipeline::Turn::RotateRight),
+            None,
             mark,
             false,
         )
@@ -851,7 +903,8 @@ mod tests {
             let step = adjust(
                 &staged.token,
                 &transform,
-                pipeline::Turn::RotateRight,
+                Some(pipeline::Turn::RotateRight),
+                None,
                 hotspot,
                 false,
             )
@@ -866,7 +919,8 @@ mod tests {
         let mirrored = adjust(
             &staged.token,
             &transform,
-            pipeline::Turn::FlipHorizontal,
+            Some(pipeline::Turn::FlipHorizontal),
+            None,
             start,
             false,
         )
@@ -874,7 +928,8 @@ mod tests {
         let turned = adjust(
             &staged.token,
             &mirrored.transform,
-            pipeline::Turn::RotateLeft,
+            Some(pipeline::Turn::RotateLeft),
+            None,
             mirrored.hotspot,
             false,
         )
@@ -882,7 +937,8 @@ mod tests {
         let home = adjust(
             &staged.token,
             &turned.transform,
-            pipeline::Turn::Reset,
+            Some(pipeline::Turn::Reset),
+            None,
             turned.hotspot,
             false,
         )

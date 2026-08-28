@@ -56,6 +56,20 @@ pub fn register(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     Ok(())
 }
 
+/// Whether this build can actually register that key combination.
+///
+/// `register` skips an accelerator it cannot parse and carries on, which is the
+/// right behaviour there — one bad entry in a settings file must not cost the
+/// other six shortcuts. It is the wrong thing to do to somebody who has just
+/// pressed a key combination and is watching to see whether it took: they get a
+/// binding that is displayed, saved, and does nothing.
+///
+/// So the UI asks first, through the same parser that will do the registering.
+/// There is no second implementation to disagree with.
+pub fn is_registerable(accelerator: &str) -> bool {
+    !accelerator.trim().is_empty() && Shortcut::from_str(accelerator).is_ok()
+}
+
 pub fn unregister_all(app: &AppHandle) -> AppResult<()> {
     app.global_shortcut()
         .unregister_all()
@@ -141,6 +155,26 @@ fn reapply(app: &AppHandle, descriptor: &crate::session::AppliedDescriptor) -> A
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The defaults must be registerable, or a fresh install ships with three
+    /// hotkeys that quietly do nothing.
+    #[test]
+    fn every_default_hotkey_can_be_registered() {
+        let defaults = Settings::default();
+        assert!(is_registerable(&defaults.hotkey_toggle), "{}", defaults.hotkey_toggle);
+        assert!(is_registerable(&defaults.hotkey_open), "{}", defaults.hotkey_open);
+        for accelerator in &defaults.hotkey_presets {
+            assert!(is_registerable(accelerator), "{accelerator}");
+        }
+    }
+
+    /// A bare key is refused. A global shortcut is global: bound to `A` it
+    /// would swallow that letter in every other application on the machine.
+    #[test]
+    fn a_shortcut_needs_more_than_one_key() {
+        assert!(!is_registerable(""));
+        assert!(!is_registerable("   "));
+    }
 
     #[test]
     fn the_default_accelerators_all_parse() {

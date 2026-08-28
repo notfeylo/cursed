@@ -294,7 +294,7 @@ fn decode_dib(data: &[u8], entry: Entry) -> AppResult<Bitmap> {
     let and_len = and_stride.saturating_mul(height as usize);
     if xor_stride == 0 {
         return Err(AppError::invalid(
-            "an image inside this cursor file declares no colour depth",
+            "an image inside this cursor file declares no color depth",
         ));
     }
 

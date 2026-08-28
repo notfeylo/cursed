@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /* Shared primitives. Deliberately few — six screens do not need a component library. */
 
-const cx = (...parts: (string | false | null | undefined)[]) =>
+export const cx = (...parts: (string | false | null | undefined)[]) =>
   parts.filter(Boolean).join(" ");
 
 export function Button({
@@ -25,7 +25,7 @@ export function Button({
   const kind =
     variant === "primary"
       ? // A gradient plus a top rim reads as a lit surface rather than a
-        // rectangle of colour, which is most of what makes a button feel solid.
+        // rectangle of color, which is most of what makes a button feel solid.
         "bg-gradient-to-b from-accent-hi to-accent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:-translate-y-px hover:glow"
       : variant === "danger"
         ? "border border-danger/40 text-danger hover:bg-danger/10 hover:border-danger"

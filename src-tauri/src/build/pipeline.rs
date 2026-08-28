@@ -741,6 +741,65 @@ impl Transform {
         point
     }
 
+    /// The crop rectangle to store, given one drawn on what is **currently on
+    /// screen**.
+    ///
+    /// Two changes of coordinates, and both are needed.
+    ///
+    /// `apply` crops *first* and turns afterwards, so `self.crop` is always in
+    /// fractions of the artwork as it arrived. What the user drew is in
+    /// fractions of the picture in front of them, which has already been cropped
+    /// once and then turned and possibly mirrored. Storing the drawn rectangle
+    /// directly would crop the original by a rectangle that describes a
+    /// different picture — visibly wrong the moment anything has been rotated,
+    /// and wrong in a way that looks like the crop tool being broken.
+    ///
+    /// So: undo the turn and the mirror to get back to the cropped picture, then
+    /// undo the existing crop to get back to the original. Both corners go
+    /// through, and the result is sorted afterwards because unmapping can swap
+    /// which corner is which — a quarter turn takes a top-left corner to a
+    /// bottom-left one.
+    pub fn composed_crop(&self, [vx0, vy0, vx1, vy1]: [f32; 4]) -> [f32; 4] {
+        let a = self.unmap_point((vx0, vy0));
+        let b = self.unmap_point((vx1, vy1));
+        let (mut x0, mut x1) = (a.0.min(b.0), a.0.max(b.0));
+        let (mut y0, mut y1) = (a.1.min(b.1), a.1.max(b.1));
+
+        if let Some([cx0, cy0, cx1, cy1]) = self.crop {
+            let (w, h) = (cx1 - cx0, cy1 - cy0);
+            x0 = cx0 + x0 * w;
+            x1 = cx0 + x1 * w;
+            y0 = cy0 + y0 * h;
+            y1 = cy0 + y1 * h;
+        }
+
+        // A rectangle with no area would crop to nothing and `cropped` would be
+        // asked for a zero-pixel bitmap. A floor of one per cent of the original
+        // is smaller than anything anyone can draw on a preview and is still a
+        // real picture.
+        const MIN: f32 = 0.01;
+        if x1 - x0 < MIN {
+            x1 = (x0 + MIN).min(1.0);
+            x0 = x1 - MIN;
+        }
+        if y1 - y0 < MIN {
+            y1 = (y0 + MIN).min(1.0);
+            y0 = y1 - MIN;
+        }
+        [x0.clamp(0.0, 1.0), y0.clamp(0.0, 1.0), x1.clamp(0.0, 1.0), y1.clamp(0.0, 1.0)]
+    }
+
+    /// Where a point on the current view lands once that view is cropped to
+    /// `rect`. Both are in view coordinates, so this is just a rescale.
+    pub fn move_point_into_crop(
+        [rx0, ry0, rx1, ry1]: [f32; 4],
+        (x, y): (f32, f32),
+    ) -> (f32, f32) {
+        let w = (rx1 - rx0).max(f32::EPSILON);
+        let h = (ry1 - ry0).max(f32::EPSILON);
+        (((x - rx0) / w).clamp(0.0, 1.0), ((y - ry0) / h).clamp(0.0, 1.0))
+    }
+
     pub fn is_identity(&self) -> bool {
         self.quarter_turns % 4 == 0
             && !self.flip_h
@@ -1073,6 +1132,72 @@ pub fn preview_ladder(master: &Bitmap, options: &Finish) -> AppResult<Vec<(u32, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn close(a: [f32; 4], b: [f32; 4]) -> bool {
+        a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() < 1e-5)
+    }
+
+    /// With nothing done to the picture, what you drew is what is stored.
+    #[test]
+    fn a_crop_on_an_untouched_picture_is_taken_as_drawn() {
+        let t = Transform::default();
+        assert!(close(t.composed_crop([0.25, 0.10, 0.75, 0.60]), [0.25, 0.10, 0.75, 0.60]));
+    }
+
+    /// **The case that makes this function necessary.**
+    ///
+    /// `apply` crops before it turns, so a rectangle drawn on a picture that has
+    /// been turned a quarter has to be un-turned before it is stored. Storing it
+    /// as drawn would take a rectangle from the wrong side of the original — and
+    /// on a square image it would look plausible, which is worse.
+    ///
+    /// A quarter turn clockwise sends `(x, y)` to `(1-y, x)`, so undoing it
+    /// sends `(x, y)` back to `(y, 1-x)`. The left-hand strip of the turned
+    /// picture is the bottom strip of the original.
+    #[test]
+    fn a_crop_drawn_on_a_turned_picture_is_stored_against_the_original() {
+        let turned = Transform { quarter_turns: 1, ..Default::default() };
+        // The left quarter of what is on screen.
+        let stored = turned.composed_crop([0.0, 0.0, 0.25, 1.0]);
+        assert!(
+            close(stored, [0.0, 0.75, 1.0, 1.0]),
+            "expected the bottom strip of the original, got {stored:?}"
+        );
+    }
+
+    /// Cropping a cropped picture nests rather than replaces.
+    ///
+    /// The second rectangle is drawn on the first crop's output, so the middle
+    /// half of a picture that is already the middle half of the original is the
+    /// middle quarter of the original — not the middle half again.
+    #[test]
+    fn cropping_twice_composes_into_the_original() {
+        let once = Transform { crop: Some([0.25, 0.25, 0.75, 0.75]), ..Default::default() };
+        let twice = once.composed_crop([0.0, 0.0, 0.5, 0.5]);
+        assert!(close(twice, [0.25, 0.25, 0.5, 0.5]), "got {twice:?}");
+    }
+
+    /// A rectangle with no area would ask `cropped` for a zero-pixel bitmap.
+    #[test]
+    fn a_crop_with_no_area_is_widened_rather_than_producing_nothing() {
+        let t = Transform::default();
+        let degenerate = t.composed_crop([0.5, 0.5, 0.5, 0.5]);
+        assert!(degenerate[2] - degenerate[0] > 0.0);
+        assert!(degenerate[3] - degenerate[1] > 0.0);
+    }
+
+    /// The click point travels into the new frame with the picture.
+    #[test]
+    fn the_hotspot_moves_into_the_cropped_frame() {
+        // The middle of the picture, cropped to the middle half, is still the
+        // middle — but expressed against the smaller frame.
+        let moved = Transform::move_point_into_crop([0.25, 0.25, 0.75, 0.75], (0.5, 0.5));
+        assert!((moved.0 - 0.5).abs() < 1e-5 && (moved.1 - 0.5).abs() < 1e-5);
+
+        // The top-left of the crop becomes the top-left of what is left.
+        let corner = Transform::move_point_into_crop([0.25, 0.25, 0.75, 0.75], (0.25, 0.25));
+        assert!(corner.0.abs() < 1e-5 && corner.1.abs() < 1e-5);
+    }
 
     /// A picture with no symmetry at all: not square, and every pixel its own
     /// colour. Anything that confuses the two axes, or a turn with its

@@ -67,6 +67,14 @@ export interface PackSummary {
 /** Which roles a cursor is applied to. */
 export type ApplyMode = "ArrowOnly" | "Recommended" | "All" | "Blend";
 
+/**
+ * What the hand — the pointer Windows shows over a link — is made of.
+ *
+ * `Pack` is what every cursor did before this existed: the pack's own hand
+ * artwork, which for a lot of the catalog is a second, unrelated drawing.
+ */
+export type HoverStyle = "Pack" | "Pointer" | "Mark";
+
 export interface Preset {
   id: string;
   name: string;
@@ -78,6 +86,7 @@ export interface Preset {
   outline: boolean;
   hotkey: string | null;
   isDefault: boolean;
+  hoverStyle: HoverStyle;
 }
 
 export interface Settings {
@@ -90,11 +99,13 @@ export interface Settings {
   cursorSize: number | null;
   tint: string;
   outline: boolean;
-  /** Whether the size control moves the link hand and the text I-beam too. */
+  /** Whether the size control moves the link hand and the text cursor too. */
   scaleAllRoles: boolean;
   applyMode: ApplyMode;
+  /** What the link hand is. */
+  hoverStyle: HoverStyle;
   blendPack: string;
-  /** Recolour catalog tiles to the tint. Off by default — see Settings. */
+  /** Recolor catalog tiles to the tint. Off by default — see Settings. */
   tintPreviews: boolean;
   animationSpeed: number;
   reapplyOnResume: boolean;

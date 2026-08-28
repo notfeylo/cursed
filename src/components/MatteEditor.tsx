@@ -12,7 +12,7 @@ import type { ImportedImage } from "../lib/types";
  *
  * ## Everything happens on a canvas, and the alpha is the only thing edited
  *
- * The colour channels are never touched. A brush that painted colour would be a
+ * The color channels are never touched. A brush that painted color would be a
  * paint program; what this does is decide, per pixel, how much of the image is
  * there. That keeps every stroke reversible in principle and makes "apply"
  * nothing more than reading the canvas back out as a PNG.
@@ -141,7 +141,7 @@ export function MatteEditor({
   /**
    * One dab of the brush.
    *
-   * Alpha only, and squared falloff from the centre so an edge worked by hand
+   * Alpha only, and squared falloff from the center so an edge worked by hand
    * does not end up harder than the antialiased one beside it.
    */
   const dab = (clientX: number, clientY: number) => {
@@ -177,8 +177,8 @@ export function MatteEditor({
         if (mode === "erase") {
           frame.data[local + 3] = Math.round(here * (1 - strength));
         } else if (original) {
-          // Restore puts back what was there, colour and all — a pixel the
-          // matte cleared had its colour zeroed with its alpha, so restoring
+          // Restore puts back what was there, color and all — a pixel the
+          // matte cleared had its color zeroed with its alpha, so restoring
           // the alpha alone would paint transparent black.
           const global = (y * canvas.width + x) * 4;
           const target = original.data[global + 3] ?? 0;

@@ -5,7 +5,7 @@ import type { ActiveState, PackSummary, Preset, Settings } from "./lib/types";
 export type View =
   | "home"
   | "catalog"
-  | "customise"
+  | "customize"
   | "custom"
   | "saved"
   | "settings"
@@ -21,8 +21,9 @@ export const DEFAULT_SETTINGS: Settings = {
   cursorSize: null,
   tint: "#2E8BFF",
   outline: true,
-  scaleAllRoles: false,
+  scaleAllRoles: true,
   applyMode: "Blend",
+  hoverStyle: "Pack",
   blendPack: "precision-gap-cross",
   tintPreviews: false,
   animationSpeed: 1,
@@ -87,7 +88,7 @@ export const useStore = create<Store>((set, get) => ({
   selected: null,
 
   go: (view) => set({ view }),
-  select: (pack) => set({ selected: pack, view: "customise" }),
+  select: (pack) => set({ selected: pack, view: "customize" }),
   setError: (error) => set({ error }),
   setPreviewing: (previewing) => set({ previewing }),
 

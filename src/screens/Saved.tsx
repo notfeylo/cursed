@@ -42,6 +42,7 @@ export function Saved() {
         created: new Date().toISOString(),
         basePack: base,
         overrides: {},
+        hoverStyle: settings.hoverStyle,
         tint: active.tint,
         size: active.size,
         outline: settings.outline,
@@ -110,7 +111,7 @@ export function Saved() {
               <div className="flex items-start gap-2">
                 {previewFor(preset) && (
                   // Masked fill, not a drawn image — the thumbnail has to show
-                  // the preset's own colour, not the base pack's default.
+                  // the preset's own color, not the base pack's default.
                   <span
                     role="img"
                     aria-label={preset.name}
@@ -219,7 +220,7 @@ export function Saved() {
 
         {presets.length === 0 && (
           <p className="mt-4 text-center text-[11px] text-text-dim">
-            A preset stores the whole pointer — pack, colour, size and outline — so you can
+            A preset stores the whole pointer — pack, color, size and outline — so you can
             switch back to it with one click or a hotkey.
           </p>
         )}

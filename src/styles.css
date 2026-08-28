@@ -93,7 +93,7 @@
   color-scheme: dark;
 }
 
-/* A faint grid, used only behind the large cursor preview on Customise. It
+/* A faint grid, used only behind the large cursor preview on Customize. It
    gives that preview a sense of scale and shows where transparency is, which is
    the one place in the app where that matters. It is deliberately no longer the
    app's background: a repeating pattern behind everything flattens whatever sits
@@ -179,9 +179,9 @@
 /* ────────────────────────────────────────────────────────────
    Utilities
    ──────────────────────────────────────────────────────────── */
-/* Hover on a tile: it lifts and casts, rather than gaining a coloured border.
+/* Hover on a tile: it lifts and casts, rather than gaining a colored border.
    An accent outline on hover competes with the focus ring — which has to stay
-   an outline, because that is what keyboard users look for — and it recolours
+   an outline, because that is what keyboard users look for — and it recolors
    the very thing being previewed. Depth says "this one" without repainting it. */
 @utility tile {
   transition:

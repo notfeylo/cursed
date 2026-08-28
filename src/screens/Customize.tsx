@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { CURSOR_SIZES } from "../lib/sizes";
 import { Check } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { Button, Card, Select, Slider, TextInput, Toggle } from "../components/ui";
+import { Button, Card, Select, Slider, Toggle } from "../components/ui";
+import { ColorPicker } from "../components/ColorPicker";
 import * as ipc from "../lib/ipc";
-import type { ApplyMode } from "../lib/types";
+import type { ApplyMode, HoverStyle } from "../lib/types";
 import { useStore } from "../store";
 
 const SWATCHES = [
@@ -25,12 +26,12 @@ const SWATCHES = [
 /**
  * One cursor, with room to work on it.
  *
- * The catalog used to carry the colour swatches and size slider along the
+ * The catalog used to carry the color swatches and size slider along the
  * bottom, which meant browsing and tweaking fought for the same cramped strip.
  * Choosing a cursor now opens here, where the preview is big enough to judge and
  * every control has space.
  */
-export function Customise() {
+export function Customize() {
   const pack = useStore((s) => s.selected);
   const settings = useStore((s) => s.settings);
   const packs = useStore((s) => s.packs);
@@ -43,6 +44,7 @@ export function Customise() {
   const [size, setSize] = useState(settings.cursorSize ?? 32);
   const [outline, setOutline] = useState(settings.outline);
   const [mode, setMode] = useState<ApplyMode>(settings.applyMode);
+  const [hover, setHover] = useState<HoverStyle>(settings.hoverStyle);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -55,7 +57,7 @@ export function Customise() {
   if (!pack) {
     return (
       <div className="screen-in flex h-full flex-col">
-        <ScreenHeader title="CUSTOMISE" back="catalog" />
+        <ScreenHeader title="CUSTOMIZE" back="catalog" />
         <div className="grid flex-1 place-items-center px-6 text-center text-[12px] text-text-dim">
           Pick a cursor from the catalog first.
         </div>
@@ -63,9 +65,9 @@ export function Customise() {
     );
   }
 
-  // Imported artwork is somebody's finished image. Recolouring it would flatten
-  // it to a silhouette, so the colour controls simply do not apply.
-  const recolourable = pack.recolorable;
+  // Imported artwork is somebody's finished image. Recoloring it would flatten
+  // it to a silhouette, so the color controls simply do not apply.
+  const recolorable = pack.recolorable;
 
   const apply = async () => {
     setBusy(true);
@@ -77,8 +79,15 @@ export function Customise() {
         size,
         outline,
         applyMode: mode,
+        hoverStyle: hover,
       });
-      await patchSettings({ tint, cursorSize: size, outline, applyMode: mode });
+      await patchSettings({
+        tint,
+        cursorSize: size,
+        outline,
+        applyMode: mode,
+        hoverStyle: hover,
+      });
       await refreshActive();
       setDone(true);
     } catch (e) {
@@ -102,7 +111,7 @@ export function Customise() {
                 "radial-gradient(ellipse 60% 80% at 50% 40%, var(--accent-glow), transparent 70%)",
             }}
           />
-          {recolourable ? (
+          {recolorable ? (
             <span
               role="img"
               aria-label={pack.name}
@@ -132,36 +141,46 @@ export function Customise() {
           </span>
         </div>
 
-        {recolourable ? (
+        {recolorable ? (
           <>
-            <span className="display mb-1 block text-[10px] text-text-dim">COLOUR</span>
+            <span className="display mb-1 block text-[10px] text-text-dim">COLOR</span>
             <Card>
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                {SWATCHES.map((swatch) => (
-                  <button
-                    key={swatch}
-                    type="button"
-                    aria-label={swatch}
-                    onClick={() => setTint(swatch)}
-                    style={{ background: swatch }}
-                    className={`h-5 w-5 rounded-full transition-transform duration-150 ${
-                      tint.toLowerCase() === swatch.toLowerCase()
-                        ? "scale-125 ring-1 ring-text ring-offset-2 ring-offset-surface"
-                        : "hover:scale-110"
-                    }`}
-                  />
-                ))}
-              </div>
-              <TextInput mono value={tint} maxLength={7} onChange={setTint} placeholder="#2E8BFF" />
+              <ColorPicker value={tint} onChange={setTint} swatches={SWATCHES} />
             </Card>
           </>
         ) : (
           <Card>
             <p className="text-[11px] text-text-muted">
-              This is an imported cursor, so it keeps its own colours. Size still applies.
+              This is an imported cursor, so it keeps its own colors. Size still applies.
             </p>
           </Card>
         )}
+
+        <span className="display mt-3 mb-1 block text-[10px] text-text-dim">
+          HOVERING A LINK
+        </span>
+        <Card>
+          <p className="mb-2 text-[11px] text-text-muted">
+            Windows shows a different pointer over links and buttons. Many cursors
+            come with their own, which is not always the one you want.
+          </p>
+          <Select<HoverStyle>
+            value={hover}
+            onChange={setHover}
+            options={[
+              { value: "Pack", label: "Use this cursor's own hover" },
+              { value: "Pointer", label: "Keep my pointer — don't change it" },
+              { value: "Mark", label: "Use the Cursed mark" },
+            ]}
+          />
+          <p className="mt-2 text-[11px] text-text-dim">
+            {hover === "Pack"
+              ? "Whatever artwork this cursor was made with."
+              : hover === "Pointer"
+                ? "Nothing changes when you hover a link. The pointer you picked stays on screen."
+                : "The Cursed mark, in the color you chose above."}
+          </p>
+        </Card>
 
         <span className="display mt-3 mb-1 block text-[10px] text-text-dim">SIZE & SHAPE</span>
         <Card>
@@ -191,7 +210,7 @@ export function Customise() {
             ))}
           </div>
 
-          {recolourable && (
+          {recolorable && (
             <Toggle
               checked={outline}
               onChange={setOutline}

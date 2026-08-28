@@ -12,7 +12,7 @@ const HOVER_DEBOUNCE_MS = 120;
 /**
  * Browsing only.
  *
- * The colour swatches and size slider used to live along the bottom of this
+ * The color swatches and size slider used to live along the bottom of this
  * screen, competing with the grid for a few cramped pixels. They now have a
  * screen of their own, reached by choosing a cursor — so this one does the one
  * job it is good at: showing you what there is.
@@ -79,6 +79,7 @@ export function Catalog() {
           size,
           outline: settings.outline,
           applyMode: settings.applyMode,
+          hoverStyle: settings.hoverStyle,
         })
         .catch(() => undefined);
     }, HOVER_DEBOUNCE_MS);
@@ -93,7 +94,7 @@ export function Catalog() {
   };
 
   /**
-   * Choosing a cursor opens it for customising rather than applying it here.
+   * Choosing a cursor opens it for customizing rather than applying it here.
    *
    * Browsing and tweaking were sharing one cramped strip along the bottom, so
    * neither had room. Picking is now a decision to look closer, not a commitment.
@@ -114,7 +115,7 @@ export function Catalog() {
         <span className="mono text-[10px] text-text-dim">{visible.length}</span>
       </ScreenHeader>
 
-      <div className="border-b border-border px-3 pb-2">
+      <div className="border-b border-border px-3 py-2">
         <div className="relative">
           <Search
             size={13}
@@ -174,7 +175,7 @@ export function Catalog() {
       </div>
 
       <div className="border-t border-border bg-bg/95 px-3 py-2 backdrop-blur">
-        {/* Colour is an option, not the default view. With it off you see each
+        {/* Color is an option, not the default view. With it off you see each
             cursor as it actually looks, which is the only way to tell two
             hundred of them apart. */}
         <button
@@ -190,14 +191,14 @@ export function Catalog() {
               : "border-border text-text-dim hover:border-border-hi hover:text-text-muted"
           }`}
         >
-          <span>{tintPreviews ? "SHOWING TINTED" : "SHOWING TRUE COLOURS"}</span>
+          <span>{tintPreviews ? "SHOWING TINTED" : "SHOWING TRUE COLORS"}</span>
           <span className="text-text-dim">
-            {tintPreviews ? "TAP FOR TRUE COLOURS" : "TAP TO TINT"}
+            {tintPreviews ? "TAP FOR TRUE COLORS" : "TAP TO TINT"}
           </span>
         </button>
 
         <p className="text-center text-[11px] text-text-dim">
-          Pick one to set its colour and size.
+          Pick one to set its color and size.
         </p>
       </div>
     </div>
@@ -214,7 +215,7 @@ function Tile({
 }: {
   pack: PackSummary;
   tint: string;
-  /** Recolour this tile to the tint, rather than showing its own colours. */
+  /** Recolor this tile to the tint, rather than showing its own colors. */
   tinted: boolean;
   onEnter: () => void;
   onLeave: () => void;
@@ -237,10 +238,10 @@ function Tile({
 
       {pack.recolorable && tinted ? (
         /*
-          Our own artwork is greyscale, so the preview is used as an alpha mask
+          Our own artwork is grayscale, so the preview is used as an alpha mask
           over a solid fill: the grid tracks the swatch the user just picked
           with no render round-trip per tile. Drawing the PNG itself would show
-          the pack's default colour and quietly contradict the swatch row.
+          the pack's default color and quietly contradict the swatch row.
         */
         <span
           role="img"
@@ -260,8 +261,8 @@ function Tile({
         />
       ) : (
         /*
-          An imported cursor is somebody's finished, full-colour artwork. Masking
-          it to the accent colour would flatten it to a silhouette and throw away
+          An imported cursor is somebody's finished, full-color artwork. Masking
+          it to the accent color would flatten it to a silhouette and throw away
           the very thing that makes it worth importing, so it is drawn as-is.
         */
         <img

@@ -443,10 +443,7 @@ pub fn run() {
             commands::open_matte_editor,
             commands::preview_matte,
             commands::get_photo_status,
-            commands::install_photo_mode,
-            commands::get_photo_progress,
-            commands::cancel_photo_install,
-            commands::remove_photo_mode,
+            commands::hotkey_is_registerable,
             commands::suggested_backup_name,
             commands::export_all_data,
             commands::import_all_data,
@@ -460,12 +457,9 @@ pub fn run() {
             commands::list_custom_cursors,
             commands::get_storage_dir,
             commands::open_storage_dir,
-            commands::get_cache_size,
-            commands::clear_cache,
             commands::get_legal_doc,
             commands::get_release_notes,
             commands::get_build_info,
-            commands::get_diagnostics,
             commands::check_for_updates,
             commands::download_update,
             commands::install_update,
@@ -492,11 +486,6 @@ pub fn run() {
             // gone, and the version now running is the only evidence of how it
             // went.
             updates::settle_and_report();
-
-            // And whether a photo-mode removal is still waiting on a library
-            // that was loaded when the user pressed the button. Here because
-            // this is the last moment before anything can load it again.
-            photo::sweep_pending_removal();
 
             // Before anything else touches the registry: capture what was there
             // first. Idempotent, so this is a no-op on every launch but the

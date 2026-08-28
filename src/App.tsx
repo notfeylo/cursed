@@ -3,7 +3,7 @@ import { TitleBar } from "./components/TitleBar";
 import { Banner } from "./components/ui";
 import { Home } from "./screens/Home";
 import { Catalog } from "./screens/Catalog";
-import { Customise } from "./screens/Customise";
+import { Customize } from "./screens/Customize";
 import { CustomImport } from "./screens/CustomImport";
 import { Saved } from "./screens/Saved";
 import { SettingsScreen } from "./screens/Settings";
@@ -77,8 +77,8 @@ function MainApp() {
           <Home />
         ) : view === "catalog" ? (
           <Catalog />
-        ) : view === "customise" ? (
-          <Customise />
+        ) : view === "customize" ? (
+          <Customize />
         ) : view === "custom" ? (
           <CustomImport />
         ) : view === "saved" ? (
@@ -104,12 +104,12 @@ function Booting() {
 /**
  * The supplied artwork, held still, behind the entire app.
  *
- * Tinted toward the brand blue rather than left neutral grey, and darkened by a
+ * Tinted toward the brand blue rather than left neutral gray, and darkened by a
  * vignette so type and controls keep their contrast wherever a fold happens to
  * be bright. Nothing animates: this window sits in the tray all day, and a
  * moving background composites forever for the ten seconds anyone looks at it.
  *
- * The source arrived as a 659 KB screenshot. Blurred greyscale survives being
+ * The source arrived as a 659 KB screenshot. Blurred grayscale survives being
  * halved and flattened to one channel with nothing visible lost — 126 KB, and it
  * is scaled to fill the window regardless.
  */

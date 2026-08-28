@@ -14,6 +14,7 @@ use crate::cursor::scheme::CursorSet;
 use crate::error::{AppError, AppResult};
 use crate::packs::art;
 use crate::packs::styles::{self, PackDef};
+use crate::state::settings::HoverStyle;
 use crate::paths;
 use crate::util::parse_hex_color;
 use serde::Serialize;
@@ -120,7 +121,7 @@ pub fn glyph_size(role: Role, entry: u32) -> u32 {
 impl RenderSpec {
     fn rgb(&self) -> AppResult<[u8; 3]> {
         parse_hex_color(&self.tint)
-            .ok_or_else(|| AppError::invalid(format!("{} is not a colour", self.tint)))
+            .ok_or_else(|| AppError::invalid(format!("{} is not a color", self.tint)))
     }
 
     /// Cache directory name. Every input that changes a pixel is in the key, so
@@ -516,6 +517,105 @@ const POINTER_LIKE_ROLES: [Role; 6] = [
     Role::Person,
 ];
 
+/// Replaces the hand in a finished set, if the user asked for something else.
+///
+/// **Applied here, to the assembled set, rather than inside `build_role`.** The
+/// hand can arrive from three unrelated places — drawn from a generated pack,
+/// copied out of an imported pack's own files, or built from the user's image —
+/// and the choice has to mean the same thing in all three. Doing it once at the
+/// end is the only way that is true by construction rather than by three
+/// implementations agreeing.
+///
+/// A no-op for [`HoverStyle::Pack`], which is what every set already was.
+pub fn apply_hover_style(
+    set: &mut CursorSet,
+    style: HoverStyle,
+    spec: &RenderSpec,
+) -> AppResult<()> {
+    match style {
+        HoverStyle::Pack => {}
+        HoverStyle::Pointer => {
+            // The same file, not a re-render of it. Whatever the arrow ended up
+            // being — generated, imported, a photograph the user cut out — the
+            // hand becomes exactly that, so hovering a link changes nothing.
+            //
+            // A set with no arrow is left alone rather than emptied of its hand:
+            // that only happens for a partial apply, and a missing hand is worse
+            // than an unexpected one.
+            if let Some(arrow) = set.files.get(&Role::Arrow).cloned() {
+                set.insert(Role::Hand, arrow);
+            }
+        }
+        HoverStyle::Mark => {
+            set.insert(Role::Hand, build_mark_hand(spec)?);
+        }
+    }
+    Ok(())
+}
+
+/// The Cursed mark, built as a hand cursor.
+///
+/// Cached under its own pack id so it cannot collide with a real pack's
+/// directory, and keyed by the same spec as everything else — the mark is tinted
+/// and outlined like any other role, because a hand that ignored the accent
+/// color would be the one part of the pointer set that did not match.
+///
+/// Rendered per rung from the vector for the same reason `build_role` does it:
+/// resampling one bitmap is what makes a large cursor soft.
+fn build_mark_hand(spec: &RenderSpec) -> AppResult<PathBuf> {
+    let dir = paths::cache_dir()?.join("_mark-hand").join(spec.key(false));
+    let file = dir.join("Hand.cur");
+    if file.exists() {
+        return Ok(file);
+    }
+    std::fs::create_dir_all(&dir)?;
+
+    let finish = finish_for(spec)?;
+    let mut images = Vec::with_capacity(TARGET_SIZES.len());
+    for size in TARGET_SIZES {
+        // Follows the same cap as any other hand: `glyph_size` is what decides
+        // whether the hand grows with the pointer, and the mark is a hand.
+        let glyph = glyph_size(Role::Hand, size);
+        let rendered = svg::render(&crate::packs::brand::small_mark_svg("#ffffff"), glyph)?;
+        let colored = rendered.tinted(finish.tint.unwrap_or([255, 255, 255]));
+        let outlined = if finish.outline {
+            colored.with_contrast_outline()
+        } else {
+            colored
+        };
+        let finished = outlined.centred_in(size);
+
+        // The mark is a pointer seen almost edge-on, so its hotspot is the tip:
+        // the top-left corner of the glyph, moved with it into the middle of the
+        // canvas exactly as `build_role` does.
+        let max = (size - 1) as f32;
+        let offset = (size.saturating_sub(glyph) / 2) as f32;
+        let span = glyph.saturating_sub(1) as f32;
+        images.push(CursorImage::new(
+            finished,
+            (
+                (offset + 0.06 * span).round().clamp(0.0, max) as u16,
+                (offset + 0.04 * span).round().clamp(0.0, max) as u16,
+            ),
+        ));
+    }
+
+    let bytes = cur_writer::write_cur(&images)?;
+    let temp = dir.join(format!("Hand.{}.tmp", std::process::id()));
+    std::fs::write(&temp, &bytes)?;
+    if let Err(e) = crate::cursor::engine::verify_loadable(&temp) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&temp, &file) {
+        let _ = std::fs::remove_file(&temp);
+        if !file.exists() {
+            return Err(e.into());
+        }
+    }
+    Ok(file)
+}
+
 /// Builds a complete 17-role scheme.
 pub fn build_set(pack_id: &str, spec: &RenderSpec) -> AppResult<CursorSet> {
     let set = build_roles(pack_id, &ALL_ROLES, spec)?;
@@ -535,6 +635,12 @@ pub fn default_tint(pack_id: &str) -> Option<&'static str> {
 }
 
 /// Total bytes of rendered cursors on disk.
+///
+/// Read by the maintainer's report in `commands::get_diagnostics` and nothing
+/// else. There is no longer a way for a user to see this or to clear it: the
+/// cache is how the apply-latency budget in PRD §12 is met, emptying it only
+/// makes the next apply of every pack slow again, and a number a user can do
+/// nothing useful with does not belong in Settings.
 pub fn cache_size() -> AppResult<u64> {
     fn walk(dir: &std::path::Path) -> u64 {
         let Ok(entries) = std::fs::read_dir(dir) else {
@@ -550,19 +656,6 @@ pub fn cache_size() -> AppResult<u64> {
             .sum()
     }
     Ok(walk(&paths::cache_dir()?))
-}
-
-/// Empties the render cache. Safe at any time: anything removed is rebuilt on
-/// the next apply, and files still referenced by the registry are re-created
-/// before they are needed because a re-apply always rebuilds first.
-pub fn clear_cache() -> AppResult<u64> {
-    let dir = paths::cache_dir()?;
-    let freed = cache_size()?;
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir)?;
-    }
-    std::fs::create_dir_all(&dir)?;
-    Ok(freed)
 }
 
 /// Deletes cache directories rendered by a different version of the renderer.
@@ -644,6 +737,55 @@ pub fn export_sources(pack: &PackDef, into: &std::path::Path) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plain_spec() -> RenderSpec {
+        RenderSpec { tint: "#2E8BFF".into(), size: 32, outline: false }
+    }
+
+    fn a_set_with_two_different_roles() -> CursorSet {
+        let mut set = CursorSet::default();
+        set.insert(Role::Arrow, PathBuf::from("arrow.cur"));
+        set.insert(Role::Hand, PathBuf::from("the-packs-own-hand.cur"));
+        set
+    }
+
+    /// The default changes nothing, which is the whole reason it is the default.
+    #[test]
+    fn keeping_the_packs_hand_leaves_the_set_exactly_as_it_was() {
+        let mut set = a_set_with_two_different_roles();
+        apply_hover_style(&mut set, HoverStyle::Pack, &plain_spec()).unwrap();
+        assert_eq!(set.get(Role::Hand), Some(PathBuf::from("the-packs-own-hand.cur")).as_deref());
+        assert_eq!(set.get(Role::Arrow), Some(PathBuf::from("arrow.cur")).as_deref());
+    }
+
+    /// **The complaint this feature exists for.** Somebody picks a cursor,
+    /// hovers a link, and gets a completely different drawing. Asking for the
+    /// pointer to be the hand has to mean the file is literally the same one —
+    /// not a re-render, which could differ, but the same path.
+    #[test]
+    fn using_the_pointer_for_hovering_makes_the_hand_the_same_file() {
+        let mut set = a_set_with_two_different_roles();
+        apply_hover_style(&mut set, HoverStyle::Pointer, &plain_spec()).unwrap();
+        assert_eq!(
+            set.get(Role::Hand),
+            set.get(Role::Arrow),
+            "hovering a link must not change the pointer at all"
+        );
+    }
+
+    /// A partial set is left with the hand it has rather than none.
+    ///
+    /// `ArrowOnly` and the preview path build a subset, and a set with no arrow
+    /// to copy is a real state. Removing the hand there would turn "keep my
+    /// pointer while hovering" into "have no hand", which is worse than the
+    /// thing being asked about.
+    #[test]
+    fn a_set_with_no_arrow_keeps_whatever_hand_it_had() {
+        let mut set = CursorSet::default();
+        set.insert(Role::Hand, PathBuf::from("lonely-hand.cur"));
+        apply_hover_style(&mut set, HoverStyle::Pointer, &plain_spec()).unwrap();
+        assert_eq!(set.get(Role::Hand), Some(PathBuf::from("lonely-hand.cur")).as_deref());
+    }
 
     fn spec() -> RenderSpec {
         RenderSpec {

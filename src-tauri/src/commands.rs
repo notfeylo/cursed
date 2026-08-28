@@ -16,7 +16,7 @@ use crate::cursor::roles::{Role, ALL_ROLES, RECOMMENDED_ROLES};
 use crate::error::{AppError, AppResult};
 use crate::packs::catalog::{self, PackSummary, RenderSpec};
 use crate::state::presets::{self, Preset};
-use crate::state::settings::{self, ApplyMode, Settings};
+use crate::state::settings::{self, ApplyMode, HoverStyle, Settings};
 use crate::{cursor, custom, packs, paths, session, updates};
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -184,6 +184,15 @@ pub struct ApplyArgs {
     pub size: u32,
     pub outline: bool,
     pub apply_mode: ApplyMode,
+    /// What the link hand should be. Absent in a request from an older frontend
+    /// — and from a `.cfpack` written before this existed — so it defaults to
+    /// the pack's own hand, which is what those were describing.
+    #[serde(default = "default_hover")]
+    pub hover_style: HoverStyle,
+}
+
+fn default_hover() -> HoverStyle {
+    HoverStyle::Pack
 }
 
 impl ApplyArgs {
@@ -260,10 +269,16 @@ fn build_set_for(
     if catalog::is_imported(&args.pack_id) {
         let pack = crate::import::get(&args.pack_id)?;
         let base = settings::get().blend_pack;
-        return Ok((catalog::build_imported(&args.pack_id, &base, spec)?, pack.name));
+        let mut set = catalog::build_imported(&args.pack_id, &base, spec)?;
+        catalog::apply_hover_style(&mut set, args.hover_style, spec)?;
+        return Ok((set, pack.name));
     }
+    let mut set = catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), spec)?;
+    // After the set is assembled, so preview and apply cannot disagree about
+    // what the hand is — the whole reason they share this function.
+    catalog::apply_hover_style(&mut set, args.hover_style, spec)?;
     Ok((
-        catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), spec)?,
+        set,
         catalog::display_name(&args.pack_id)
             .ok_or(AppError::UnknownPack)?
             .to_owned(),
@@ -410,6 +425,10 @@ pub fn apply_preset_inner(app: &AppHandle, preset: &Preset) -> AppResult<()> {
             set.insert(*role, path.to_path_buf());
         }
     }
+    // Last, so it wins over an override that put a custom cursor on the hand —
+    // "use my pointer for hovering too" has to mean the pointer that is actually
+    // being applied, overrides included.
+    catalog::apply_hover_style(&mut set, preset.hover_style, &spec)?;
 
     cursor::commit(
         set,
@@ -498,53 +517,24 @@ pub fn preview_matte(token: String, tolerance: i32) -> AppResult<String> {
 
 /* ── photo mode ────────────────────────────────────────────── */
 
-/// What photo mode would cost and whether it is installed.
+/// Whether background removal can run on this machine.
 ///
-/// Cheap and side-effect free: it reads two file sizes. Nothing here downloads,
-/// and nothing here runs at launch.
+/// Cheap and side-effect free: it checks that two files are where the installer
+/// put them. There is nothing to install and nothing to remove, so this is the
+/// only photo-mode command left.
 #[tauri::command]
 pub fn get_photo_status() -> AppResult<crate::photo::PhotoStatus> {
     Ok(crate::photo::status())
 }
 
-/// Downloads the model and runtime, after the user has been told the size.
+/// Whether this build can register that key combination.
 ///
-/// Runs on its own thread and reports progress through the shared state, so the
-/// window keeps painting through a twenty-megabyte download.
+/// Asked by the hotkey field the moment a combination is captured, so an
+/// unsupported key is a sentence on screen rather than a binding that looks
+/// saved and never fires.
 #[tauri::command]
-pub fn install_photo_mode() -> AppResult<()> {
-    if !crate::photo::available() {
-        return Err(AppError::invalid(crate::photo::UNAVAILABLE));
-    }
-    std::thread::Builder::new()
-        .name("cursed-photo-install".into())
-        .spawn(|| {
-            let result = crate::photo::install(&mut |got, total| {
-                crate::photo::report_progress(got, total);
-            });
-            crate::photo::finish(result);
-        })
-        .map_err(|e| AppError::msg(format!("the download could not be started: {e}")))?;
-    Ok(())
-}
-
-/// How the download is going. Cheap enough to poll.
-#[tauri::command]
-pub fn get_photo_progress() -> AppResult<crate::photo::Progress> {
-    Ok(crate::photo::progress())
-}
-
-/// Stops a download in flight. The partial file is discarded.
-#[tauri::command]
-pub fn cancel_photo_install() -> AppResult<()> {
-    crate::photo::cancel();
-    Ok(())
-}
-
-/// Deletes the model and runtime, and reports the space reclaimed.
-#[tauri::command]
-pub fn remove_photo_mode() -> AppResult<u64> {
-    crate::photo::remove()
+pub fn hotkey_is_registerable(accelerator: String) -> AppResult<bool> {
+    Ok(crate::hotkeys::is_registerable(&accelerator))
 }
 
 /* ── backup and restore ────────────────────────────────────── */
@@ -618,7 +608,13 @@ pub struct AdjustArgs {
     /// held here: two windows on one staged image would otherwise fight.
     #[serde(default)]
     pub transform: crate::build::pipeline::Transform,
-    pub turn: crate::build::pipeline::Turn,
+    /// Absent for a crop-only round, which turns nothing.
+    #[serde(default)]
+    pub turn: Option<crate::build::pipeline::Turn>,
+    /// A rectangle drawn on the picture as it is currently shown, or a request
+    /// to take the crop off again. Absent leaves the crop as it is.
+    #[serde(default)]
+    pub crop: Option<crate::custom::CropChange>,
     pub hotspot: (f32, f32),
     pub outline: bool,
 }
@@ -630,6 +626,7 @@ pub fn adjust_custom(args: AdjustArgs) -> AppResult<custom::Adjusted> {
         &args.token,
         &args.transform,
         args.turn,
+        args.crop,
         (
             args.hotspot.0.clamp(0.0, 1.0),
             args.hotspot.1.clamp(0.0, 1.0),
@@ -691,6 +688,11 @@ pub fn apply_custom_cursor(app: AppHandle, args: ApplyCustomArgs) -> AppResult<(
         args.blend_pack_id.as_deref(),
         &spec,
     )?;
+    // Taken from settings rather than from the request: the custom screen has no
+    // hand of its own to argue about, and somebody who has asked for their
+    // pointer to be the hand everywhere means everywhere.
+    let mut set = set;
+    catalog::apply_hover_style(&mut set, settings::get().hover_style, &spec)?;
 
     // The name the user typed, not the word "CUSTOM".
     //
@@ -802,16 +804,6 @@ pub fn get_storage_dir() -> AppResult<String> {
 #[tauri::command]
 pub fn open_storage_dir() -> AppResult<()> {
     crate::shell::open_path(&paths::root()?)
-}
-
-#[tauri::command]
-pub fn get_cache_size() -> AppResult<u64> {
-    catalog::cache_size()
-}
-
-#[tauri::command]
-pub fn clear_cache() -> AppResult<u64> {
-    catalog::clear_cache()
 }
 
 #[tauri::command]
@@ -940,17 +932,18 @@ fn windows_build() -> String {
     out
 }
 
-/// A plain-text report the user can copy straight into a message.
+/// A plain-text report of what this install actually looks like.
 ///
-/// This exists because "it doesn't work" is unanswerable. Everything in it has
-/// already been the difference between working and not: which version is really
-/// running, whether the data directory can be written, how many cursors the
-/// catalog can actually offer, and whether the seventeen registry values still
-/// point at files that exist.
+/// **Not a command, and not reachable from the UI.** It used to be a button in
+/// Settings, and it is not one any more: it is a maintainer's tool, and a wall
+/// of registry values and file paths is not something to put in front of
+/// somebody who wants a nicer pointer. `genpacks` prints it, which is where it
+/// belongs — the people who read it are the people who can run that.
 ///
-/// It carries no personal data beyond paths inside the user's own profile,
-/// because the entire point is that it can be pasted to a stranger.
-#[tauri::command]
+/// Everything in it has already been the difference between working and not:
+/// which version is really running, whether the data directory can be written,
+/// how many cursors the catalog can offer, and whether the seventeen registry
+/// values still point at files that exist.
 pub fn get_diagnostics() -> AppResult<String> {
     use std::fmt::Write as _;
     let mut out = String::new();
@@ -1248,17 +1241,16 @@ pub fn delete_all_imported() -> AppResult<()> {
 /// Named rather than inlined so the test below can check it against every link
 /// the frontend actually offers — the two halves are in different languages and
 /// neither imports the other, so nothing but a test connects them.
-const ALLOWED_EXTERNAL: [&str; 4] = [
-    "https://github.com/notfeylo/cursed",
-    "https://github.com/notfeylo/cursed/issues",
-    "https://github.com/notfeylo/cursed/releases",
-    // The one the update panel's "download it manually" button asks for, and
-    // the one it was missing. That button is the last resort offered after an
-    // update has already failed — it opened nothing at all, silently, because
-    // the frontend asked for `/releases/latest` and this list stopped at
-    // `/releases`.
-    "https://github.com/notfeylo/cursed/releases/latest",
-];
+/// **One entry, and it is not the source repository.** This used to be four:
+/// the project page, the issue tracker, the releases page, and the
+/// `/releases/latest` the update panel actually asked for. None of them are
+/// offered any more — the app does not send anybody to a repository, and there
+/// is no wording left that implies there is one to go to.
+///
+/// The fallback itself stays, because an update that fails with no way forward
+/// is worse than having no update button at all. It goes to the same page a new
+/// user downloads from.
+const ALLOWED_EXTERNAL: [&str; 1] = ["https://cursorforge.vercel.app/"];
 
 #[tauri::command]
 pub fn open_external(url: String) -> AppResult<()> {
