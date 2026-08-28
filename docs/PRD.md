@@ -13,7 +13,7 @@ deliberately overruled during the build and the reasoning is recorded elsewhere:
   permanently burned and must never be reused (`CONTRIBUTING.md` explains why).
 - The floor is **Windows 10 1803**, not 1809, and it is set by WebView2 rather
   than chosen.
-- The catalog is **36 hand-made packs**, not a generated set. §7 describes the
+- The catalog is **83 hand-made packs**, not a generated set. §7 describes the
   generated catalog that 1.18.0 removed.
 - Releases ship **x64, ARM64 and 32-bit**, which §11 does not anticipate.
 

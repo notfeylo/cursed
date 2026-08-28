@@ -50,7 +50,7 @@ here; it is a property of the design.
 
 ## What it does
 
-- **36 hand-made cursor packs**, in the installer. Nothing is downloaded on
+- **83 hand-made cursor packs**, in the installer. Nothing is downloaded on
   first run and nothing needs importing.
 - **All 17 pointer roles, always.** Most packs define an arrow and a hand; the
   remaining roles are filled from a plain built-in base, so you never end up
@@ -228,9 +228,10 @@ can be turned off. See [PRIVACY.md](docs/PRIVACY.md).
 MIT — © 2026 feylo, for the application and for its own artwork: the mark, the
 pointer, the link hand, the text I-beam and the `GAP-CROSS` blend base.
 
-**The 36 bundled cursor packs are not covered by that.** Two are GPL-3.0 and
-carry their own licence files; thirty-four state no licence at all, and several
-depict characters owned by other people.
+**The 83 bundled cursor packs are not covered by that.** Two are GPL-3.0 and
+carry their own licence files. Thirty-four state no licence at all. Forty-seven
+were given for use here by the person who drew them, with no credit asked for.
+Several depict characters owned by other people.
 [docs/LICENSES.md](docs/LICENSES.md) names every one of them and explains the
 position rather than leaving it to be discovered.
 

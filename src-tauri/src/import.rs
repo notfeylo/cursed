@@ -157,7 +157,7 @@ fn names_no_windows_role(base: &str) -> bool {
 /// Returns `None` both for names that mean nothing to us and for names that
 /// mean something Windows cannot express — the caller skips those rather than
 /// defaulting them to the arrow.
-fn role_from_filename(stem: &str) -> Option<(Role, Claim)> {
+pub(crate) fn role_from_filename(stem: &str) -> Option<(Role, Claim)> {
     let lower = stem.trim().to_ascii_lowercase();
     let mut base = lower.as_str();
     let mut claim: Claim = 0;
@@ -297,7 +297,11 @@ fn strip_hash_suffix(raw: &str) -> &str {
 }
 
 /// `Skyrim-Set-2-563e85ef` becomes `Skyrim Set 2`.
-fn pretty_folder_name(raw: &str) -> String {
+///
+/// Visible to the crate so `bundled` can assert that a shipped pack's label
+/// survives this unchanged — the label is what names the directory, and a label
+/// this rewrites is a pack that reinstalls on every launch.
+pub(crate) fn pretty_folder_name(raw: &str) -> String {
     let stem = strip_hash_suffix(raw);
 
     // A folder holding one cursor is often named for the role it fills, and

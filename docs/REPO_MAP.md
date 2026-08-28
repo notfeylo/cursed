@@ -46,7 +46,7 @@ shapes · `store.ts` state · `styles.css` every design token.
 | `src/channel.rs` | Which of the two side-by-side installs this binary is. Every per-channel name comes from here and nowhere else — see [`../docs/CHANNELS.md`](CHANNELS.md). |
 | `src/build/` | Artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`, `cur_reader` (one frame, via Windows), `icon_reader` (`.cur`/`.ico`/`.ani` parsed from bytes, every frame). Pure and unit-tested — no registry, no Win32. |
 | `src/packs/` | `styles.rs` defines the one generated blend base, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it, `cfpack.rs` is the pack format. |
-| `src/bundled.rs` | **The catalog.** The 36 packs embedded in the binary and installed on first run. |
+| `src/bundled.rs` | **The catalog.** The 83 packs embedded in the binary and installed on first run. |
 | `src/custom.rs` | Cursors built from the user's own images, including optional hover artwork. |
 | `src/import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
 | `src/updates.rs` | The one network request the app makes, on WinHTTP. Architecture-aware asset matching, checksum verified before anything is executed. |
@@ -66,7 +66,7 @@ shapes · `store.ts` state · `styles.css` every design token.
 
 ## `assets/` · [README](../assets/README.md)
 
-`bundled/` is thirty-six `.zip` packs embedded by `include_bytes!` — this is what
+`bundled/` is eighty-three `.zip` packs embedded by `include_bytes!` — this is what
 ships. `packs/` is generated SVG artwork, committed only so a change to the
 drawing code shows up as a change to a picture; nothing reads it at runtime.
 
