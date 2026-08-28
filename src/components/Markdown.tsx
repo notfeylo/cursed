@@ -262,14 +262,14 @@ export function Markdown({ source }: { source: string }) {
 
           case "para":
             return (
-              <p key={key} className="mb-2.5">
+              <p key={key} className="mb-3">
                 <Inline text={block.text} />
               </p>
             );
 
           case "list":
             return (
-              <ul key={key} className="mb-2.5 space-y-1.5">
+              <ul key={key} className="mb-3 space-y-2">
                 {block.items.map((item, n) => (
                   <li key={`${n}`} className="flex gap-2">
                     <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" />
@@ -285,7 +285,7 @@ export function Markdown({ source }: { source: string }) {
             return (
               <blockquote
                 key={key}
-                className="mb-2.5 rounded-xs border-l-2 border-accent/50 bg-elevated/60 py-2 pr-3 pl-3 text-[11px] text-text-dim"
+                className="mb-3 rounded-xs border-l-2 border-accent/50 bg-elevated/60 py-2 pr-3 pl-3 text-[11px] text-text-dim"
               >
                 {block.text.split("\n\n").map((p, n) => (
                   <p key={`${n}`} className="mb-1.5 last:mb-0">
@@ -301,7 +301,7 @@ export function Markdown({ source }: { source: string }) {
             return (
               <div
                 key={key}
-                className="mb-2.5 overflow-x-auto rounded-xs border border-border"
+                className="mb-3 overflow-x-auto rounded-xs border border-border"
               >
                 <table className="w-full border-collapse text-left text-[11px]">
                   <thead>

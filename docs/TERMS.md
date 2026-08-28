@@ -1,62 +1,36 @@
 # Terms & Conditions
 
-**Cursed** — last updated 2026-08-07.
+**Cursed** — last updated 2026-08-28.
 
-## 1. The software is free and provided as-is
+## Free, and provided as-is
 
-Cursed is released free of charge under the MIT License. It comes with
-**no warranty of any kind**, express or implied, including no warranty of
-merchantability or fitness for a particular purpose.
+Cursed costs nothing and comes with **no warranty of any kind**, express or
+implied, including no warranty that it is fit for any particular purpose. You
+use it at your own risk.
 
-## 2. What it changes on your computer
+## What it changes on your computer
 
-Cursed modifies **only per-user Windows pointer settings**, stored under
-`HKEY_CURRENT_USER\Control Panel\Cursors` — the same settings the Windows
-Settings app exposes under Mouse → Additional mouse settings → Pointers.
+Cursed changes **only your own Windows pointer settings** — the same ones the
+Windows Settings app shows under Mouse → Additional mouse settings → Pointers.
 
-It requires **no administrator rights**, makes **no system-wide changes**, never
-writes to `HKEY_LOCAL_MACHINE`, never installs a driver or service, and never
-injects code into another process.
+It needs **no administrator rights**, makes **no system-wide changes**, installs
+no driver and no service, and never injects code into another program. Nothing
+it does affects other accounts on the machine.
 
-Its own files live in `%APPDATA%\Cursed`.
+## Images you bring
 
-## 3. Images you import
+You are responsible for any image you import, and by importing it you confirm
+you have the right to use it. Your images are processed **on your computer** and
+are never uploaded anywhere.
 
-You are solely responsible for any image you import into Cursed, and you
-warrant that you hold the rights necessary to use it. Cursed processes your
-images entirely on your own computer and never uploads them anywhere.
+## What you may not do with it
 
-## 4. Acceptable use
+Do not use Cursed to imitate a Windows prompt or any other part of the system
+interface in order to mislead somebody, and do not use it to pass on anything
+harmful or deceptive.
 
-You may not use Cursed to:
+## No liability, and always a way back
 
-- impersonate a system user-interface element for deceptive purposes, or
-- distribute malicious, deceptive, or infringing content via `.cfpack` files.
-
-## 5. Bundled cursor artwork
-
-The generated cursor catalog is original work, © 2026 feylo, licensed under the
-MIT License alongside the source code. No generated asset replicates a protected
-character, logo, or copyrighted design, and no pack is named after a third
-party's product or trademark.
-
-A small number of complete cursor sets by other authors also ship with Cursed.
-They are included only where the author has licensed the work for
-redistribution, they keep their own licence, and that licence is extracted
-alongside them. See **Licences** for the list.
-
-Cursors you import from your own folders stay on your computer. They are never
-uploaded, never redistributed, and never included in the installer — whatever
-their licence.
-
-## 6. Limitation of liability
-
-To the maximum extent permitted by law, the author is not liable for any loss or
-damage arising from the use of this software. A one-click **Restore Windows
-Default** is available at all times under Settings → Advanced, and the
-uninstaller runs the same restore automatically.
-
-## 7. Changes to these terms
-
-These terms may be updated in future releases. Continued use of the software
-after an update constitutes acceptance of the updated terms.
+To the fullest extent the law allows, Cursed is not liable for any loss arising
+from its use. Whatever happens, one button in Settings puts every pointer back
+to the Windows default, and the uninstaller does the same thing on its way out.
