@@ -7,6 +7,73 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.27.0 — 2026-08-28
+
+Forty-seven more cursors, background removal that is simply there, and four
+things the app used to make you work around.
+
+### Forty-seven more cursors
+
+The catalog is 83 packs, up from 36. They install on first run like the rest —
+nothing to download, nothing to import.
+
+### Background removal is already installed
+
+It used to be a one-time download hidden in Settings, which meant the people
+most likely to want it — the ones dropping in a photograph — were exactly the
+ones who never found it. It now ships inside the installer and works the moment
+you install, offline included. The installer is bigger for it. There is no
+longer anything to turn on, and nothing to remove.
+
+### Crop your picture before it becomes a cursor
+
+You could rotate and mirror an imported image; you could not take part of it. A
+cursor is a small square, and cropping to the subject is usually the difference
+between artwork that reads at 32 pixels and one that does not. Drag a box over
+the part you want. The click point moves into the new frame with the picture.
+
+### Choose what happens when you hover a link
+
+Windows shows a different pointer over links and buttons, and many cursors come
+with their own — often a completely unrelated drawing, so picking a cursor you
+liked and hovering a link gave you something else. That was the most common
+complaint about the catalog.
+
+Now it is a choice, next to the size and colour: keep the cursor's own hover,
+use the Cursed mark, or keep your pointer exactly as it is so hovering changes
+nothing at all.
+
+### Pick a colour by looking at it
+
+The colour controls were a hex box and twelve swatches. If the colour you wanted
+was not one of the twelve, the app was asking you to know that a particular
+orange is `#FF7A2E` — so people were leaving to search for colour codes and
+pasting them back. Drag across the gradient instead and read the code off the
+bottom. Typing a code still works.
+
+### Set a shortcut by pressing it
+
+The hotkey boxes wanted you to type `Ctrl+Alt+0` exactly. Get it wrong and
+nothing said so — the shortcut was saved, displayed, and dead. Click a shortcut
+and press the keys you want.
+
+### The pointer size controls say what they do
+
+"I-beam" is not a word anyone should have to know; it is the text cursor. The
+hand and the text cursor now grow with the pointer by default, because a big
+pointer with a small hand reads as the setting not having worked. The switch to
+put it back is in the same panel.
+
+### Smaller things
+
+- Terms, Privacy and Licences are one short screen each instead of seven tabbed
+  pages of prose.
+- A section header no longer sits flush against the content beneath it in
+  Settings or the catalog.
+- The interface uses American spelling throughout.
+- The build report and the cursor-cache size are no longer in Settings. Neither
+  was anything you could act on.
+
 ## 1.26.0 — 2026-08-27
 
 Six fixes, all of them about the same complaint: cursors that look soft, blocky
