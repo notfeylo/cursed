@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://www.trycursed.com/favicon.png">
     <link rel="icon" href="/favicon.png" type="image/png" sizes="256x256">
     <link rel="apple-touch-icon" href="/favicon.png" sizes="256x256">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=1.27.0">
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.trycursed.com/#website","url":"https://www.trycursed.com/","name":"Cursed","alternateName":["Try Cursed","trycursed.com"]},{"@type":"Organization","@id":"https://www.trycursed.com/#organization","name":"Cursed","url":"https://www.trycursed.com/","logo":{"@type":"ImageObject","url":"https://www.trycursed.com/favicon.png","width":256,"height":256}},{"@type":"SoftwareApplication","name":"Cursed","alternateName":"Try Cursed","url":"https://www.trycursed.com/","description":"Cursed is a free Windows cursor customizer that changes all 17 pointer roles and turns pictures and animated GIFs into cursors.","applicationCategory":"UtilitiesApplication","applicationSubCategory":"Desktop customization","operatingSystem":"Windows 10, Windows 11","downloadUrl":"https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe","featureList":["83 included cursor packs","Image and animated GIF cursor creation","All 17 Windows pointer roles","Size and color controls","One-click cursor restoration"],"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@id":"https://www.trycursed.com/#organization"}}]}</script>
     <script src="site.js" defer></script>
   </head>
@@ -64,11 +64,18 @@
           <p>The standard installer is for most Windows PCs. It installs for your account and does not need administrator permission. ARM64, 32-bit, and offline builds are available below.</p>
         </div>
         <div class="download-card">
-          <a class="download-button" href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe" download rel="noopener noreferrer">
+          <a class="download-button" href="/download">
             <span>Download for Windows</span>
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </a>
           <p class="release-line"><span>v<span id="rel-version">1.27.0</span></span><span aria-hidden="true">·</span><span id="rel-size">22.62 MB</span><span aria-hidden="true">·</span><span id="rel-date">2026-08-29</span></p>
+          <div class="checksum-block" role="group" aria-labelledby="checksum-title">
+            <p class="checksum-title" id="checksum-title">SHA256 checksum</p>
+            <code class="checksum-hash" id="rel-sha256">d23d4630040469de155d66d8a67f344f81ebd3176a1011d899d6a550c043a6ff</code>
+            <p>Verify in PowerShell:</p>
+            <code class="checksum-command">Get-FileHash .\Cursed-Setup.exe -Algorithm SHA256</code>
+            <p><a id="rel-checksum-link" href="/downloads/1.27.0/SHA256SUMS.txt">Download SHA256SUMS.txt</a></p>
+          </div>
           <dl class="requirements">
             <div><dt>System</dt><dd>Windows 10 or 11</dd></div>
             <div><dt>Memory</dt><dd>2 GB RAM</dd></div>
@@ -96,7 +103,7 @@
 
         <div class="footer-cta">
           <p class="footer-cta-head">Get it for Windows</p>
-          <a class="footer-pill" href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe" download rel="noopener noreferrer">
+          <a class="footer-pill" href="/download">
             <span>Download the installer</span>
             <span class="footer-pill-arrow" aria-hidden="true">↘</span>
           </a>

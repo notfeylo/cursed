@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /download
+Disallow: /downloads/
 
 Sitemap: https://www.trycursed.com/sitemap.xml

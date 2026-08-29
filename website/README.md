@@ -10,16 +10,32 @@ node scripts/build.mjs
 vercel --prod
 ```
 
-The build script reads the latest public GitHub release to fill in the version,
-installer size, and release date. If GitHub is unavailable, it keeps the true
-values committed in `index.html`.
+`release.json` is the source of truth for the current download and every
+immutable Store release. The build verifies each installer byte-for-byte,
+checks its committed checksum, fills the homepage version and checksum, and
+checks that `/download` points to the current versioned file.
 
 Only `dist` is deployed. It contains the homepage, branded 404 page, guide
 library, stylesheet, small same-origin dialog script, favicon, local font files,
 `robots.txt`, and `sitemap.xml`. Source notes, build scripts, Vercel
 configuration, and unused media are deliberately excluded from production.
 `www.trycursed.com` is the canonical address; the apex domain and old Vercel
-hostname redirect there permanently.
+hostname redirect there permanently. Use the `www` version of an immutable
+download URL in Microsoft Partner Center so the submitted URL itself returns
+the binary without a domain redirect.
+
+## Add a Store release
+
+1. Create `downloads/<version>/` without changing an older folder.
+2. Put the standard x64 installer at `downloads/<version>/Cursed-Setup.exe`.
+3. Run `node scripts/prepare-download.mjs <version> YYYY-MM-DD`.
+4. Run `node scripts/build.mjs`. The build stops if any historical binary was
+   changed, a checksum is stale, or `/download` points at the wrong version.
+5. Commit the new version folder, `release.json`, the generated checksum, and
+   the generated `vercel.json` redirect together, then deploy.
+
+The current Partner Center URL will be:
+`https://www.trycursed.com/downloads/1.27.0/Cursed-Setup.exe`.
 
 ## Privacy and security
 

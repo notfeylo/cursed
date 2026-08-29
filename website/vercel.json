@@ -7,18 +7,37 @@
   "redirects": [
     {
       "source": "/:path*",
-      "has": [{ "type": "host", "value": "cursorforge.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "cursorforge.vercel.app"
+        }
+      ],
       "destination": "https://www.trycursed.com/:path*",
       "permanent": true
+    },
+    {
+      "source": "/download",
+      "destination": "/downloads/1.27.0/Cursed-Setup.exe",
+      "permanent": false
     }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=63072000; includeSubDomains; preload"
@@ -27,10 +46,22 @@
           "key": "Permissions-Policy",
           "value": "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=(), interest-cohort=()"
         },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Resource-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },
-        { "key": "X-Permitted-Cross-Domain-Policies", "value": "none" },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "require-corp"
+        },
+        {
+          "key": "X-Permitted-Cross-Domain-Policies",
+          "value": "none"
+        },
         {
           "key": "Content-Security-Policy",
           "value": "default-src 'none'; base-uri 'none'; connect-src 'none'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data:; manifest-src 'none'; media-src 'none'; object-src 'none'; script-src 'self' 'sha256-BNwG8KNZ8ZNPnJu+10QdAc41Xut3Rh7bMdHQFjMnk6E=' 'sha256-xJwpuzYKVZLvZGaO9QAD4URpYytMtJ6oX0kuCZqJ0Mk=' 'sha256-xWJ508fnZu+3pqSeKehKGl2dYRmE5tlJB2fNu9im+kQ=' 'sha256-rh5UIAhXM/JMxxfR37Hxz2r2RtVY/NUO3JxhYoSTY38=' 'sha256-a6bVTjOLWcAxNgZrrSR4RvWZCZVVoVhGuARpxPU2G/o=' 'sha256-S4giwoFSpetzIZ7LoGHRWpbR4cOCvMLSCwcZDV1p0eQ='; style-src 'self'; worker-src 'none'; upgrade-insecure-requests"
@@ -40,7 +71,52 @@
     {
       "source": "/fonts/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/downloads/(.*)/Cursed-Setup.exe",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"Cursed-Setup.exe\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/downloads/(.*)/SHA256SUMS.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "inline; filename=\"SHA256SUMS.txt\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
       ]
     }
   ]
