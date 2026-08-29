@@ -57,7 +57,7 @@ here; it is a property of the design.
   with a custom pointer and a stock Windows hourglass the moment your PC copies
   a file.
 - **Every size, sharp.** Vector artwork is rendered at 10, 16, 24, 32, 48, 64,
-  96 and 128 px into one multi-resolution `.cur`. Photographs are resampled in
+  96, 128, 192 and 256 px into one multi-resolution `.cur`. Photographs are resampled in
   linear light — averaging sRGB bytes darkens every edge, which is most of why a
   shrunk photo looks muddy — then sharpened in proportion to how far they were
   shrunk. Small imports are enlarged here rather than stretched by Windows.
@@ -66,7 +66,7 @@ here; it is a property of the design.
   Imported packs keep their own colours, because tinting somebody's finished
   artwork only breaks it.
 - **Drop a PNG.** Hotspot picker with alpha-centroid and tip-detect, a 1:1
-  preview of all eight sizes, and a real cursor in under three seconds — a
+  preview of all ten sizes, and a real cursor in under three seconds — a
   nineteen-megapixel photograph included. GIF and APNG become real animated
   `.ani` files, and a photo shot on a phone arrives the way up it was taken.
 - **The background comes off cleanly.** A flat card, a studio sweep or a soft
@@ -112,7 +112,7 @@ That link is x64, which is what almost every Windows PC is. The rest:
 | [x64, offline](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe) | An air-gapped machine, or a network that blocks Microsoft's download |
 
 The offline installer embeds the Edge WebView2 runtime, so it needs no network —
-214 MB against the normal 11 MB. Take it only if you need it: WebView2 is
+about 272 MiB against the normal 23 MiB. Take it only if you need it: WebView2 is
 already on every Windows 11 and on any updated Windows 10, and the ordinary
 installer simply uses what is there.
 
@@ -165,7 +165,7 @@ Each directory has a README explaining what is in it and where to start.
 | --- | --- |
 | [`src/`](src/) | **The front end.** React + TypeScript: screens, shared components, the typed IPC client, the store, and every design token in one stylesheet. |
 | [`src-tauri/`](src-tauri/) | **The core.** Rust, and everything that touches Windows: the three cursor layers, the file writers, the catalog, updates, the tray, and the installer hooks. |
-| [`assets/`](assets/) | The 36 bundled packs that ship inside the installer, and the generated artwork kept in-repo so a drawing change shows up as a picture in the diff. |
+| [`assets/`](assets/) | The 83 bundled packs that ship inside the installer, and the generated artwork kept in-repo so a drawing change shows up as a picture in the diff. |
 | [`website/`](website/) | cursorforge.vercel.app. Static HTML and CSS, no build step, and `script-src 'none'`. |
 | [`scripts/`](scripts/) | Build, release and verification tooling. |
 | [`docs/`](docs/) | Architecture, the cursor byte formats, licensing, and one verification record per release. |

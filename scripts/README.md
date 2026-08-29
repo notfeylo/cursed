@@ -21,11 +21,11 @@ paying for it in speed and battery on the machines least able to spare either.
 
 Two WebView2 strategies, because the window is Edge WebView2. The ordinary
 installer checks for the runtime and fetches it if missing (~11 MB); the offline
-one embeds it (~214 MB) for an air-gapped machine or a network that blocks
+one embeds it (~272 MiB) for an air-gapped machine or a network that blocks
 Microsoft's download. The small one is the default and the only one the updater
 will match — `is_our_installer` accepts `Cursed_<version>_<arch>-setup.exe`, and
 the offline build is named to fall outside that on purpose, so a background
-update can never quietly pull 214 MB on a metered connection.
+update can never quietly pull 272 MiB on a metered connection.
 
 ## The gate before tagging
 

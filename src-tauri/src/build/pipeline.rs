@@ -1058,7 +1058,7 @@ pub fn slice_sprite_sheet(sheet: &Bitmap, columns: u32, rows: u32) -> AppResult<
     Ok(out)
 }
 
-/// The eight sizes every static catalog cursor ships.
+/// The ten sizes every static catalog cursor ships.
 pub fn target_sizes() -> &'static [u32] {
     &TARGET_SIZES
 }

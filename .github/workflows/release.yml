@@ -178,7 +178,7 @@ jobs:
             | `Cursed-Setup.exe` | Almost every PC (x64) |
             | `Cursed-Setup-ARM64.exe` | Snapdragon, Copilot+, Surface Pro X — native rather than emulated |
             | `Cursed-Setup-x86.exe` | Older PCs running 32-bit Windows |
-            | `Cursed-Setup-Offline-x64.exe` | No internet, or a network that blocks Microsoft's download. ~214 MB — only take it if you need it. |
+            | `Cursed-Setup-Offline-x64.exe` | No internet, or a network that blocks Microsoft's download. ~272 MiB — only take it if you need it. |
 
             Requires **Windows 10 version 1803 or newer**. The app updates
             itself to the architecture it is already running.

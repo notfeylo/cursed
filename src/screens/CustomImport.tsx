@@ -734,7 +734,7 @@ function HotspotPicker({
   );
 }
 
-/** The eight sizes at 1:1, so what you see is exactly what gets installed. */
+/** The ten sizes at 1:1, so what you see is exactly what gets installed. */
 function PreviewLadder({ previews }: { previews: Preview[] }) {
   return (
     <div className="rounded-sm border border-border bg-surface p-2">
