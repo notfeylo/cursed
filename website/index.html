@@ -108,29 +108,31 @@
       <div class="footer-base">
         <p>© 2026 feylo</p>
         <nav class="footer-legal" aria-label="Legal information">
-          <button type="button" data-dialog="privacy-dialog">Privacy</button>
-          <button type="button" data-dialog="terms-dialog">Terms</button>
+          <a href="#privacy" data-dialog="privacy">Privacy</a>
+          <a href="#terms" data-dialog="terms">Terms</a>
         </nav>
         <p class="footer-note">Your pointer. Possessed.</p>
       </div>
     </footer>
 
-    <dialog class="legal-dialog" id="privacy-dialog" aria-labelledby="privacy-title">
+    <dialog class="legal-dialog" id="privacy" aria-labelledby="privacy-title">
       <div class="dialog-head"><div><p class="kicker">Legal</p><h2 id="privacy-title">Privacy</h2></div><button class="dialog-close" type="button" data-close aria-label="Close privacy policy">×</button></div>
       <div class="legal-copy">
         <p>Cursed does not require an account and does not collect analytics, telemetry, crash reports, advertising identifiers, or personal information. Your settings, presets, imported images, and generated cursor files stay on your computer and are never uploaded by Cursed.</p>
         <p>If automatic update checks are enabled, the app makes a request to GitHub to see whether a newer release is available. That request contains no Cursed account or device identifier, and you can disable it in Settings. Visiting this website or downloading an installer may still give Vercel or GitHub the ordinary technical information needed to serve the request under their own privacy policies.</p>
         <p>This website has no cookies, analytics, advertising, sign-in, contact form, or third-party tracking scripts. If Cursed ever adds optional telemetry, it will be off unless you enable it and this policy will be updated before that release.</p>
+        <p><a class="legal-full-link" href="/privacy">Read the full privacy policy</a></p>
         <p class="legal-date">Last updated August 29, 2026.</p>
       </div>
     </dialog>
 
-    <dialog class="legal-dialog" id="terms-dialog" aria-labelledby="terms-title">
+    <dialog class="legal-dialog" id="terms" aria-labelledby="terms-title">
       <div class="dialog-head"><div><p class="kicker">Legal</p><h2 id="terms-title">Terms</h2></div><button class="dialog-close" type="button" data-close aria-label="Close terms">×</button></div>
       <div class="legal-copy">
         <p>Cursed is free software provided as is, without warranties of any kind. It changes the cursor settings for your Windows account, installs no driver or system service, and does not need administrator permission. You are responsible for keeping any backups you consider important and for deciding whether the app is suitable for your computer.</p>
         <p>You are responsible for the images and cursor files you import and must have the right to use them. Do not use Cursed or a cursor made with it to imitate a trusted system prompt, mislead another person, distribute harmful material, or break the law.</p>
         <p>Cursed, its original interface, and its original artwork belong to feylo. Cursor packs or artwork supplied by third parties remain subject to their own rights and terms. To the fullest extent allowed by law, feylo is not liable for losses caused by using or being unable to use Cursed; the app includes controls to restore your previous scheme or the Windows defaults.</p>
+        <p><a class="legal-full-link" href="/terms">Read the full terms</a></p>
         <p class="legal-date">Last updated August 29, 2026.</p>
       </div>
     </dialog>
