@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Make an Animated GIF Cursor for Windows | Cursed</title>
+  <meta name="description" content="Turn an animated GIF or APNG into a real Windows animated cursor, preserve its frames, set the hotspot, and apply it with the free Cursed app.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1"><link rel="canonical" href="https://www.trycursed.com/guides/animated-gif-cursor">
+  <meta property="og:title" content="Make an Animated GIF Cursor for Windows"><meta property="og:description" content="Convert a GIF or APNG into a real animated Windows cursor."><meta property="og:type" content="article"><meta property="og:url" content="https://www.trycursed.com/guides/animated-gif-cursor"><meta property="og:image" content="https://www.trycursed.com/favicon.png"><meta name="twitter:card" content="summary">
+  <link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="guide-header"><a class="guide-brand" href="/">CURSED</a><nav aria-label="Main"><a href="/guides/">Guides</a><a href="/#download">Download</a></nav></header>
+  <main class="guide-main">
+    <p class="breadcrumbs"><a href="/">Home</a> / <a href="/guides/">Guides</a> / Animated GIF cursor</p>
+    <p class="eyebrow">Animated Windows cursor</p><h1>Keep a GIF moving when it becomes your cursor</h1>
+    <p class="guide-lead">Windows uses the ANI format for animated pointers. Cursed reads the frames from a GIF or APNG and builds the Windows cursor files needed to play that animation on the desktop.</p>
+    <article class="guide-content">
+      <h2>Choose a short, readable animation</h2>
+      <p>A cursor repeats constantly, so a small loop works better than a long clip. Keep the main shape in roughly the same place from frame to frame. Large jumps make the pointer look unstable, while rapid flashes can become distracting.</p>
+      <p>Transparency also matters. A GIF can have hard transparent edges, while APNG supports smoother partial transparency. Cursed preserves supported animation frames and creates an ANI cursor at the sizes Windows expects.</p>
+
+      <h2>Set one reliable click point</h2>
+      <p>Every frame shares the job of pointing at the same place. Choose a hotspot on a stable part of the artwork: the tip of an arrow, the center of a target, or another fixed visual anchor. If that point moves through the animation, clicking will feel less precise.</p>
+
+      <h2>Convert the animation with Cursed</h2>
+      <ol>
+        <li>Open custom import and add a GIF or APNG up to 20 MB.</li>
+        <li>Preview the frames and crop the canvas around the moving artwork.</li>
+        <li>Place the hotspot on the part that should perform the click.</li>
+        <li>Apply the result to the pointer roles you choose.</li>
+      </ol>
+      <p>Cursed can also open an existing ANI cursor. The conversion and generated cursor files stay on your PC; the website does not receive your animation.</p>
+
+      <h2>Check movement and visibility</h2>
+      <p>After applying the cursor, move it across a light window, a dark desktop, and a text field. Confirm that the animation remains recognizable, the click point feels accurate, and the pointer does not hide the content beneath it. If it is difficult to follow, shorten the loop, simplify the image, or use a larger size.</p>
+      <div class="guide-cta"><h2>Create an animated Windows cursor</h2><p>Use your own GIF or APNG, or start with one of the animated designs included in Cursed.</p><a class="download-button" href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe" download rel="noopener noreferrer">Download for Windows</a></div>
+    </article>
+  </main>
+  <footer class="guide-footer"><p>© 2026 feylo</p><p><a href="/guides/image-to-cursor">Read the image-to-cursor guide</a></p></footer>
+</body>
+</html>

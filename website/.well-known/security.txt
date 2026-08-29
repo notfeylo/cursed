@@ -1,0 +1,5 @@
+Contact: https://github.com/notfeylo/cursed/security/advisories/new
+Expires: 2027-08-29T00:00:00.000Z
+Canonical: https://www.trycursed.com/.well-known/security.txt
+Policy: https://github.com/notfeylo/cursed/security
+Preferred-Languages: en

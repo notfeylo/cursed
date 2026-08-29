@@ -87,6 +87,36 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .legal-copy p + p { margin-top: 18px; }
 .legal-date { color: var(--quiet); font-size: 13px; }
 
+.guide-header, .guide-main, .guide-footer { width: min(100%, 860px); margin-inline: auto; padding-inline: var(--gutter); }
+.guide-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-top: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.guide-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text); font-family: var(--display); font-weight: 700; letter-spacing: .14em; text-decoration: none; }
+.guide-header nav { display: flex; gap: 20px; font-size: 13px; }
+.guide-header nav a { color: var(--muted); text-decoration: none; }
+.guide-header nav a:hover { color: var(--blue-light); }
+.guide-main { padding-top: clamp(62px, 9vw, 100px); padding-bottom: clamp(72px, 10vw, 120px); }
+.breadcrumbs { margin: 0 0 28px; color: var(--quiet); font-size: 13px; }
+.breadcrumbs a { color: var(--muted); }
+.guide-main h1 { max-width: 800px; font-size: clamp(2.6rem, 7vw, 5.2rem); line-height: 1; }
+.guide-lead { max-width: 720px; margin: 28px 0 0; color: #c3c9d2; font-size: clamp(1.08rem, 2vw, 1.25rem); }
+.guide-content { margin-top: clamp(56px, 8vw, 84px); }
+.guide-content h2 { margin-top: 58px; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.guide-content h2:first-child { margin-top: 0; }
+.guide-content h3 { margin: 34px 0 0; color: var(--text); font-family: var(--display); font-size: 1.25rem; }
+.guide-content p, .guide-content ol, .guide-content ul { max-width: 720px; margin-top: 18px; }
+.guide-content li + li { margin-top: 10px; }
+.guide-content strong { color: var(--text); font-weight: 500; }
+.guide-note { padding: 22px 24px; background: var(--surface); border-left: 3px solid var(--blue); border-radius: 0 10px 10px 0; }
+.guide-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
+.guide-card { display: block; min-height: 180px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; }
+.guide-card:hover { border-color: var(--blue); }
+.guide-card h2, .guide-card h3 { margin: 0; color: var(--text); font-family: var(--display); font-size: 1.35rem; line-height: 1.2; }
+.guide-card p { margin: 12px 0 0; color: var(--muted); }
+.guide-cta { margin-top: 64px; padding: clamp(26px, 5vw, 42px); background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; }
+.guide-cta h2 { margin-top: 0; }
+.guide-cta .download-button { width: fit-content; margin-top: 24px; }
+.guide-footer { display: flex; justify-content: space-between; gap: 24px; padding-top: 28px; padding-bottom: 34px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 13px; }
+.guide-footer p { margin: 0; }
+
 @media (max-width: 760px) {
   .hero { min-height: 720px; }
   .feature-list, .download, .footer-top, .footer-base { grid-template-columns: 1fr; }
@@ -95,6 +125,7 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
   .footer-cta { justify-self: stretch; max-width: none; }
   .footer-cta-head, .footer-note { text-align: left; }
   .footer-legal { justify-content: flex-start; }
+  .guide-cards { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
@@ -104,4 +135,7 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
   .requirements { grid-template-columns: 1fr; }
   .requirements div + div { border-top: 1px solid var(--line); border-left: 0; }
   .dialog-head, .legal-copy { padding-left: 22px; padding-right: 22px; }
+  .guide-header { align-items: flex-start; }
+  .guide-header nav { flex-direction: column; gap: 4px; text-align: right; }
+  .guide-footer { flex-direction: column; }
 }
