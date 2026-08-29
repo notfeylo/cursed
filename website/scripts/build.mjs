@@ -54,6 +54,7 @@ for (const file of ["styles.css", "site.js", "favicon.png", "robots.txt", "sitem
   copyFileSync(join(sourceDirectory, file), join(outputDirectory, file));
 }
 cpSync(join(sourceDirectory, "fonts"), join(outputDirectory, "fonts"), { recursive: true });
+cpSync(join(sourceDirectory, "media"), join(outputDirectory, "media"), { recursive: true });
 cpSync(join(sourceDirectory, "guides"), join(outputDirectory, "guides"), { recursive: true });
 cpSync(join(sourceDirectory, "downloads"), join(outputDirectory, "downloads"), { recursive: true });
 cpSync(join(sourceDirectory, ".well-known"), join(outputDirectory, ".well-known"), { recursive: true });

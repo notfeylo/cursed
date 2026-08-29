@@ -42,6 +42,19 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .feature-list li { display: flex; gap: 12px; align-items: baseline; color: var(--text); }
 .feature-list li span { color: var(--blue); font-size: 25px; line-height: 0; }
 
+.showcase-intro { max-width: 790px; }
+.showcase-intro > p:last-child { margin: 24px 0 0; color: #c3c9d2; font-size: clamp(1rem, 1.7vw, 1.12rem); }
+.showcase-demo { max-width: 680px; margin: clamp(42px, 7vw, 72px) auto 0; padding: 11px; background: #080a0e; border: 1px solid var(--line); }
+.showcase-frame-head { display: flex; justify-content: space-between; gap: 20px; padding: 3px 4px 12px; color: var(--quiet); font-family: var(--display); font-size: 10px; letter-spacing: .15em; }
+.showcase-video { display: block; width: 100%; aspect-ratio: 640 / 650; background: #020306; object-fit: cover; }
+.showcase-demo figcaption { padding: 13px 5px 3px; color: var(--quiet); font-size: 12px; }
+.showcase-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.showcase-shot { margin: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
+.showcase-shot img { display: block; width: 100%; height: auto; background: #06101f; }
+.showcase-shot figcaption { display: grid; gap: 4px; padding: 16px; }
+.showcase-shot strong { color: var(--text); font-family: var(--display); font-size: 14px; letter-spacing: .04em; }
+.showcase-shot span { color: var(--quiet); font-size: 12px; line-height: 1.55; }
+
 .download { display: grid; grid-template-columns: minmax(0, .8fr) minmax(380px, 1.2fr); gap: clamp(44px, 8vw, 92px); align-items: center; }
 .download > * { min-width: 0; }
 .download-copy p:last-child { max-width: 470px; margin: 22px 0 0; }
@@ -165,6 +178,7 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
   .footer-cta-head, .footer-note { text-align: left; }
   .footer-legal { justify-content: flex-start; }
   .guide-cards { grid-template-columns: 1fr; }
+  .showcase-gallery { gap: 12px; }
 }
 
 @media (max-width: 480px) {
@@ -180,4 +194,6 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
   .guide-header nav { flex-direction: column; gap: 4px; text-align: right; }
   .guide-footer { flex-direction: column; }
   .guide-footer nav { justify-content: flex-start; }
+  .showcase-gallery { display: flex; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+  .showcase-shot { flex: 0 0 min(78vw, 300px); scroll-snap-align: start; }
 }

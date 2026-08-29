@@ -1,10 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+  xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
   <url>
     <loc>https://www.trycursed.com/</loc>
     <lastmod>2026-08-29</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://www.trycursed.com/media/cursed-windows-cursor-customizer.webp</image:loc>
+      <image:title>Cursed Windows cursor customizer home screen</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.trycursed.com/media/cursed-windows-cursor-catalog.webp</image:loc>
+      <image:title>Cursed custom cursor and mouse pointer catalog</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.trycursed.com/media/cursed-mouse-pointer-settings.webp</image:loc>
+      <image:title>Cursed Windows mouse pointer size and color settings</image:title>
+    </image:image>
+    <video:video>
+      <video:thumbnail_loc>https://www.trycursed.com/media/cursed-cursor-customization-demo-poster.webp</video:thumbnail_loc>
+      <video:title>Cursed Windows cursor customization demo</video:title>
+      <video:description>See Cursed browse cursor packs, create a custom pointer, and change Windows mouse pointer settings.</video:description>
+      <video:content_loc>https://www.trycursed.com/media/cursed-cursor-customization-demo.mp4</video:content_loc>
+      <video:duration>45</video:duration>
+      <video:publication_date>2026-08-29T19:05:29-04:00</video:publication_date>
+    </video:video>
   </url>
   <url>
     <loc>https://www.trycursed.com/guides</loc>
