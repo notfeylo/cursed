@@ -15,8 +15,10 @@ installer size, and release date. If GitHub is unavailable, it keeps the true
 values committed in `index.html`.
 
 Only `dist` is deployed. It contains `index.html`, `styles.css`, `site.js`, the
-favicon, and local font files. Source notes, build scripts, Vercel configuration,
-and unused media are deliberately excluded from production.
+favicon, local font files, `robots.txt`, and `sitemap.xml`. Source notes, build
+scripts, Vercel configuration, and unused media are deliberately excluded from
+production. `www.trycursed.com` is the canonical address; the old Vercel hostname
+redirects there permanently.
 
 ## Privacy and security
 

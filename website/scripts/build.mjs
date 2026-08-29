@@ -53,7 +53,7 @@ let html = readFileSync(join(sourceDirectory, "index.html"), "utf8");
 html = await syncRelease(html);
 writeFileSync(join(outputDirectory, "index.html"), html, "utf8");
 
-for (const file of ["styles.css", "site.js", "favicon.png"]) {
+for (const file of ["styles.css", "site.js", "favicon.png", "robots.txt", "sitemap.xml"]) {
   copyFileSync(join(sourceDirectory, file), join(outputDirectory, file));
 }
 cpSync(join(sourceDirectory, "fonts"), join(outputDirectory, "fonts"), { recursive: true });
