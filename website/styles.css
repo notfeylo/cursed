@@ -30,7 +30,8 @@ h1, h2 { color: var(--text); font-family: var(--display); font-weight: 700; }
 h1 { margin: 0; font-size: clamp(3rem, 9vw, 6.5rem); letter-spacing: -.025em; line-height: .94; }
 h1 span { display: block; }
 .accent { color: var(--blue); }
-.hero-copy { max-width: 690px; margin: 30px auto 0; font-size: clamp(1rem, 2vw, 1.16rem); }
+.hero-tagline { margin: 26px 0 0; color: var(--text); font-family: var(--display); font-size: clamp(1rem, 2vw, 1.35rem); letter-spacing: .12em; text-transform: uppercase; }
+.hero-copy { max-width: 690px; margin: 16px auto 0; font-size: clamp(1rem, 2vw, 1.16rem); }
 
 .section { padding-top: clamp(72px, 10vw, 112px); padding-bottom: clamp(72px, 10vw, 112px); border-top: 1px solid var(--line); }
 h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; line-height: 1.08; }
