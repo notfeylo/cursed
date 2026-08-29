@@ -1,605 +1,98 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cursed — Turn any image into a Windows cursor</title>
-    <meta
-      name="description"
-      content="Cursed replaces every Windows pointer with a cursor you chose, and turns any picture into a real one. Free, no account, no telemetry, no admin rights."
-    />
-    <meta name="theme-color" content="#000000" />
-    <link rel="icon" href="favicon.png" type="image/png" />
-    <link rel="stylesheet" href="styles.css" />
-
-    <meta property="og:title" content="Cursed — Turn any image into a Windows cursor" />
-    <meta
-      property="og:description"
-      content="Your pointer. Possessed. Drop in a picture, get a real cursor. All seventeen pointer roles, 83 packs included, nothing to sign up for."
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="shots/home.png" />
-
-    <!-- The page's cursor is animated: this swaps the pointer image frame by
-         frame, which is what an .ani file is. `defer` keeps it off the critical
-         path, and the page is complete and readable if it never runs. -->
-    <script src="cursor.js" defer></script>
+    <meta name="description" content="Cursed replaces every Windows pointer with one you chose and turns your own pictures into real cursors. Free, private, and made for Windows.">
+    <meta name="theme-color" content="#050608">
+    <meta property="og:title" content="Cursed — Turn any image into a Windows cursor">
+    <meta property="og:description" content="Choose a complete Windows cursor pack or turn your own picture into a cursor. No account, ads, or telemetry.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="stylesheet" href="styles.css">
+    <script src="site.js" defer></script>
   </head>
-
   <body>
-    <!-- ------------------------------------------------------------ HEADER -->
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="#top">
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <a class="brand" href="#top" id="top" aria-label="Cursed home">
           <span class="brand-mark" aria-hidden="true">
-            <!-- Same geometry as the app icon, from src-tauri/src/packs/brand.rs -->
-            <svg viewBox="0 0 64 64" width="24" height="24">
-              <path
-                d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z"
-                fill="#2e8bff"
-              />
-              <path
-                d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z"
-                fill="#1b5fb5"
-              />
+            <svg viewBox="0 0 64 64" width="38" height="38">
+              <path d="M45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L2.00 51.89 L4.02 48.52 L44.47 11.44 Z" fill="#2e8bff" />
+              <path d="M44.47 11.44 L45.15 10.76 L46.49 13.46 L44.47 34.36 L61.33 51.89 L44.47 51.89 Z" fill="#174f99" />
             </svg>
           </span>
-          <span class="brand-word">CURSED</span>
+          <span>CURSED</span>
         </a>
-
-        <nav class="site-nav" aria-label="Sections">
-          <a href="#about">About</a>
-          <a href="#download">Download</a>
-          <a href="#rate">Rate it</a>
-        </nav>
-
-        <a class="header-cta" href="#download">Download</a>
-      </div>
-    </header>
-
-    <main id="top">
-      <!-- ---------------------------------------------------- 1 · THE TITLE -->
-      <section class="hero" aria-labelledby="hero-h">
         <p class="eyebrow">Windows · Free · No account</p>
-
-        <h1 class="hero-title" id="hero-h">
-          <span class="line">YOUR POINTER.</span>
-          <span class="line accent">POSSESSED.</span>
-        </h1>
-
-        <p class="hero-sub">
-          Every cursor on your PC, replaced with one you actually chose — and any picture
-          you own turned into a real one. Two clicks, no files to hunt down, and it stays
-          that way.
-        </p>
+        <h1 id="hero-title"><span>YOUR POINTER.</span><span class="accent">POSSESSED.</span></h1>
+        <p class="hero-copy">Every cursor on your PC, replaced with one you actually chose — and any picture you own turned into a real one. Two clicks, no files to hunt down, and it stays that way.</p>
       </section>
 
-      <!-- ------------------------------------------- 2 · ABOUT, ON A LAPTOP -->
-      <!-- The lid starts closed and swings open as the section scrolls into
-           view. The keyboard deck is a real 3D plane lying back under it, which
-           is the difference between a laptop and a rectangle with a border. -->
-      <section class="section about" id="about" aria-labelledby="about-h">
-        <header class="section-head">
-          <p class="kicker">About</p>
-          <h2 id="about-h">What Cursed actually is</h2>
-          <p class="section-lede">
-            A small Windows app with one job, done properly: the pointer you want,
-            everywhere Windows draws one.
-          </p>
-        </header>
-
-        <div class="stage">
-          <div class="laptop">
-            <div class="laptop-lid">
-              <div class="lid-inner">
-                <div class="laptop-screen">
-                  <!-- The notch, and the sensor housing inside it. -->
-                  <div class="notch" aria-hidden="true">
-                    <span class="notch-cam"></span>
-                  </div>
-
-                  <div class="screen-doc" tabindex="0" role="region" aria-label="About Cursed">
-                    <div class="doc-inner">
-                      <p class="doc-eyebrow">The problem</p>
-                      <h3>Windows lets you change your cursor. It has never made it easy.</h3>
-                      <p>
-                        The stock route is a Control Panel dialog from another decade, a file
-                        picker, and seventeen separate pointer roles you are expected to set
-                        one at a time — assuming you already have
-                        <span class="mono">.cur</span> files, which almost nobody does. Then
-                        a theme change or a feature update quietly puts the arrow back.
-                      </p>
-                      <p class="doc-turn">
-                        Cursed collapses all of that into a window, a drop zone and a click.
-                      </p>
-
-                      <p class="doc-eyebrow">What it does</p>
-                      <ul class="feature-grid">
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <rect
-                                x="3"
-                                y="4"
-                                width="18"
-                                height="14"
-                                rx="2.5"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                              />
-                              <path
-                                d="M3 14.5l4.2-4a1.6 1.6 0 0 1 2.2 0l3 2.9M14 12.2l1.8-1.7a1.6 1.6 0 0 1 2.2 0L21 13.4"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                              />
-                              <circle cx="15.2" cy="8.4" r="1.5" fill="currentColor" />
-                            </svg>
-                          </span>
-                          <b>Any picture becomes a cursor</b>
-                          <span
-                            >Drop a PNG, JPEG or GIF. The background comes off, the hotspot
-                            is found, and you get a real <span class="mono">.cur</span> or
-                            <span class="mono">.ani</span> at ten sizes. An animated GIF
-                            stays animated.</span
-                          >
-                        </li>
-
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <path
-                                d="M5.5 3.2 L5.5 17.4 L9.1 13.9 L11.6 19.8 L14 18.8 L11.6 13.1 L16.6 13.1 Z"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linejoin="round"
-                              />
-                              <path
-                                d="M19 6.5v3M19 14.5v3M17.5 8h3M17.5 16h3"
-                                stroke="currentColor"
-                                stroke-width="1.4"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          <b>All seventeen roles</b>
-                          <span
-                            >The arrow, the hand, the text beam, the busy ring, every resize
-                            handle. No custom pointer sitting next to a stock Windows
-                            hourglass the moment your PC copies a file.</span
-                          >
-                        </li>
-
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <rect
-                                x="3"
-                                y="3"
-                                width="7.5"
-                                height="7.5"
-                                rx="1.6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                              />
-                              <rect
-                                x="13.5"
-                                y="3"
-                                width="7.5"
-                                height="7.5"
-                                rx="1.6"
-                                fill="currentColor"
-                              />
-                              <rect
-                                x="3"
-                                y="13.5"
-                                width="7.5"
-                                height="7.5"
-                                rx="1.6"
-                                fill="currentColor"
-                              />
-                              <rect
-                                x="13.5"
-                                y="13.5"
-                                width="7.5"
-                                height="7.5"
-                                rx="1.6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                              />
-                            </svg>
-                          </span>
-                          <b>83 packs, already installed</b>
-                          <span
-                            >They ship inside the installer. Nothing is fetched, nothing is
-                            streamed, and the whole catalog works with the network
-                            unplugged.</span
-                          >
-                        </li>
-
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <path
-                                d="M20 12a8 8 0 1 1-2.6-5.9"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                              />
-                              <path
-                                d="M20 3.6V7.4h-3.8"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                              <path
-                                d="M8.8 12.1l2.2 2.2 4.2-4.6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                            </svg>
-                          </span>
-                          <b>It stays applied</b>
-                          <span
-                            >Windows resets pointers on theme changes and updates. A watchdog
-                            notices and puts yours back, so your choice survives the machine
-                            disagreeing with it.</span
-                          >
-                        </li>
-
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <path
-                                d="M12 3.5v10.5M8.2 10.4 12 14.2l3.8-3.8"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                              <path
-                                d="M4 16.2v2.3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.3"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          <b>Cursors you already own</b>
-                          <span
-                            >Existing <span class="mono">.cur</span>,
-                            <span class="mono">.ani</span>, <span class="mono">.ico</span>
-                            and TIFF files import directly, frames and all.</span
-                          >
-                        </li>
-
-                        <li>
-                          <span class="fi" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="18" height="18">
-                              <path
-                                d="M4 20 L20 4 M20 10.4V4h-6.4"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                              <path
-                                d="M4 13.6V20h6.4"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.6"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                            </svg>
-                          </span>
-                          <b>Size is yours</b>
-                          <span
-                            >Scale the whole set, or only the roles you name, without hunting
-                            for a bigger copy of the artwork.</span
-                          >
-                        </li>
-                      </ul>
-
-                      <div class="doc-callout">
-                        <p class="doc-eyebrow">Why it is built this way</p>
-                        <p>
-                          <strong>Cursed never draws a cursor.</strong> It tells Windows
-                          which cursor to draw, and Windows renders it on the graphics
-                          card's hardware cursor plane — the same path it uses for its own
-                          arrow. Apps that paint a pointer sprite into an always-on-top
-                          window get composited by the desktop compositor and trail your
-                          real pointer by 8–33 ms, permanently. This one adds nothing you
-                          can measure.
-                        </p>
-                      </div>
-
-                      <p class="doc-eyebrow">What it will not do</p>
-                      <ul class="nope-list">
-                        <li>
-                          <span class="ni" aria-hidden="true">
-                            <svg viewBox="0 0 20 20" width="13" height="13">
-                              <path
-                                d="M5.5 5.5l9 9M14.5 5.5l-9 9"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          Ask for an account, a sign-in or a key
-                        </li>
-                        <li>
-                          <span class="ni" aria-hidden="true">
-                            <svg viewBox="0 0 20 20" width="13" height="13">
-                              <path
-                                d="M5.5 5.5l9 9M14.5 5.5l-9 9"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          Send telemetry, analytics or crash reports
-                        </li>
-                        <li>
-                          <span class="ni" aria-hidden="true">
-                            <svg viewBox="0 0 20 20" width="13" height="13">
-                              <path
-                                d="M5.5 5.5l9 9M14.5 5.5l-9 9"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          Ask for administrator rights, ever
-                        </li>
-                        <li>
-                          <span class="ni" aria-hidden="true">
-                            <svg viewBox="0 0 20 20" width="13" height="13">
-                              <path
-                                d="M5.5 5.5l9 9M14.5 5.5l-9 9"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                              />
-                            </svg>
-                          </span>
-                          Inject code into your games to force a crosshair
-                        </li>
-                      </ul>
-
-                      <p class="doc-close">
-                        Your settings, presets and imported cursors sit in a folder on your
-                        own machine and never leave it. Uninstall and all seventeen pointers
-                        go back exactly as they were.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <span class="lid-chin" aria-hidden="true">CURSED</span>
-              </div>
-            </div>
-
-            <!-- The keyboard deck. The outer box is what the page lays out; the
-                 plane inside it is the one that actually tips back, because a
-                 rotated element keeps its untransformed height in flow and
-                 would otherwise reserve three times the room it occupies. -->
-            <div class="laptop-deck" aria-hidden="true">
-              <div class="deck-plane">
-                <div class="deck-hinge"></div>
-                <div class="deck-keys">
-                  <span class="key-rows"></span>
-                  <span class="key-space"></span>
-                </div>
-                <div class="deck-pad"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <section class="section about" aria-labelledby="about-title">
+        <p class="kicker">About</p>
+        <h2 id="about-title">A simpler way to make Windows yours</h2>
+        <p class="about-copy">Cursed is a Windows app for changing every system cursor from one place. Choose from 83 included cursor packs or turn your own image into a cursor. It applies a complete set across all 17 Windows pointer roles, so the arrow, link hand, text cursor, busy cursor, and resize pointers match. You can adjust size and color, crop imported images, keep animated images moving, and choose what appears when you hover over a link. Cursed remembers your choice after Windows theme changes and gives you a one-click way to restore your previous cursor scheme. It runs without an account, administrator access, ads, or telemetry.</p>
+        <ul class="feature-list">
+          <li><span aria-hidden="true">›</span>83 ready-to-use cursor packs are included</li>
+          <li><span aria-hidden="true">›</span>Import pictures, animated images, and cursor files</li>
+          <li><span aria-hidden="true">›</span>Change all 17 Windows pointer roles together</li>
+          <li><span aria-hidden="true">›</span>No account, ads, administrator access, or telemetry</li>
+        </ul>
       </section>
 
-      <!-- ------------------------------------------------------ 3 · DOWNLOAD -->
-      <section class="section download" id="download" aria-labelledby="download-h">
-        <div class="download-card">
+      <section class="section download" aria-labelledby="download-title">
+        <div class="download-copy">
           <p class="kicker">Download</p>
-          <h2 id="download-h">Get Cursed</h2>
-
-          <a
-            class="btn btn-primary"
-            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
-            download
-            rel="noopener noreferrer"
-          >
-            <span>Download for Windows</span>
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-              <path
-                d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </a>
-
-          <p class="rel-line">
-            <span class="mono">v<span id="rel-version">1.26.0</span></span>
-            <span class="dot">·</span>
-            <span class="mono" id="rel-size">11.37 MB</span>
-            <span class="dot">·</span>
-            <span class="mono" id="rel-date">2026-08-27</span>
-          </p>
-
-          <ul class="reqs-row" aria-label="System requirements">
-            <li>
-              <span class="req-k">Processor</span>
-              <span class="req-v">1 GHz dual-core</span>
-              <span class="req-n">x64, ARM64 or 32-bit</span>
-            </li>
-            <li>
-              <span class="req-k">Memory</span>
-              <span class="req-v">2 GB RAM</span>
-              <span class="req-n">4 GB recommended</span>
-            </li>
-            <li>
-              <span class="req-k">Storage</span>
-              <span class="req-v">150 MB free</span>
-              <span class="req-n">83 packs and background removal included</span>
-            </li>
-          </ul>
-
-          <ul class="platforms" aria-label="Platform availability">
-            <li class="is-ready"><span>Windows</span><b>Available now</b></li>
-            <li><span>Linux</span><b>Coming soon</b></li>
-            <li><span>macOS</span><b>Coming soon</b></li>
-          </ul>
-
-          <!-- Every href is an unversioned alias staged by the release build, so
-               publishing a release does not turn this list into 404s. -->
-          <p class="builds">
-            Other builds:
-            <a
-              href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-ARM64.exe"
-              download
-              rel="noopener noreferrer"
-              >ARM64</a
-            >
-            ·
-            <a
-              href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-x86.exe"
-              download
-              rel="noopener noreferrer"
-              >32-bit</a
-            >
-            ·
-            <a
-              href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe"
-              download
-              rel="noopener noreferrer"
-              >offline installer</a
-            >
-          </p>
+          <h2 id="download-title">Get Cursed for Windows</h2>
+          <p>The standard installer is for most Windows PCs. It installs for your account and does not need administrator permission. ARM64, 32-bit, and offline builds are available below.</p>
         </div>
-      </section>
-
-      <!-- -------------------------------------------------------- 4 · RATING -->
-      <!-- The stars are radio inputs, so picking one is real state the browser
-           holds and CSS can read. It is a rating you give, not a number we
-           claim: nothing here invents an average out of thin air. -->
-      <section class="section rate" id="rate" aria-labelledby="rate-h">
-        <div class="rate-card">
-          <p class="kicker">Your verdict</p>
-          <h2 id="rate-h">How are you finding it?</h2>
-          <p class="rate-lede">
-            Pick a score. It stays in your browser — there is nothing to sign in to and
-            nothing gets sent anywhere.
-          </p>
-
-          <fieldset class="stars">
-            <legend class="sr-only">Rate Cursed out of five</legend>
-
-            <input type="radio" name="rating" id="star5" value="5" />
-            <label for="star5" title="Five out of five"
-              ><span class="sr-only">Five out of five</span></label
-            >
-            <input type="radio" name="rating" id="star4" value="4" />
-            <label for="star4" title="Four out of five"
-              ><span class="sr-only">Four out of five</span></label
-            >
-            <input type="radio" name="rating" id="star3" value="3" />
-            <label for="star3" title="Three out of five"
-              ><span class="sr-only">Three out of five</span></label
-            >
-            <input type="radio" name="rating" id="star2" value="2" />
-            <label for="star2" title="Two out of five"
-              ><span class="sr-only">Two out of five</span></label
-            >
-            <input type="radio" name="rating" id="star1" value="1" />
-            <label for="star1" title="One out of five"
-              ><span class="sr-only">One out of five</span></label
-            >
-
-            <output class="rate-out" aria-live="polite">
-              <span class="rate-idle">Tap a star</span>
-              <span class="rate-said r1">Ouch. Noted.</span>
-              <span class="rate-said r2">Fair enough.</span>
-              <span class="rate-said r3">We will take it.</span>
-              <span class="rate-said r4">Good to hear.</span>
-              <span class="rate-said r5">Thank you.</span>
-            </output>
-          </fieldset>
+        <div class="download-card">
+          <a class="download-button" href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe" download rel="noopener noreferrer">
+            <span>Download for Windows</span>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1v9M4.5 7L8 10.5 11.5 7M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </a>
+          <p class="release-line"><span>v<span id="rel-version">1.27.0</span></span><span aria-hidden="true">·</span><span id="rel-size">22.62 MB</span><span aria-hidden="true">·</span><span id="rel-date">2026-08-29</span></p>
+          <dl class="requirements">
+            <div><dt>System</dt><dd>Windows 10 or 11</dd></div>
+            <div><dt>Memory</dt><dd>2 GB RAM</dd></div>
+            <div><dt>Storage</dt><dd>150 MB free</dd></div>
+          </dl>
+          <p class="other-builds">Other builds: <a href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-ARM64.exe" download rel="noopener noreferrer">ARM64</a><span aria-hidden="true">·</span><a href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-x86.exe" download rel="noopener noreferrer">32-bit</a><span aria-hidden="true">·</span><a href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup-Offline-x64.exe" download rel="noopener noreferrer">offline installer</a></p>
         </div>
       </section>
     </main>
 
-    <!-- ------------------------------------------------------------ FOOTER -->
     <footer class="site-footer">
-      <div class="footer-top">
-        <a class="footer-brand" href="#top">CURSED<sup>&reg;</sup></a>
-
-        <nav class="footer-nav" aria-label="Footer">
-          <span class="bracket" aria-hidden="true">[</span>
-          <ul>
-            <li><a href="#top">Home</a></li>
-            <li><a href="#about">About</a></li>
-            <li><a href="#download">Download</a></li>
-            <li><a href="#rate">Rate it</a></li>
-          </ul>
-          <span class="bracket" aria-hidden="true">]</span>
+      <div class="footer-inner">
+        <div><p class="footer-name">CURSED</p><p class="footer-summary">A private Windows cursor app by feylo.</p></div>
+        <nav class="footer-legal" aria-label="Legal information">
+          <button type="button" data-dialog="privacy-dialog">Privacy</button>
+          <button type="button" data-dialog="terms-dialog">Terms</button>
         </nav>
-
-        <div class="footer-cta">
-          <p class="footer-cta-head">Get it for Windows</p>
-          <a
-            class="footer-pill"
-            href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe"
-            download
-            rel="noopener noreferrer"
-          >
-            <span>Download the installer</span>
-            <span class="footer-pill-arrow" aria-hidden="true">&#8600;</span>
-          </a>
-        </div>
-      </div>
-
-      <p class="footer-wordmark" aria-hidden="true">CURSED</p>
-
-      <div class="footer-base">
-        <p class="footer-copy">&copy; 2026 feylo</p>
-
-        <nav class="footer-legal" aria-label="Legal">
-          <a
-            href="https://github.com/notfeylo/cursed/blob/main/docs/PRIVACY.md"
-            rel="noopener noreferrer"
-            >Privacy</a
-          >
-          <a
-            href="https://github.com/notfeylo/cursed/blob/main/docs/TERMS.md"
-            rel="noopener noreferrer"
-            >Terms</a
-          >
-        </nav>
-
-        <p class="footer-note">Your pointer. Possessed.</p>
+        <p class="copyright">© 2026 feylo</p>
       </div>
     </footer>
+
+    <dialog class="legal-dialog" id="privacy-dialog" aria-labelledby="privacy-title">
+      <div class="dialog-head"><div><p class="kicker">Legal</p><h2 id="privacy-title">Privacy</h2></div><button class="dialog-close" type="button" data-close aria-label="Close privacy policy">×</button></div>
+      <div class="legal-copy">
+        <p>Cursed does not require an account and does not collect analytics, telemetry, crash reports, advertising identifiers, or personal information. Your settings, presets, imported images, and generated cursor files stay on your computer and are never uploaded by Cursed.</p>
+        <p>If automatic update checks are enabled, the app makes a request to GitHub to see whether a newer release is available. That request contains no Cursed account or device identifier, and you can disable it in Settings. Visiting this website or downloading an installer may still give Vercel or GitHub the ordinary technical information needed to serve the request under their own privacy policies.</p>
+        <p>This website has no cookies, analytics, advertising, sign-in, contact form, or third-party tracking scripts. If Cursed ever adds optional telemetry, it will be off unless you enable it and this policy will be updated before that release.</p>
+        <p class="legal-date">Last updated August 29, 2026.</p>
+      </div>
+    </dialog>
+
+    <dialog class="legal-dialog" id="terms-dialog" aria-labelledby="terms-title">
+      <div class="dialog-head"><div><p class="kicker">Legal</p><h2 id="terms-title">Terms</h2></div><button class="dialog-close" type="button" data-close aria-label="Close terms">×</button></div>
+      <div class="legal-copy">
+        <p>Cursed is free software provided as is, without warranties of any kind. It changes the cursor settings for your Windows account, installs no driver or system service, and does not need administrator permission. You are responsible for keeping any backups you consider important and for deciding whether the app is suitable for your computer.</p>
+        <p>You are responsible for the images and cursor files you import and must have the right to use them. Do not use Cursed or a cursor made with it to imitate a trusted system prompt, mislead another person, distribute harmful material, or break the law.</p>
+        <p>Cursed, its original interface, and its original artwork belong to feylo. Cursor packs or artwork supplied by third parties remain subject to their own rights and terms. To the fullest extent allowed by law, feylo is not liable for losses caused by using or being unable to use Cursed; the app includes controls to restore your previous scheme or the Windows defaults.</p>
+        <p class="legal-date">Last updated August 29, 2026.</p>
+      </div>
+    </dialog>
   </body>
 </html>
