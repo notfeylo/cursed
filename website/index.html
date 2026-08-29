@@ -30,7 +30,7 @@
         <p class="hero-copy">Every cursor on your PC, replaced with one you actually chose — and any picture you own turned into a real one. Two clicks, no files to hunt down, and it stays that way.</p>
       </section>
 
-      <section class="section about" aria-labelledby="about-title">
+      <section class="section about" id="about" aria-labelledby="about-title">
         <p class="kicker">About</p>
         <h2 id="about-title">A simpler way to make Windows yours</h2>
         <p class="about-copy">Cursed is a Windows app for changing every system cursor from one place. Choose from 83 included cursor packs or turn your own image into a cursor. It applies a complete set across all 17 Windows pointer roles, so the arrow, link hand, text cursor, busy cursor, and resize pointers match. You can adjust size and color, crop imported images, keep animated images moving, and choose what appears when you hover over a link. Cursed remembers your choice after Windows theme changes and gives you a one-click way to restore your previous cursor scheme. It runs without an account, administrator access, ads, or telemetry.</p>
@@ -42,7 +42,7 @@
         </ul>
       </section>
 
-      <section class="section download" aria-labelledby="download-title">
+      <section class="section download" id="download" aria-labelledby="download-title">
         <div class="download-copy">
           <p class="kicker">Download</p>
           <h2 id="download-title">Get Cursed for Windows</h2>
@@ -65,13 +65,37 @@
     </main>
 
     <footer class="site-footer">
-      <div class="footer-inner">
-        <div><p class="footer-name">CURSED</p><p class="footer-summary">A private Windows cursor app by feylo.</p></div>
+      <div class="footer-top">
+        <a class="footer-brand" href="#top">CURSED<sup>®</sup></a>
+
+        <nav class="footer-nav" aria-label="Footer">
+          <span class="bracket" aria-hidden="true">[</span>
+          <ul>
+            <li><a href="#top">Home</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#download">Download</a></li>
+          </ul>
+          <span class="bracket" aria-hidden="true">]</span>
+        </nav>
+
+        <div class="footer-cta">
+          <p class="footer-cta-head">Get it for Windows</p>
+          <a class="footer-pill" href="https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe" download rel="noopener noreferrer">
+            <span>Download the installer</span>
+            <span class="footer-pill-arrow" aria-hidden="true">↘</span>
+          </a>
+        </div>
+      </div>
+
+      <p class="footer-wordmark" aria-hidden="true">CURSED</p>
+
+      <div class="footer-base">
+        <p>© 2026 feylo</p>
         <nav class="footer-legal" aria-label="Legal information">
           <button type="button" data-dialog="privacy-dialog">Privacy</button>
           <button type="button" data-dialog="terms-dialog">Terms</button>
         </nav>
-        <p class="copyright">© 2026 feylo</p>
+        <p class="footer-note">Your pointer. Possessed.</p>
       </div>
     </footer>
 
