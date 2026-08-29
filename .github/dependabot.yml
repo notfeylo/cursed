@@ -54,9 +54,8 @@ updates:
           - "@types/react"
           - "@types/react-dom"
 
-  # The workflows pin actions by major version, which is a supply-chain surface
-  # of its own: `actions/checkout@v4` is a moving reference to whatever that tag
-  # points at today.
+  # Workflows pin actions to immutable commit SHAs. This entry lets Dependabot
+  # propose reviewed SHA updates instead of silently following a moving tag.
   - package-ecosystem: github-actions
     directory: /
     schedule:

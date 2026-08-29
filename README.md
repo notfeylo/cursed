@@ -2,6 +2,8 @@
 
 **Your pointer. Possessed.**
 
+[Website](https://www.trycursed.com/) · [Download](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe) · [Cursor guides](https://www.trycursed.com/guides)
+
 [![build](https://github.com/notfeylo/cursed/actions/workflows/build.yml/badge.svg)](https://github.com/notfeylo/cursed/actions/workflows/build.yml)
 [![latest release](https://img.shields.io/github/v/release/notfeylo/cursed?label=download)](https://github.com/notfeylo/cursed/releases/latest)
 [![Windows 10 1803+](https://img.shields.io/badge/Windows-10%201803%2B-0078D4)](#requirements)
@@ -12,13 +14,6 @@ multi-resolution cursor scheme, turns any image you drop on it into a real
 `.cur` or `.ani`, and stops Windows quietly reverting it.
 
 No administrator rights. No overlay. No added input latency.
-
-| | |
-| :---: | :---: |
-| <img src="website/shots/home.png" width="330" alt="The home screen, showing the cursor currently in use."> | <img src="website/shots/catalog.png" width="330" alt="The catalog, a searchable grid of cursor packs."> |
-| **Home** — what you're using now | **Catalog** — search, filter, hover to preview |
-| <img src="website/shots/custom.png" width="330" alt="The custom screen, with a drop zone above cursors built from the user's own images."> | <img src="website/shots/customise.png" width="330" alt="The customise screen, with a size slider and a control for which pointer roles it applies to."> |
-| **Custom** — drop an image, get a cursor | **Customise** — size, colour, which roles |
 
 ---
 
@@ -166,7 +161,7 @@ Each directory has a README explaining what is in it and where to start.
 | [`src/`](src/) | **The front end.** React + TypeScript: screens, shared components, the typed IPC client, the store, and every design token in one stylesheet. |
 | [`src-tauri/`](src-tauri/) | **The core.** Rust, and everything that touches Windows: the three cursor layers, the file writers, the catalog, updates, the tray, and the installer hooks. |
 | [`assets/`](assets/) | The 83 bundled packs that ship inside the installer, and the generated artwork kept in-repo so a drawing change shows up as a picture in the diff. |
-| [`website/`](website/) | cursorforge.vercel.app. Static HTML and CSS, no build step, and `script-src 'none'`. |
+| [`website/`](website/) | The trycursed.com static site, guide library, build script, SEO metadata, and strict deployment headers. |
 | [`scripts/`](scripts/) | Build, release and verification tooling. |
 | [`docs/`](docs/) | Architecture, the cursor byte formats, licensing, and one verification record per release. |
 | [`.github/`](.github/) | CI: the build, cross-architecture and audit jobs, and the tag-triggered release workflow. |

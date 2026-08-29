@@ -1,4 +1,4 @@
-# cursorforge.vercel.app
+# trycursed.com
 
 The Cursed landing page is a small static site: logo and hero, About, Download,
 and a compact footer with in-page Privacy and Terms dialogs.
@@ -14,11 +14,12 @@ The build script reads the latest public GitHub release to fill in the version,
 installer size, and release date. If GitHub is unavailable, it keeps the true
 values committed in `index.html`.
 
-Only `dist` is deployed. It contains `index.html`, `styles.css`, `site.js`, the
-favicon, local font files, `robots.txt`, and `sitemap.xml`. Source notes, build
-scripts, Vercel configuration, and unused media are deliberately excluded from
-production. `www.trycursed.com` is the canonical address; the old Vercel hostname
-redirects there permanently.
+Only `dist` is deployed. It contains the homepage, branded 404 page, guide
+library, stylesheet, small same-origin dialog script, favicon, local font files,
+`robots.txt`, and `sitemap.xml`. Source notes, build scripts, Vercel
+configuration, and unused media are deliberately excluded from production.
+`www.trycursed.com` is the canonical address; the apex domain and old Vercel
+hostname redirect there permanently.
 
 ## Privacy and security
 

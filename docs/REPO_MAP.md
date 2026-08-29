@@ -15,7 +15,7 @@ the reason a UI change can never write to the wrong place.
 src/                The React front end. Everything the user looks at.
 src-tauri/          The Rust core. Everything that touches Windows.
 assets/             The 83 bundled packs, and the generated artwork kept for review.
-website/            cursorforge.vercel.app. Static, no build step, no scripts.
+website/            trycursed.com static source, guides, build script, and deployment policy.
 scripts/            Build, release and verification tooling.
 docs/               This, and everything else worth writing down.
 .github/            CI and the issue/PR templates.
