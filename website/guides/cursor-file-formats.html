@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CUR vs ANI: Windows Cursor Files and Hotspots | Cursed</title>
+  <meta name="description" content="Understand CUR, ANI, and ICO cursor files, how a cursor hotspot controls clicks, and why multiple sizes matter for Windows display scaling.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1"><link rel="canonical" href="https://www.trycursed.com/guides/cursor-file-formats">
+  <meta property="og:title" content="CUR vs ANI: Windows Cursor Files and Hotspots"><meta property="og:description" content="A practical explanation of Windows cursor formats, hotspots, animation, and display scaling."><meta property="og:type" content="article"><meta property="og:url" content="https://www.trycursed.com/guides/cursor-file-formats"><meta property="og:image" content="https://www.trycursed.com/media/cursed-mouse-pointer-settings.webp"><meta property="og:image:alt" content="Cursed Windows mouse pointer size and color settings"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="CUR vs ANI: Windows Cursor Files and Hotspots"><meta name="twitter:description" content="A practical explanation of Windows cursor formats, hotspots, animation, and display scaling."><meta name="twitter:image" content="https://www.trycursed.com/media/cursed-mouse-pointer-settings.webp">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","@id":"https://www.trycursed.com/guides/cursor-file-formats#article","headline":"CUR vs ANI: Windows Cursor Files and Hotspots","description":"Understand CUR, ANI, and ICO cursor files, cursor hotspots, animation, and display scaling.","url":"https://www.trycursed.com/guides/cursor-file-formats","mainEntityOfPage":"https://www.trycursed.com/guides/cursor-file-formats","image":"https://www.trycursed.com/media/cursed-mouse-pointer-settings.webp","datePublished":"2026-08-29","dateModified":"2026-08-29","author":{"@id":"https://www.trycursed.com/#organization"},"publisher":{"@id":"https://www.trycursed.com/#organization"},"isPartOf":{"@id":"https://www.trycursed.com/#website"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Cursed","item":"https://www.trycursed.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://www.trycursed.com/guides"},{"@type":"ListItem","position":3,"name":"Cursor file formats","item":"https://www.trycursed.com/guides/cursor-file-formats"}]}]}</script>
+  <link rel="icon" href="/favicon.png" type="image/png" sizes="256x256"><link rel="apple-touch-icon" href="/favicon.png" sizes="256x256"><link rel="stylesheet" href="/styles.css"><script src="/analytics-config.js" defer></script><script src="/download-events.js" defer></script>
+</head>
+<body>
+  <header class="guide-header"><a class="guide-brand" href="/">CURSED</a><nav aria-label="Main"><a href="/guides">Guides</a><a href="/#download">Download</a></nav></header>
+  <main class="guide-main">
+    <p class="breadcrumbs"><a href="/">Home</a> / <a href="/guides">Guides</a> / Cursor file formats</p>
+    <p class="eyebrow">Windows cursor files</p><h1>CUR, ANI, and the pixel that makes a click land</h1>
+    <p class="guide-lead">Windows uses CUR files for still pointers and ANI files for animated ones. Both need a correctly placed hotspot, and good cursor files also account for different screen sizes.</p>
+    <p class="guide-updated">Updated <time datetime="2026-08-29">August 29, 2026</time></p>
+    <article class="guide-content">
+      <h2>CUR is a still Windows cursor</h2>
+      <p>A <code>.cur</code> file looks similar to an icon file, but it carries one extra piece of information that matters every time you click: the hotspot. A well-built CUR file can contain the same pointer artwork at several resolutions so Windows can choose an appropriate size for the current display scale.</p>
+      <p>Renaming a PNG or ICO file to <code>.cur</code> does not create a working cursor. The file needs the cursor directory structure, image data, and hotspot coordinates Windows expects.</p>
+
+      <h2>ANI is an animated Windows cursor</h2>
+      <p>An <code>.ani</code> file stores a sequence of cursor frames plus timing information. Windows uses ANI for moving pointers such as an animated busy indicator. Each frame still needs a reliable hotspot so the apparent click point does not jump as the animation plays.</p>
+      <p>GIF and APNG are image-animation formats, not native Windows cursor formats. Cursed decodes their frames and writes the corresponding ANI cursor files locally.</p>
+
+      <h2>The hotspot is the actual click point</h2>
+      <p>The hotspot is a pair of pixel coordinates inside the cursor. An arrow normally clicks from its sharp tip; a crosshair normally clicks from its center. If the artwork looks correct but every click lands a few pixels away, the hotspot is probably misplaced.</p>
+      <p>Hotspots should scale with the artwork. Reusing one absolute coordinate across several cursor sizes can make only one size feel accurate. Cursed stores the chosen point proportionally and writes the correct coordinate for each output size.</p>
+
+      <h2>Why multiple sizes matter</h2>
+      <p>Windows display scaling changes how large interface elements appear on high-density screens. A cursor with several built-in resolutions gives Windows suitable artwork to choose from instead of stretching one small bitmap. Cursed produces still cursors at 32, 48, 64, 96, 128, 192, and 256 pixels.</p>
+      <p>Animated cursor files do not carry the same multi-resolution directory as CUR files, so Cursed creates a separate ANI for each target size and selects the closest one when applying the pointer.</p>
+
+      <h2>What about ICO, PNG, GIF, and APNG?</h2>
+      <ul>
+        <li><strong>ICO</strong> is a Windows icon format. Cursed can read it as artwork, but a cursor still needs hotspot information.</li>
+        <li><strong>PNG, JPEG, WebP, BMP, and TIFF</strong> are still image sources that can become CUR files.</li>
+        <li><strong>GIF and APNG</strong> are animation sources that can become ANI files.</li>
+        <li><strong>CUR and ANI</strong> are the native cursor files Windows applies.</li>
+      </ul>
+      <p class="guide-note"><strong>Quick diagnosis:</strong> if the cursor is sharp but clicks in the wrong place, check the hotspot. If it clicks correctly but looks blurry at some display scales, check the resolutions stored in the file.</p>
+      <div class="guide-cta"><h2>Create a correctly sized Windows cursor</h2><p>Import artwork, place the hotspot visually, and let Cursed build the native cursor files on your PC.</p><a class="download-button" href="/download">Download Cursed</a></div>
+    </article>
+  </main>
+  <footer class="guide-footer"><p>© 2026 feylo</p><nav aria-label="Related pages"><a href="/guides/image-to-cursor">Image to cursor</a><a href="/guides/animated-gif-cursor">Animated GIF cursor</a><a href="/guides/windows-cursor-customization">Cursor customization</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav></footer>
+</body>
+</html>

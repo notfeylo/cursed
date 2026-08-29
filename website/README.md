@@ -39,10 +39,12 @@ The current Partner Center URL will be:
 
 ## Privacy and security
 
-The site has no cookies, analytics, forms, accounts, external scripts, or
-third-party embeds. Privacy and Terms use the native HTML dialog element and the
-small same-origin `site.js` file. Vercel headers deny framing, referrers,
-powerful browser permissions, network connections from scripts, and every
+The site has no cookies, forms, accounts, external scripts, or third-party
+embeds. Privacy and Terms use the native HTML dialog element and the small
+same-origin `site.js` file. A dormant, first-party download-event client is
+documented in `POSTHOG.md`; it sends nothing unless a public PostHog project
+token is configured at build time. Vercel headers deny framing, referrers,
+powerful browser permissions, cross-origin connections from scripts, and every
 resource type the page does not use.
 
 The app itself also has no telemetry. GitHub release download counts can show

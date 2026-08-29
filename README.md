@@ -2,7 +2,7 @@
 
 **Your pointer. Possessed.**
 
-[Website](https://www.trycursed.com/) · [Download](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe) · [Cursor guides](https://www.trycursed.com/guides)
+[Website](https://www.trycursed.com/) · [Download](https://github.com/notfeylo/cursed/releases/latest/download/Cursed-Setup.exe) · [Cursor guides](https://www.trycursed.com/guides) · [CUR and ANI reference](https://www.trycursed.com/guides/cursor-file-formats)
 
 [![build](https://github.com/notfeylo/cursed/actions/workflows/build.yml/badge.svg)](https://github.com/notfeylo/cursed/actions/workflows/build.yml)
 [![latest release](https://img.shields.io/github/v/release/notfeylo/cursed?label=download)](https://github.com/notfeylo/cursed/releases/latest)

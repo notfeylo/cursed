@@ -159,6 +159,11 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .guide-cta { margin-top: 64px; padding: clamp(26px, 5vw, 42px); background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; }
 .guide-cta h2 { margin-top: 0; }
 .guide-cta .download-button { width: fit-content; margin-top: 24px; }
+.media-resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; max-width: 800px; margin-top: 26px; }
+.media-resource { display: grid; overflow: hidden; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 12px; text-decoration: none; }
+.media-resource:hover { border-color: var(--blue); color: var(--text); }
+.media-resource img { display: block; width: 100%; height: auto; background: #06101f; }
+.media-resource span { padding: 12px 14px; }
 .guide-footer { display: flex; justify-content: space-between; gap: 24px; padding-top: 28px; padding-bottom: 34px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 13px; }
 .guide-footer p { margin: 0; }
 .guide-footer nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; }
@@ -179,6 +184,7 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
   .footer-legal { justify-content: flex-start; }
   .guide-cards { grid-template-columns: 1fr; }
   .showcase-gallery { gap: 12px; }
+  .media-resource-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {

@@ -38,6 +38,19 @@ const paths = releasePaths(sourceDirectory, catalog, version);
 rmSync(outputDirectory, { recursive: true, force: true });
 mkdirSync(outputDirectory, { recursive: true });
 
+const posthogToken = process.env.POSTHOG_PROJECT_TOKEN?.trim() ?? "";
+const posthogRegion = process.env.POSTHOG_REGION?.trim().toLowerCase() === "eu" ? "eu" : "us";
+const analyticsConfig = {
+  token: posthogToken,
+  endpoint: posthogToken ? `/c7-${posthogRegion}/events` : "",
+  version,
+};
+writeFileSync(
+  join(outputDirectory, "analytics-config.js"),
+  `window.CURSED_DOWNLOAD_ANALYTICS = ${JSON.stringify(analyticsConfig)};\n`,
+  "utf8",
+);
+
 let html = readFileSync(join(sourceDirectory, "index.html"), "utf8");
 html = setById(html, "rel-version", version);
 html = setById(html, "rel-size", `${(release.sizeBytes / 1_048_576).toFixed(2)} MB`);
@@ -49,8 +62,9 @@ copyFileSync(join(sourceDirectory, "404.html"), join(outputDirectory, "404.html"
 copyFileSync(join(sourceDirectory, "privacy.html"), join(outputDirectory, "privacy.html"));
 copyFileSync(join(sourceDirectory, "terms.html"), join(outputDirectory, "terms.html"));
 copyFileSync(join(sourceDirectory, "installer-return-codes.html"), join(outputDirectory, "installer-return-codes.html"));
+copyFileSync(join(sourceDirectory, "press.html"), join(outputDirectory, "press.html"));
 
-for (const file of ["styles.css", "site.js", "favicon.png", "robots.txt", "sitemap.xml"]) {
+for (const file of ["styles.css", "site.js", "download-events.js", "favicon.png", "robots.txt", "sitemap.xml"]) {
   copyFileSync(join(sourceDirectory, file), join(outputDirectory, file));
 }
 cpSync(join(sourceDirectory, "fonts"), join(outputDirectory, "fonts"), { recursive: true });
