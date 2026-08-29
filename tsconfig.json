@@ -20,10 +20,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": false,
-    "forceConsistentCasingInFileNames": true,
-
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "forceConsistentCasingInFileNames": true
+    // There was a "baseUrl" and an "@/*" -> "src/*" mapping here. TypeScript 7
+    // removed "baseUrl", and the alias was never worth repairing: vite.config.ts
+    // declares no matching `resolve.alias`, so nothing in src/ could import
+    // through it — an `@/` import would have type-checked and then failed to
+    // bundle. Gone rather than rewritten.
   },
   "include": ["src", "vite.config.ts"]
 }
