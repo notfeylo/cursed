@@ -48,6 +48,7 @@ writeFileSync(join(outputDirectory, "index.html"), html, "utf8");
 copyFileSync(join(sourceDirectory, "404.html"), join(outputDirectory, "404.html"));
 copyFileSync(join(sourceDirectory, "privacy.html"), join(outputDirectory, "privacy.html"));
 copyFileSync(join(sourceDirectory, "terms.html"), join(outputDirectory, "terms.html"));
+copyFileSync(join(sourceDirectory, "installer-return-codes.html"), join(outputDirectory, "installer-return-codes.html"));
 
 for (const file of ["styles.css", "site.js", "favicon.png", "robots.txt", "sitemap.xml"]) {
   copyFileSync(join(sourceDirectory, file), join(outputDirectory, file));

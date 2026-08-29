@@ -109,6 +109,13 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .legal-sections p, .legal-sections ul { margin: 17px 0 0; }
 .legal-sections ul { padding-left: 22px; }
 .legal-sections li + li { margin-top: 9px; }
+.legal-sections code { color: #c8d8ee; font-family: "Cascadia Mono", "Consolas", monospace; }
+.table-wrap { margin-top: 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.return-code-table { width: 100%; min-width: 620px; border-collapse: collapse; background: var(--surface); }
+.return-code-table th, .return-code-table td { padding: 16px 18px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.return-code-table th { color: var(--text); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.return-code-table tbody tr:last-child td { border-bottom: 0; }
+.return-code-table td:first-child { width: 72px; color: var(--text); font-weight: 500; }
 .legal-page-footer { width: min(100%, 920px); }
 
 .guide-header, .guide-main, .guide-footer { width: min(100%, 860px); margin-inline: auto; padding-inline: var(--gutter); }

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installer Return Codes | Cursed</title>
+  <meta name="description" content="Return codes, silent-install parameters, and troubleshooting guidance for the Cursed Windows installer.">
+  <meta name="robots" content="index, follow, max-snippet:-1">
+  <meta name="theme-color" content="#050608">
+  <link rel="canonical" href="https://www.trycursed.com/installer-return-codes">
+  <meta property="og:title" content="Installer Return Codes | Cursed">
+  <meta property="og:description" content="Return codes and troubleshooting guidance for the Cursed Windows installer.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.trycursed.com/installer-return-codes">
+  <meta property="og:image" content="https://www.trycursed.com/favicon.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="/favicon.png" type="image/png" sizes="256x256">
+  <link rel="apple-touch-icon" href="/favicon.png" sizes="256x256">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="guide-header">
+    <a class="guide-brand" href="/">CURSED</a>
+    <nav aria-label="Main"><a href="/">Home</a><a href="/guides">Guides</a><a href="/#download">Download</a></nav>
+  </header>
+  <main class="legal-main">
+    <div class="legal-intro">
+      <p class="eyebrow">Installer documentation</p>
+      <h1>Return codes</h1>
+      <p class="legal-lead">Cursed uses an NSIS installer for Windows. These return values tell Microsoft Store, deployment tools, and support teams whether installation completed or why it stopped.</p>
+      <p class="legal-meta"><span>Applies to Cursed 1.27.0 and later</span><span>Last updated <time datetime="2026-08-29">August 29, 2026</time></span></p>
+    </div>
+    <div class="legal-sections">
+      <section aria-labelledby="installer-parameters">
+        <h2 id="installer-parameters">Silent installation</h2>
+        <p>Use <code>/S</code> to run the installer without interactive windows. The switch is case-sensitive and must use an uppercase S.</p>
+        <p><code>Cursed-Setup.exe /S</code></p>
+      </section>
+      <section aria-labelledby="installer-codes">
+        <h2 id="installer-codes">Return-code reference</h2>
+        <div class="table-wrap">
+          <table class="return-code-table">
+            <thead><tr><th scope="col">Code</th><th scope="col">Meaning</th><th scope="col">Recommended action</th></tr></thead>
+            <tbody>
+              <tr><td><code>0</code></td><td>Installation completed successfully.</td><td>No action is required.</td></tr>
+              <tr><td><code>1</code></td><td>The user cancelled an interactive installation.</td><td>Run the installer again when ready. This outcome is not expected during a normal silent installation.</td></tr>
+              <tr><td><code>2</code></td><td>The installer or its script aborted because installation could not continue. Cursed uses this result when Windows is older than Windows 10 version 1803, build 17134.</td><td>Confirm the PC runs a supported Windows version. Then check available disk space, close running copies of Cursed, and retry the installer.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-labelledby="installer-other-codes">
+        <h2 id="installer-other-codes">Other results</h2>
+        <p>Cursed does not currently define any additional custom installer return codes. If a deployment tool reports another value, record the complete value and the Windows version, then report it through the <a href="https://github.com/notfeylo/cursed/issues" rel="noopener noreferrer">Cursed issue tracker</a>.</p>
+      </section>
+      <section aria-labelledby="installer-requirements">
+        <h2 id="installer-requirements">Installation requirements</h2>
+        <p>Cursed installs for the current Windows user and does not require administrator permission. It supports Windows 10 version 1803 or newer and Windows 11. The Microsoft Edge WebView2 Runtime must be available for the app interface.</p>
+      </section>
+    </div>
+  </main>
+  <footer class="guide-footer legal-page-footer"><p>© 2026 feylo</p><nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/guides">Guides</a></nav></footer>
+</body>
+</html>
