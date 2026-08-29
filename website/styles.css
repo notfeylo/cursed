@@ -44,12 +44,12 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 
 .showcase-intro { max-width: 790px; }
 .showcase-intro > p:last-child { margin: 24px 0 0; color: #c3c9d2; font-size: clamp(1rem, 1.7vw, 1.12rem); }
-.showcase-demo { max-width: 680px; margin: clamp(42px, 7vw, 72px) auto 0; padding: 11px; background: #080a0e; border: 1px solid var(--line); }
+.showcase-demo { max-width: 520px; margin: clamp(42px, 7vw, 72px) auto 0; padding: 11px; background: #080a0e; border: 1px solid var(--line); }
 .showcase-frame-head { display: flex; justify-content: space-between; gap: 20px; padding: 3px 4px 12px; color: var(--quiet); font-family: var(--display); font-size: 10px; letter-spacing: .15em; }
-.showcase-video { display: block; width: 100%; aspect-ratio: 640 / 650; background: #020306; object-fit: cover; }
+.showcase-video { display: block; width: 100%; aspect-ratio: 696 / 948; background: #020306; border-radius: 10px; object-fit: cover; }
 .showcase-demo figcaption { padding: 13px 5px 3px; color: var(--quiet); font-size: 12px; }
 .showcase-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-.showcase-shot { margin: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
+.showcase-shot { margin: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .showcase-shot img { display: block; width: 100%; height: auto; background: #06101f; }
 .showcase-shot figcaption { display: grid; gap: 4px; padding: 16px; }
 .showcase-shot strong { color: var(--text); font-family: var(--display); font-size: 14px; letter-spacing: .04em; }
@@ -160,7 +160,7 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .guide-cta h2 { margin-top: 0; }
 .guide-cta .download-button { width: fit-content; margin-top: 24px; }
 .media-resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; max-width: 800px; margin-top: 26px; }
-.media-resource { display: grid; overflow: hidden; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 12px; text-decoration: none; }
+.media-resource { display: grid; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 12px; text-decoration: none; }
 .media-resource:hover { border-color: var(--blue); color: var(--text); }
 .media-resource img { display: block; width: 100%; height: auto; background: #06101f; }
 .media-resource span { padding: 12px 14px; }
