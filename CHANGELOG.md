@@ -7,6 +7,66 @@ happened to, not for the person who made it.
 
 ---
 
+## 1.28.0 — 2026-09-07
+
+Fifty more cursors, a catalog you can actually find things in, and the size
+control finally working on every cursor in it.
+
+### Fifty more cursors, and shelves to keep them on
+
+The catalog is 133 packs, up from 83. With that many, one long grid stopped
+being browsable — so cursors are now filed by what they are: anime, gaming,
+memes, cute, movies & TV, cars, weapons, sports, tech. Animated and static are
+filters across the whole set rather than categories of their own, because an
+animated Naruto cursor belongs with the other Naruto cursors.
+
+The two sites this catalog draws on, **custom-cursor.com** and
+**sweezy-cursors.com**, are now credited on the website.
+
+### Bookmark a cursor while you are browsing
+
+There was one way to keep a cursor: apply it, then save the whole pointer as a
+preset. That is a decision — pack, colour, size, outline — and it is far more
+than "I like that one, do not lose it" deserves. Bookmark any cursor from the
+catalog and it appears under SAVED, above your presets.
+
+### The size control now works on animated cursors
+
+It did not, and nothing said so. An animated cursor holds exactly one
+resolution and Windows cannot rescale one while loading it, so every imported
+animation was pinned to the size its artist drew it at — usually 32 pixels. The
+slider moved, the number changed, and the pointer on screen stayed exactly the
+same. Animated cursors are now re-rendered at the size you asked for, through
+the same resampler everything else uses. Static imported cursors go through it
+too, so they are sharper when enlarged than the shell's own stretch.
+
+### Cropping is a question now, not a fixture
+
+The crop tool was a second full-size picture with a drag surface, sitting in the
+middle of the import screen for every image — including the majority that are
+already the right shape. It asks first, and appears when you say yes.
+
+**It was also wrong on any picture that was not square.** The drag box was
+measured against its frame rather than against the picture inside it, so on a
+wide or tall image the crop landed somewhere other than where you dragged. The
+same mistake moved the hotspot marker off the point you clicked. Both are fixed.
+
+### Quitting gives you your pointer back
+
+Quit Cursed — from the tray, or from the notification area — and Windows' own
+pointer comes back. It used to leave its cursor behind with nothing running to
+undo it, so the way out was to start the app again and find Restore. Starting
+Cursed again puts your cursor back, so nothing is lost by quitting.
+
+### Smaller things
+
+- Your cursor is re-asserted on screen at sign-in rather than assumed to have
+  survived, so a restart brings back the pointer you were using.
+- The orientation row is one line, and Reset sits in the panel header.
+- The "Apply to" dropdown on a catalog cursor no longer starts blank.
+
+---
+
 ## 1.27.0 — 2026-08-28
 
 Forty-seven more cursors, background removal that is simply there, and four
