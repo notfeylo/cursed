@@ -42,6 +42,13 @@ h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.02em; lin
 .feature-list li { display: flex; gap: 12px; align-items: baseline; color: var(--text); }
 .feature-list li span { color: var(--blue); font-size: 25px; line-height: 0; }
 
+.credit-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; max-width: 820px; margin: 34px 0 0; padding: 0; list-style: none; }
+.credit-list li { display: flex; flex-direction: column; gap: 6px; padding: 20px; background: var(--surface); border: 1px solid var(--line); }
+.credit-list a { color: var(--text); font-family: var(--display); font-size: 15px; letter-spacing: .04em; text-decoration: none; }
+.credit-list a:hover { color: var(--blue-light); text-decoration: underline; }
+.credit-list span { color: var(--quiet); font-size: 13px; }
+.credit-note { max-width: 790px; margin: 26px 0 0; color: var(--quiet); font-size: 13px; line-height: 1.65; }
+
 .showcase-intro { max-width: 790px; }
 .showcase-intro > p:last-child { margin: 24px 0 0; color: #c3c9d2; font-size: clamp(1rem, 1.7vw, 1.12rem); }
 .showcase-demo { max-width: 520px; margin: clamp(42px, 7vw, 72px) auto 0; padding: 11px; background: #080a0e; border: 1px solid var(--line); }
