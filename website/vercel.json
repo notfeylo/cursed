@@ -18,7 +18,7 @@
     },
     {
       "source": "/download",
-      "destination": "/downloads/1.27.0/Cursed-Setup.exe",
+      "destination": "/downloads/1.28.0/Cursed-Setup.exe",
       "permanent": false
     }
   ],
