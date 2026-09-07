@@ -52,6 +52,22 @@ export const getActiveState = () => call<ActiveState>("get_active_state");
 
 export const listPacks = () => call<PackSummary[]>("list_packs");
 
+/** One frame of a pack's arrow, with how long it is shown. */
+export interface PreviewFrame {
+  dataUri: string;
+  /** 0 for a still, which is what a static cursor comes back as. */
+  delayMs: number;
+}
+
+/**
+ * Every frame of one pack's arrow, for a preview that moves.
+ *
+ * Asked for per pack rather than carried in `listPacks`, which returns one still
+ * each because it fills a grid of a hundred and thirty tiles.
+ */
+export const previewFrames = (packId: string) =>
+  call<PreviewFrame[]>("preview_frames", { packId });
+
 export interface ApplyArgs {
   packId: string;
   tint: string;

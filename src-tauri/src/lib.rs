@@ -426,6 +426,7 @@ pub fn run() {
             commands::get_active_state,
             commands::get_cursor_base_size,
             commands::list_packs,
+            commands::preview_frames,
             commands::preview_pack,
             commands::clear_preview,
             commands::apply_pack,

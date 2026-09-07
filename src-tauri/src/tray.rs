@@ -84,6 +84,7 @@ pub fn create(app: &AppHandle) -> AppResult<()> {
                     // few things still able to raise a window while the event
                     // loop is being torn down.
                     crate::begin_shutdown();
+                    quit_hands_the_pointer_back();
                     app.exit(0)
                 }
                 other => {
@@ -109,6 +110,30 @@ pub fn create(app: &AppHandle) -> AppResult<()> {
         .build(app)
         .map_err(map)?;
     Ok(())
+}
+
+/// Puts Windows' own pointer back, because the app is going away.
+///
+/// **Quit and Restore are different actions and this is the difference.**
+/// Restore means "I do not want this cursor any more": it puts the pointer back
+/// *and* forgets which cursor was applied, so nothing brings it back. Quit means
+/// "stop running" — and a user who quits an app and is left with its cursor,
+/// with nothing running to change it back, has to reinstall the app to undo it.
+/// That is the state the Task Manager and the notification area lead people to,
+/// and it is why the pointer is handed back here.
+///
+/// So the descriptor is deliberately **not** forgotten. `applied.json` still
+/// names the cursor, the registry no longer holds it, and the next launch sees
+/// exactly that and commits it again — which is what makes quitting reversible
+/// by starting the app rather than by picking the cursor a second time.
+///
+/// Best-effort, and quiet. Nothing here may stop the process exiting: an app
+/// that will not quit is worse than one that leaves a pointer behind.
+pub(crate) fn quit_hands_the_pointer_back() {
+    match crate::cursor::restore_default() {
+        Ok(()) => log::info!("quit: the pointer was handed back to Windows"),
+        Err(e) => log::warn!("quit: the pointer could not be handed back: {e}"),
+    }
 }
 
 /// Rebuilds the menu so newly saved presets appear without a restart.

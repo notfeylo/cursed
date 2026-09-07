@@ -12,4 +12,5 @@ pub mod hotspot;
 pub mod icon_reader;
 pub mod matte;
 pub mod pipeline;
+pub mod rescale;
 pub mod svg;

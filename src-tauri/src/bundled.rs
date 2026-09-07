@@ -8,7 +8,7 @@
 //!
 //! ## Licensing, stated plainly
 //!
-//! **Two of these carry a licence. Eighty-one do not.**
+//! **Two of these carry a licence. A hundred and thirty-one do not.**
 //!
 //! `geared-brass` and `geared-steel` are GPL-3.0, with the author stating the
 //! assets are their own work, and their archives carry the `LICENSE.txt` and
@@ -22,6 +22,14 @@
 //! why those archives hold their two cursor files and nothing else, and why the
 //! `LIST INFO` chunk naming the artist was stripped out of the animations
 //! themselves. Deleting a readme does not empty a RIFF chunk.
+//!
+//! Fifty came from custom-cursor.com and sweezy-cursors.com, and state no
+//! licence either. Unlike the forty-seven, these are **credited**: both sites
+//! are named and linked on the website, which is the difference between using
+//! someone's work and passing it off. The archives are still cut back to their
+//! two cursor files — that is a naming requirement rather than an erasure, and
+//! it is explained below — but nothing was stripped out of the animations, so
+//! the `LIST INFO` chunk still carries whatever the artist put there.
 //!
 //! Several across both groups depict characters owned by somebody else — Batman,
 //! Spider-Man, Hello Kitty, Minecraft, Skyrim, Jujutsu Kaisen, One Piece,
@@ -74,23 +82,36 @@ impl Bundled {
     }
 }
 
-const PACKS: [Bundled; 83] = [
+const PACKS: [Bundled; 133] = [
     Bundled { slug: "9892a", label: "9892a", archive: include_bytes!("../../assets/bundled/9892a.zip") },
+    Bundled { slug: "among-us-john-wick-skin", label: "Among Us John Wick Skin", archive: include_bytes!("../../assets/bundled/among-us-john-wick-skin.zip") },
+    Bundled { slug: "among-us-yellow-twerk-animated", label: "Among Us Yellow Twerk Animated", archive: include_bytes!("../../assets/bundled/among-us-yellow-twerk-animated.zip") },
+    Bundled { slug: "artemis-ii-rocket-orion-spacecraft", label: "Artemis II Rocket & Orion Spacecraft", archive: include_bytes!("../../assets/bundled/artemis-ii-rocket-orion-spacecraft.zip") },
     Bundled { slug: "awkward-look-monkey-puppet-meme-3d", label: "Awkward Look Monkey Puppet Meme 3D", archive: include_bytes!("../../assets/bundled/awkward-look-monkey-puppet-meme-3d.zip") },
     Bundled { slug: "banana-cat-meme", label: "Banana Cat Meme", archive: include_bytes!("../../assets/bundled/banana-cat-meme.zip") },
     Bundled { slug: "batman-batarang", label: "Batman & Batarang", archive: include_bytes!("../../assets/bundled/batman-batarang.zip") },
     Bundled { slug: "batman-logo-face", label: "Batman Logo & Face", archive: include_bytes!("../../assets/bundled/batman-logo-face.zip") },
+    Bundled { slug: "battle-for-dream-island-pencil-animated", label: "Battle for Dream Island Pencil Animated", archive: include_bytes!("../../assets/bundled/battle-for-dream-island-pencil-animated.zip") },
+    Bundled { slug: "black-white-arrow-3d", label: "Black & White Arrow 3D", archive: include_bytes!("../../assets/bundled/black-white-arrow-3d.zip") },
+    Bundled { slug: "bleach-tybw-rukia-kuchiki-sode", label: "Bleach TYBW Rukia Kuchiki & Sode", archive: include_bytes!("../../assets/bundled/bleach-tybw-rukia-kuchiki-sode.zip") },
+    Bundled { slug: "blue-lock-rin-itoshi-soccer-ball", label: "Blue Lock Rin Itoshi & Soccer Ball", archive: include_bytes!("../../assets/bundled/blue-lock-rin-itoshi-soccer-ball.zip") },
+    Bundled { slug: "cars-lightning-mcqueen", label: "Cars Lightning McQueen", archive: include_bytes!("../../assets/bundled/cars-lightning-mcqueen.zip") },
     Bundled { slug: "cells-at-work-white-blood-cell-knife", label: "Cells at Work! White Blood Cell & Knife", archive: include_bytes!("../../assets/bundled/cells-at-work-white-blood-cell-knife.zip") },
     Bundled { slug: "chrome-hearts-sneaker-cross-arrow", label: "Chrome Hearts Sneaker & Cross Arrow", archive: include_bytes!("../../assets/bundled/chrome-hearts-sneaker-cross-arrow.zip") },
     Bundled { slug: "cristiano-ronaldo-siuuuu-meme-animated", label: "Cristiano Ronaldo Siuuuu Meme Animated", archive: include_bytes!("../../assets/bundled/cristiano-ronaldo-siuuuu-meme-animated.zip") },
     Bundled { slug: "cur1020", label: "Cur1020", archive: include_bytes!("../../assets/bundled/cur1020.zip") },
     Bundled { slug: "cur736", label: "Cur736", archive: include_bytes!("../../assets/bundled/cur736.zip") },
+    Bundled { slug: "cute-fluffy-cat-paw-arrow-pointing-paw", label: "Cute Fluffy Cat Paw Arrow & Pointing Paw", archive: include_bytes!("../../assets/bundled/cute-fluffy-cat-paw-arrow-pointing-paw.zip") },
+    Bundled { slug: "dancing-toothless-meme-animated", label: "Dancing Toothless Meme Animated", archive: include_bytes!("../../assets/bundled/dancing-toothless-meme-animated.zip") },
+    Bundled { slug: "dark-fantasy-bat-dagger-ankh", label: "Dark Fantasy Bat Dagger & Ankh", archive: include_bytes!("../../assets/bundled/dark-fantasy-bat-dagger-ankh.zip") },
+    Bundled { slug: "dark-grey-audi-car-silver-logo", label: "Dark Grey Audi Car & Silver Logo", archive: include_bytes!("../../assets/bundled/dark-grey-audi-car-silver-logo.zip") },
     Bundled { slug: "dc-joker-card", label: "DC Joker & Card", archive: include_bytes!("../../assets/bundled/dc-joker-card.zip") },
     Bundled { slug: "demon-slayer-water-breathing-sword", label: "Demon Slayer Water Breathing Sword", archive: include_bytes!("../../assets/bundled/demon-slayer-water-breathing-sword.zip") },
     Bundled { slug: "doraemon-pancake", label: "Doraemon & Pancake", archive: include_bytes!("../../assets/bundled/doraemon-pancake.zip") },
     Bundled { slug: "dragon-ball-black-rose-scythe", label: "Dragon Ball Black Rose & Scythe", archive: include_bytes!("../../assets/bundled/dragon-ball-black-rose-scythe.zip") },
     Bundled { slug: "dragon-ball-goku-arrow-animated", label: "Dragon Ball Goku & Arrow Animated", archive: include_bytes!("../../assets/bundled/dragon-ball-goku-arrow-animated.zip") },
     Bundled { slug: "dragon-ball-goku-face-energy-arrow", label: "Dragon Ball Goku Face & Energy Arrow", archive: include_bytes!("../../assets/bundled/dragon-ball-goku-face-energy-arrow.zip") },
+    Bundled { slug: "du-bist-gut-genug-meme-animated", label: "Du Bist Gut Genug Meme Animated", archive: include_bytes!("../../assets/bundled/du-bist-gut-genug-meme-animated.zip") },
     Bundled { slug: "geared-brass", label: "Geared Brass", archive: include_bytes!("../../assets/bundled/geared-brass.zip") },
     Bundled { slug: "geared-steel", label: "Geared Steel", archive: include_bytes!("../../assets/bundled/geared-steel.zip") },
     Bundled { slug: "ghost", label: "Ghost", archive: include_bytes!("../../assets/bundled/ghost.zip") },
@@ -99,42 +120,71 @@ const PACKS: [Bundled; 83] = [
     Bundled { slug: "green-water-gun-toy-animated", label: "Green Water Gun Toy Animated", archive: include_bytes!("../../assets/bundled/green-water-gun-toy-animated.zip") },
     Bundled { slug: "grey-bmw-m5", label: "Grey BMW M5", archive: include_bytes!("../../assets/bundled/grey-bmw-m5.zip") },
     Bundled { slug: "grey-electric-animated", label: "Grey Electric Animated", archive: include_bytes!("../../assets/bundled/grey-electric-animated.zip") },
+    Bundled { slug: "gta-6-jason-duval-pistol", label: "GTA 6 Jason Duval & Pistol", archive: include_bytes!("../../assets/bundled/gta-6-jason-duval-pistol.zip") },
     Bundled { slug: "haaland-onion-meme", label: "Haaland Onion Meme", archive: include_bytes!("../../assets/bundled/haaland-onion-meme.zip") },
     Bundled { slug: "halo-energy-sword", label: "Halo Energy Sword", archive: include_bytes!("../../assets/bundled/halo-energy-sword.zip") },
     Bundled { slug: "hello-kitty-hearts-pixel-animated", label: "Hello Kitty & Hearts Pixel Animated", archive: include_bytes!("../../assets/bundled/hello-kitty-hearts-pixel-animated.zip") },
     Bundled { slug: "hello-kitty-pusheen", label: "Hello Kitty & Pusheen", archive: include_bytes!("../../assets/bundled/hello-kitty-pusheen.zip") },
+    Bundled { slug: "himouto-umaru-doma-cora-bottle", label: "Himouto! Umaru Doma & Cora Bottle", archive: include_bytes!("../../assets/bundled/himouto-umaru-doma-cora-bottle.zip") },
     Bundled { slug: "hollow-knight-game-arrow", label: "Hollow Knight & Game Arrow", archive: include_bytes!("../../assets/bundled/hollow-knight-game-arrow.zip") },
+    Bundled { slug: "hollow-knight-hornet-needle-weapon", label: "Hollow Knight Hornet & Needle Weapon", archive: include_bytes!("../../assets/bundled/hollow-knight-hornet-needle-weapon.zip") },
+    Bundled { slug: "infinity-gauntlet-snap-animated", label: "Infinity Gauntlet Snap Animated", archive: include_bytes!("../../assets/bundled/infinity-gauntlet-snap-animated.zip") },
+    Bundled { slug: "japanese-tanto-dagger-black-ninja", label: "Japanese Tanto Dagger & Black Ninja", archive: include_bytes!("../../assets/bundled/japanese-tanto-dagger-black-ninja.zip") },
     Bundled { slug: "jujutsu-kaisen-choso-blood-manipulation", label: "Jujutsu Kaisen Choso Blood Manipulation", archive: include_bytes!("../../assets/bundled/jujutsu-kaisen-choso-blood-manipulation.zip") },
     Bundled { slug: "jujutsu-kaisen-gojo-cat-sword", label: "Jujutsu Kaisen Gojo Cat Sword", archive: include_bytes!("../../assets/bundled/jujutsu-kaisen-gojo-cat-sword.zip") },
+    Bundled { slug: "jujutsu-kaisen-satoru-gojo-infinity", label: "Jujutsu Kaisen Satoru Gojo Infinity", archive: include_bytes!("../../assets/bundled/jujutsu-kaisen-satoru-gojo-infinity.zip") },
+    Bundled { slug: "jujutsu-kaisen-satoru-gojo-waving", label: "Jujutsu Kaisen Satoru Gojo Waving", archive: include_bytes!("../../assets/bundled/jujutsu-kaisen-satoru-gojo-waving.zip") },
     Bundled { slug: "jujutsu-kaisen-sukuna-flame-arrow-hand", label: "Jujutsu Kaisen Sukuna Flame Arrow & Hand", archive: include_bytes!("../../assets/bundled/jujutsu-kaisen-sukuna-flame-arrow-hand.zip") },
     Bundled { slug: "just-a-chill-guy-3d-meme-animated", label: "Just a Chill Guy 3D Meme Animated", archive: include_bytes!("../../assets/bundled/just-a-chill-guy-3d-meme-animated.zip") },
+    Bundled { slug: "kawaii-cinnamoroll-mcfries", label: "Kawaii Cinnamoroll McFries", archive: include_bytes!("../../assets/bundled/kawaii-cinnamoroll-mcfries.zip") },
+    Bundled { slug: "kawaii-hello-kitty-shades-brick-phone", label: "Kawaii Hello Kitty Shades & Brick Phone", archive: include_bytes!("../../assets/bundled/kawaii-hello-kitty-shades-brick-phone.zip") },
+    Bundled { slug: "kawaii-skateboarding-hello-kitty", label: "Kawaii Skateboarding Hello Kitty", archive: include_bytes!("../../assets/bundled/kawaii-skateboarding-hello-kitty.zip") },
     Bundled { slug: "kfc-fried-chicken-bucket", label: "KFC Fried Chicken Bucket", archive: include_bytes!("../../assets/bundled/kfc-fried-chicken-bucket.zip") },
     Bundled { slug: "kingdom-hearts-riku-soul-eater", label: "Kingdom Hearts Riku & Soul Eater", archive: include_bytes!("../../assets/bundled/kingdom-hearts-riku-soul-eater.zip") },
+    Bundled { slug: "kny-muichiro-tokito-chibi-arrow", label: "KNY Muichiro Tokito Chibi Arrow", archive: include_bytes!("../../assets/bundled/kny-muichiro-tokito-chibi-arrow.zip") },
     Bundled { slug: "kuromi-naruto-crossover-akatsuki-cloak-kunai-dagger", label: "Kuromi & Naruto Crossover Akatsuki Cloak", archive: include_bytes!("../../assets/bundled/kuromi-naruto-crossover-akatsuki-cloak-kunai-dagger.zip") },
     Bundled { slug: "kuromi-notebook-pen", label: "Kuromi Notebook Pen", archive: include_bytes!("../../assets/bundled/kuromi-notebook-pen.zip") },
     Bundled { slug: "lamine-yamal-gold-cup-trophy-animated", label: "Lamine Yamal & Gold Cup Trophy Animated", archive: include_bytes!("../../assets/bundled/lamine-yamal-gold-cup-trophy-animated.zip") },
+    Bundled { slug: "m4-competition-logo-bmw", label: "M4 Competition Logo & BMW", archive: include_bytes!("../../assets/bundled/m4-competition-logo-bmw.zip") },
+    Bundled { slug: "marvel-iron-man-armor-gauntlet", label: "Marvel Iron Man Armor Gauntlet", archive: include_bytes!("../../assets/bundled/marvel-iron-man-armor-gauntlet.zip") },
     Bundled { slug: "marvel-spider-man-venom", label: "Marvel Spider-Man & Venom", archive: include_bytes!("../../assets/bundled/marvel-spider-man-venom.zip") },
     Bundled { slug: "matrix-pixel-animated", label: "Matrix Pixel Animated", archive: include_bytes!("../../assets/bundled/matrix-pixel-animated.zip") },
     Bundled { slug: "mec424", label: "Mec424", archive: include_bytes!("../../assets/bundled/mec424.zip") },
     Bundled { slug: "messi-world-cup-animated", label: "Messi & World Cup Animated", archive: include_bytes!("../../assets/bundled/messi-world-cup-animated.zip") },
     Bundled { slug: "miffy-listen-to-music", label: "Miffy Listen To Music", archive: include_bytes!("../../assets/bundled/miffy-listen-to-music.zip") },
     Bundled { slug: "mine-craft-items", label: "Mine Craft Items", archive: include_bytes!("../../assets/bundled/mine-craft-items.zip") },
+    Bundled { slug: "minecraft-calico-tuxedo-cat", label: "Minecraft Calico & Tuxedo Cat", archive: include_bytes!("../../assets/bundled/minecraft-calico-tuxedo-cat.zip") },
     Bundled { slug: "minecraft-enchanted-diamond-pickaxe-animated", label: "Minecraft Enchanted Diamond Pickaxe Anim", archive: include_bytes!("../../assets/bundled/minecraft-enchanted-diamond-pickaxe-animated.zip") },
     Bundled { slug: "minecraft-enchanted-diamond-sword-animated", label: "Minecraft Enchanted Diamond Sword Animat", archive: include_bytes!("../../assets/bundled/minecraft-enchanted-diamond-sword-animated.zip") },
     Bundled { slug: "minecraft-fat-chicken", label: "Minecraft Fat Chicken", archive: include_bytes!("../../assets/bundled/minecraft-fat-chicken.zip") },
     Bundled { slug: "minecraft-steve-raising-hands", label: "Minecraft Steve Raising Hands", archive: include_bytes!("../../assets/bundled/minecraft-steve-raising-hands.zip") },
     Bundled { slug: "moyai-emoji-meme", label: "Moyai Emoji Meme", archive: include_bytes!("../../assets/bundled/moyai-emoji-meme.zip") },
     Bundled { slug: "naruto-arrow-animated", label: "Naruto & Arrow Animated", archive: include_bytes!("../../assets/bundled/naruto-arrow-animated.zip") },
+    Bundled { slug: "naruto-arrow-hand", label: "Naruto Arrow & Hand", archive: include_bytes!("../../assets/bundled/naruto-arrow-hand.zip") },
+    Bundled { slug: "neon-lamborghini-huracan", label: "Neon Lamborghini Huracan", archive: include_bytes!("../../assets/bundled/neon-lamborghini-huracan.zip") },
+    Bundled { slug: "nike-air-jordan-1-animated", label: "Nike Air Jordan 1 Animated", archive: include_bytes!("../../assets/bundled/nike-air-jordan-1-animated.zip") },
     Bundled { slug: "one-piece-luffy-arrow-animated", label: "One Piece Luffy & Arrow Animated", archive: include_bytes!("../../assets/bundled/one-piece-luffy-arrow-animated.zip") },
+    Bundled { slug: "one-piece-red-manga-monkey-d-luffy", label: "One Piece Red Manga Monkey D. Luffy", archive: include_bytes!("../../assets/bundled/one-piece-red-manga-monkey-d-luffy.zip") },
     Bundled { slug: "one-piece-roronoa-zoro-swords-animated", label: "One Piece Roronoa Zoro & Swords Animated", archive: include_bytes!("../../assets/bundled/one-piece-roronoa-zoro-swords-animated.zip") },
+    Bundled { slug: "one-piece-trafalgar-law-x-pochacco", label: "One Piece Trafalgar Law x Pochacco", archive: include_bytes!("../../assets/bundled/one-piece-trafalgar-law-x-pochacco.zip") },
     Bundled { slug: "one-piece-zoro-demon-form-shusui", label: "One Piece Zoro Demon Form & Shusui", archive: include_bytes!("../../assets/bundled/one-piece-zoro-demon-form-shusui.zip") },
     Bundled { slug: "oo-ee-a-e-a-cat-meme-animated", label: "Oo Ee A E A Cat Meme Animated", archive: include_bytes!("../../assets/bundled/oo-ee-a-e-a-cat-meme-animated.zip") },
     Bundled { slug: "paper-airplane", label: "Paper Airplane", archive: include_bytes!("../../assets/bundled/paper-airplane.zip") },
     Bundled { slug: "pixel-bmw-m4-racing-car", label: "Pixel BMW M4 Racing Car", archive: include_bytes!("../../assets/bundled/pixel-bmw-m4-racing-car.zip") },
+    Bundled { slug: "pixel-tuxedo-cat-calico-cat", label: "Pixel Tuxedo Cat & Calico Cat", archive: include_bytes!("../../assets/bundled/pixel-tuxedo-cat-calico-cat.zip") },
+    Bundled { slug: "pizza-cat-meme", label: "Pizza Cat Meme", archive: include_bytes!("../../assets/bundled/pizza-cat-meme.zip") },
     Bundled { slug: "please-speed-i-need-this-meme-animated", label: "Please Speed I Need This Meme Animated", archive: include_bytes!("../../assets/bundled/please-speed-i-need-this-meme-animated.zip") },
+    Bundled { slug: "pokemon-skyla-pokeball-animated", label: "Pokemon Skyla Pokeball Animated", archive: include_bytes!("../../assets/bundled/pokemon-skyla-pokeball-animated.zip") },
+    Bundled { slug: "popcorn-rocket-sheep-animated", label: "Popcorn Rocket Sheep Animated", archive: include_bytes!("../../assets/bundled/popcorn-rocket-sheep-animated.zip") },
+    Bundled { slug: "purple-magic-wand-crystal-animated", label: "Purple Magic Wand & Crystal Animated", archive: include_bytes!("../../assets/bundled/purple-magic-wand-crystal-animated.zip") },
+    Bundled { slug: "pusheen-eating-noodles-animated", label: "Pusheen Eating Noodles Animated", archive: include_bytes!("../../assets/bundled/pusheen-eating-noodles-animated.zip") },
+    Bundled { slug: "pusheen-the-cat-animated", label: "Pusheen the Cat Animated", archive: include_bytes!("../../assets/bundled/pusheen-the-cat-animated.zip") },
+    Bundled { slug: "pusheen-the-cat-with-laptop", label: "Pusheen the Cat with Laptop", archive: include_bytes!("../../assets/bundled/pusheen-the-cat-with-laptop.zip") },
+    Bundled { slug: "rascal-does-not-dream-mai-sakurajima", label: "Rascal Does Not Dream Mai Sakurajima", archive: include_bytes!("../../assets/bundled/rascal-does-not-dream-mai-sakurajima.zip") },
     Bundled { slug: "roblox-2013", label: "Roblox 2013", archive: include_bytes!("../../assets/bundled/roblox-2013.zip") },
     Bundled { slug: "roblox-baby", label: "Roblox Baby", archive: include_bytes!("../../assets/bundled/roblox-baby.zip") },
     Bundled { slug: "roblox-black-white-cat", label: "Roblox Black & White Cat", archive: include_bytes!("../../assets/bundled/roblox-black-white-cat.zip") },
+    Bundled { slug: "roblox-forsaken-john-doe-crosshair", label: "Roblox Forsaken John Doe Crosshair", archive: include_bytes!("../../assets/bundled/roblox-forsaken-john-doe-crosshair.zip") },
     Bundled { slug: "roblox-mega-noob", label: "Roblox Mega Noob", archive: include_bytes!("../../assets/bundled/roblox-mega-noob.zip") },
     Bundled { slug: "roblox-steal-brainrot-67-animated", label: "Roblox Steal Brainrot 67 Animated", archive: include_bytes!("../../assets/bundled/roblox-steal-brainrot-67-animated.zip") },
     Bundled { slug: "roblox-sussy-smirk-arrow-hand", label: "Roblox Sussy Smirk Arrow & Hand", archive: include_bytes!("../../assets/bundled/roblox-sussy-smirk-arrow-hand.zip") },
@@ -149,15 +199,95 @@ const PACKS: [Bundled; 83] = [
     Bundled { slug: "solo-leveling-sung-jin-woo-dark-flames", label: "Solo Leveling Sung Jin-Woo Dark Flames", archive: include_bytes!("../../assets/bundled/solo-leveling-sung-jin-woo-dark-flames.zip") },
     Bundled { slug: "spider-man", label: "Spider-Man", archive: include_bytes!("../../assets/bundled/spider-man.zip") },
     Bundled { slug: "spider-man-hand-mask", label: "Spider-Man Hand & Mask", archive: include_bytes!("../../assets/bundled/spider-man-hand-mask.zip") },
+    Bundled { slug: "spider-verse-miles-morales-spray", label: "Spider-Verse Miles Morales & Spray", archive: include_bytes!("../../assets/bundled/spider-verse-miles-morales-spray.zip") },
     Bundled { slug: "spongebob-patrick-star", label: "SpongeBob & Patrick Star", archive: include_bytes!("../../assets/bundled/spongebob-patrick-star.zip") },
+    Bundled { slug: "spongebob-squarepants-krusty-krab-soda", label: "SpongeBob SquarePants Krusty Krab Soda", archive: include_bytes!("../../assets/bundled/spongebob-squarepants-krusty-krab-soda.zip") },
+    Bundled { slug: "spongebob-squarepants-spatula", label: "SpongeBob Squarepants & Spatula", archive: include_bytes!("../../assets/bundled/spongebob-squarepants-spatula.zip") },
+    Bundled { slug: "spongebob-x-one-piece-luffy-spongebob", label: "SpongeBob x One Piece Luffy SpongeBob", archive: include_bytes!("../../assets/bundled/spongebob-x-one-piece-luffy-spongebob.zip") },
+    Bundled { slug: "spongebob-x-one-piece-sanji-zoro", label: "SpongeBob x One Piece Sanji & Zoro", archive: include_bytes!("../../assets/bundled/spongebob-x-one-piece-sanji-zoro.zip") },
     Bundled { slug: "steroid-strong-goose-meme", label: "Steroid Strong Goose Meme", archive: include_bytes!("../../assets/bundled/steroid-strong-goose-meme.zip") },
     Bundled { slug: "sukuna-human-finger", label: "Sukuna Human Finger", archive: include_bytes!("../../assets/bundled/sukuna-human-finger.zip") },
     Bundled { slug: "supreme-gun-money", label: "Supreme Gun & Money", archive: include_bytes!("../../assets/bundled/supreme-gun-money.zip") },
     Bundled { slug: "swole-doge-vs-cheems-meme", label: "Swole Doge vs. Cheems Meme", archive: include_bytes!("../../assets/bundled/swole-doge-vs-cheems-meme.zip") },
     Bundled { slug: "toyota-gr-supra-a90-red-black-sports-car", label: "Toyota GR Supra A90 Red & Black Sports C", archive: include_bytes!("../../assets/bundled/toyota-gr-supra-a90-red-black-sports-car.zip") },
     Bundled { slug: "tung-tung-tung-sahur-brainrot-meme", label: "Tung Tung Tung Sahur Brainrot Meme", archive: include_bytes!("../../assets/bundled/tung-tung-tung-sahur-brainrot-meme.zip") },
+    Bundled { slug: "twixxel-minecraft-fanart-spiral-arrow", label: "Twixxel Minecraft Fanart & Spiral Arrow", archive: include_bytes!("../../assets/bundled/twixxel-minecraft-fanart-spiral-arrow.zip") },
+    Bundled { slug: "two-soyjaks-pointing-meme-animated", label: "Two Soyjaks Pointing Meme Animated", archive: include_bytes!("../../assets/bundled/two-soyjaks-pointing-meme-animated.zip") },
     Bundled { slug: "vintage-cartoon-raccoon-glove-hand", label: "Vintage Cartoon Raccoon & Glove Hand", archive: include_bytes!("../../assets/bundled/vintage-cartoon-raccoon-glove-hand.zip") },
+    Bundled { slug: "windows-blue-screen-of-death", label: "Windows Blue Screen of Death", archive: include_bytes!("../../assets/bundled/windows-blue-screen-of-death.zip") },
     Bundled { slug: "wpppzuou", label: "WpppZUoU", archive: include_bytes!("../../assets/bundled/wpppzuou.zip") },
+];
+
+/// The packs whose source is named on the website.
+///
+/// These came from custom-cursor.com and sweezy-cursors.com, and both sites are
+/// credited there. That is the whole difference between this list and the rest
+/// of the table, and it is the reason
+/// [`tests::an_uncredited_cursors_only_pack_carries_no_name_inside_its_animation`]
+/// exempts them: the forty-seven given to the project's owner directly were
+/// given with **no credit asked for and none given**, so a name left inside one
+/// of those `.ani` files is a name being shipped that nobody agreed to ship. A
+/// name inside one of these is the artist's own credit on work whose source is
+/// acknowledged, and stripping it would be the worse act.
+///
+/// A slug here that is not in `PACKS` is a stale entry, and a test says so.
+///
+/// Only the tests read it, so it is compiled only for them — the `build`
+/// workflow runs `clippy -D warnings`, and an unused constant is a red CI on all
+/// four jobs. It stays out here rather than inside the test module because it
+/// documents what shipped, which is worth reading next to the table it annotates.
+#[cfg(test)]
+const CREDITED_SOURCES: [&str; 50] = [
+    "among-us-john-wick-skin",
+    "among-us-yellow-twerk-animated",
+    "artemis-ii-rocket-orion-spacecraft",
+    "battle-for-dream-island-pencil-animated",
+    "black-white-arrow-3d",
+    "bleach-tybw-rukia-kuchiki-sode",
+    "blue-lock-rin-itoshi-soccer-ball",
+    "cars-lightning-mcqueen",
+    "cute-fluffy-cat-paw-arrow-pointing-paw",
+    "dancing-toothless-meme-animated",
+    "dark-fantasy-bat-dagger-ankh",
+    "dark-grey-audi-car-silver-logo",
+    "du-bist-gut-genug-meme-animated",
+    "gta-6-jason-duval-pistol",
+    "himouto-umaru-doma-cora-bottle",
+    "hollow-knight-hornet-needle-weapon",
+    "infinity-gauntlet-snap-animated",
+    "japanese-tanto-dagger-black-ninja",
+    "jujutsu-kaisen-satoru-gojo-infinity",
+    "jujutsu-kaisen-satoru-gojo-waving",
+    "kawaii-cinnamoroll-mcfries",
+    "kawaii-hello-kitty-shades-brick-phone",
+    "kawaii-skateboarding-hello-kitty",
+    "kny-muichiro-tokito-chibi-arrow",
+    "m4-competition-logo-bmw",
+    "marvel-iron-man-armor-gauntlet",
+    "minecraft-calico-tuxedo-cat",
+    "naruto-arrow-hand",
+    "neon-lamborghini-huracan",
+    "nike-air-jordan-1-animated",
+    "one-piece-red-manga-monkey-d-luffy",
+    "one-piece-trafalgar-law-x-pochacco",
+    "pixel-tuxedo-cat-calico-cat",
+    "pizza-cat-meme",
+    "pokemon-skyla-pokeball-animated",
+    "popcorn-rocket-sheep-animated",
+    "purple-magic-wand-crystal-animated",
+    "pusheen-eating-noodles-animated",
+    "pusheen-the-cat-animated",
+    "pusheen-the-cat-with-laptop",
+    "rascal-does-not-dream-mai-sakurajima",
+    "roblox-forsaken-john-doe-crosshair",
+    "spider-verse-miles-morales-spray",
+    "spongebob-squarepants-krusty-krab-soda",
+    "spongebob-squarepants-spatula",
+    "spongebob-x-one-piece-luffy-spongebob",
+    "spongebob-x-one-piece-sanji-zoro",
+    "twixxel-minecraft-fanart-spiral-arrow",
+    "two-soyjaks-pointing-meme-animated",
+    "windows-blue-screen-of-death",
 ];
 
 /// Installs any bundled pack that is not already present.
@@ -607,9 +737,15 @@ mod tests {
     /// clean. Packs that ship a `pack.json`, a readme or a licence are the older
     /// ones and are left alone — `ghost` uses `INAM` to name the role, and a
     /// pack that credits its author should go on doing so.
+    ///
+    /// The one exception is [`CREDITED_SOURCES`], which share the shape because
+    /// they have to — the `arrow-role`/`hand-role` naming is what stops the
+    /// importer mapping an arrow onto the hand — but not the reason. Those sites
+    /// are named on the website, so the artist's name inside the file is credit
+    /// rather than something being shipped unacknowledged.
     #[test]
-    fn a_cursors_only_pack_carries_no_name_inside_its_animation() {
-        for pack in &PACKS {
+    fn an_uncredited_cursors_only_pack_carries_no_name_inside_its_animation() {
+        for pack in PACKS.iter().filter(|p| !CREDITED_SOURCES.contains(&p.slug)) {
             let cursor = std::io::Cursor::new(pack.archive);
             let mut archive = zip::ZipArchive::new(cursor).expect("readable");
             let names: Vec<String> =
@@ -631,6 +767,64 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A pack that ships an `.ani` must really have something to animate.
+    ///
+    /// The detail view asks `import::preview_frames` for every frame of a pack's
+    /// arrow so the preview moves instead of showing a frozen first frame. That
+    /// is only worth anything if the shipped animations decode to more than one
+    /// frame — a single-frame `.ani`, or one this decoder cannot read past the
+    /// first of, would animate exactly as much as the still it replaced, and
+    /// nothing else would report it.
+    #[test]
+    fn every_shipped_animation_has_frames_to_play() {
+        let mut animated = 0usize;
+        for pack in &PACKS {
+            let cursor = std::io::Cursor::new(pack.archive);
+            let mut archive = zip::ZipArchive::new(cursor).expect("readable");
+            let names: Vec<String> = (0..archive.len())
+                .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_owned()))
+                .filter(|n| n.to_ascii_lowercase().ends_with(".ani"))
+                .collect();
+
+            for name in names {
+                let mut entry = archive.by_name(&name).expect("entry");
+                let mut bytes = Vec::new();
+                std::io::Read::read_to_end(&mut entry, &mut bytes).expect("read");
+                let frames = crate::build::icon_reader::decode_ani(&bytes)
+                    .unwrap_or_else(|e| panic!("{} ships {name}, which will not decode: {e}", pack.label));
+                assert!(
+                    frames.len() > 1,
+                    "{} ships {name} with {} frame(s), so its preview would not move",
+                    pack.label,
+                    frames.len()
+                );
+                animated += 1;
+            }
+        }
+        assert!(animated > 20, "only {animated} animated cursors were found");
+    }
+
+    /// The credit exemption must name packs that exist.
+    ///
+    /// A slug that has been renamed or removed would sit in `CREDITED_SOURCES`
+    /// exempting nothing, and — worse — a pack renamed *into* one of these
+    /// names would be exempted silently. Neither shows up as a failure anywhere
+    /// else: the test above would simply skip fewer or more packs than intended.
+    #[test]
+    fn every_credited_slug_names_a_pack_that_ships() {
+        for slug in CREDITED_SOURCES {
+            assert!(
+                PACKS.iter().any(|pack| pack.slug == slug),
+                "{slug} is exempted from the name check but is not in the catalog"
+            );
+        }
+        let mut sorted = CREDITED_SOURCES;
+        sorted.sort_unstable();
+        let mut deduped = sorted.to_vec();
+        deduped.dedup();
+        assert_eq!(deduped.len(), CREDITED_SOURCES.len(), "a slug is listed twice");
     }
 
     /// Whether a RIFF file carries a top-level `LIST INFO`. Walks the chunk list

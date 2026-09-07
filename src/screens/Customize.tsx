@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { CURSOR_SIZES } from "../lib/sizes";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button, Card, Select, Slider, Toggle } from "../components/ui";
 import { ColorPicker } from "../components/ColorPicker";
+import { useAnimatedPreview } from "../lib/useAnimatedPreview";
 import * as ipc from "../lib/ipc";
 import type { ApplyMode, HoverStyle } from "../lib/types";
 import { useStore } from "../store";
@@ -43,7 +44,17 @@ export function Customize() {
   const [tint, setTint] = useState(settings.tint);
   const [size, setSize] = useState(settings.cursorSize ?? 32);
   const [outline, setOutline] = useState(settings.outline);
-  const [mode, setMode] = useState<ApplyMode>(settings.applyMode);
+  // `Blend` is normalised to `All` on the way in.
+  //
+  // Blend exists for a custom image — one drawing over a base pack's other
+  // sixteen roles — so this screen does not offer it, and `roles_for` already
+  // treats the two as identical for a catalog pack. But it is the *default*
+  // setting, so the select below was being handed a value none of its options
+  // carried, and a native `<select>` in that state renders blank. The first
+  // thing anyone saw under "Apply to" was an empty box.
+  const [mode, setMode] = useState<ApplyMode>(
+    settings.applyMode === "Blend" ? "All" : settings.applyMode,
+  );
   const [hover, setHover] = useState<HoverStyle>(settings.hoverStyle);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -53,6 +64,15 @@ export function Customize() {
       void ipc.getCursorBaseSize().then(setSize).catch(() => undefined);
     }
   }, [settings.cursorSize]);
+
+  // The preview moves if the cursor does.
+  //
+  // `pack.preview` is one still — the catalog hands back a single frame per pack
+  // because it draws a hundred and thirty at once. Half of them are animations,
+  // and this is the screen where somebody decides whether they want one, so it
+  // asks for the whole thing.
+  const frames = useAnimatedPreview(pack?.id ?? null);
+  const frame = frames.current ?? pack?.preview ?? "";
 
   if (!pack) {
     return (
@@ -116,8 +136,8 @@ export function Customize() {
               role="img"
               aria-label={pack.name}
               style={{
-                WebkitMaskImage: `url("${pack.preview}")`,
-                maskImage: `url("${pack.preview}")`,
+                WebkitMaskImage: `url("${frame}")`,
+                maskImage: `url("${frame}")`,
                 WebkitMaskSize: "contain",
                 maskSize: "contain",
                 WebkitMaskPosition: "center",
@@ -130,15 +150,24 @@ export function Customize() {
             />
           ) : (
             <img
-              src={pack.preview}
+              src={frame}
               alt={pack.name}
               draggable={false}
-              className="relative h-24 w-24 object-contain"
+              className="relative h-24 w-24 object-contain [image-rendering:pixelated]"
             />
           )}
           <span className="mono absolute right-2 bottom-2 text-[10px] text-text-dim">
             {pack.category}
           </span>
+          {/* Said out loud, because a loop can reach a frame that looks like a
+              still and "is this one animated?" is the question this screen is
+              here to answer. */}
+          {frames.animated && (
+            <span className="display absolute top-2 right-2 flex items-center gap-1 text-[10px] text-accent-hi">
+              <Sparkles size={10} />
+              ANIMATED
+            </span>
+          )}
         </div>
 
         {recolorable ? (

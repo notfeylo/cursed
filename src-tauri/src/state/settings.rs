@@ -15,6 +15,13 @@ use std::sync::{Mutex, OnceLock};
 pub const MIN_CURSOR_PX: u32 = 10;
 pub const MAX_CURSOR_PX: u32 = 128;
 
+/// How many cursors may be bookmarked.
+///
+/// Comfortably more than the shipped catalog, so nobody meets this by using the
+/// feature as intended — it is a ceiling on a file that can be edited by hand,
+/// not a rationing of shelf space.
+pub const MAX_BOOKMARKS: usize = 500;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -66,6 +73,20 @@ pub struct Settings {
     pub tint_previews: bool,
     pub animation_speed: f32,
     pub reapply_on_resume: bool,
+    /// Pack ids the user has bookmarked out of the catalog, newest first.
+    ///
+    /// A bookmark is not a preset. A preset is the whole pointer — pack, colour,
+    /// size, outline — saved so it can be switched back to; bookmarking is
+    /// "keep this one where I can find it" while browsing a hundred and thirty
+    /// cursors, before any decision about colour or size has been made. Forcing
+    /// the first through the second would mean inventing a colour and a size for
+    /// something the user has only said they like the look of.
+    ///
+    /// Ids, not packs: the pack itself lives in the catalog, and storing a copy
+    /// here would go stale the moment it is re-imported. An id that no longer
+    /// resolves is dropped when the SAVED screen renders, so uninstalling a pack
+    /// cleans up after itself without a migration.
+    pub bookmarks: Vec<String>,
 
     // Protection
     pub watchdog_enabled: bool,
@@ -141,6 +162,7 @@ impl Default for Settings {
             tint_previews: false,
             animation_speed: 1.0,
             reapply_on_resume: true,
+            bookmarks: Vec::new(),
 
             watchdog_enabled: true,
             watchdog_interval_secs: 5,
@@ -188,6 +210,22 @@ impl Settings {
         if crate::util::parse_hex_color(&self.tint).is_none() {
             self.tint = "#2E8BFF".to_owned();
         }
+        // Bookmarks are a list the user grows by clicking, so it needs the same
+        // treatment as any other unbounded field read off disk: duplicates
+        // removed (a double-click must not put a cursor on the shelf twice) and
+        // a ceiling, so a hand-edited or corrupted file cannot make the SAVED
+        // screen render tens of thousands of tiles. Order is kept — it is
+        // most-recent-first and that is the point of it.
+        let mut seen: Vec<String> = Vec::with_capacity(self.bookmarks.len());
+        self.bookmarks.retain(|id| {
+            if id.is_empty() || seen.iter().any(|kept| kept == id) {
+                return false;
+            }
+            seen.push(id.clone());
+            true
+        });
+        self.bookmarks.truncate(MAX_BOOKMARKS);
+
         self.hotkey_presets.truncate(5);
         while self.hotkey_presets.len() < 5 {
             let n = self.hotkey_presets.len() + 1;
@@ -282,6 +320,32 @@ mod tests {
         assert_eq!(wild.watchdog_interval_secs, 3);
         assert_eq!(wild.tint, "#2E8BFF");
         assert_eq!(wild.hotkey_presets.len(), 5);
+    }
+
+    #[test]
+    fn bookmarks_are_deduplicated_and_capped_without_losing_their_order() {
+        let settings = Settings {
+            bookmarks: vec![
+                "user:ghost".into(),
+                "user:batman".into(),
+                // A double-click, or a file edited by hand.
+                "user:ghost".into(),
+                String::new(),
+            ],
+            ..Settings::default()
+        }
+        .sanitised();
+
+        // Most-recent-first is the whole ordering, so the survivor is the first
+        // mention rather than the last.
+        assert_eq!(settings.bookmarks, vec!["user:ghost", "user:batman"]);
+
+        let flooded = Settings {
+            bookmarks: (0..MAX_BOOKMARKS + 50).map(|n| format!("user:{n}")).collect(),
+            ..Settings::default()
+        }
+        .sanitised();
+        assert_eq!(flooded.bookmarks.len(), MAX_BOOKMARKS);
     }
 
     #[test]

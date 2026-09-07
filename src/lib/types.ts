@@ -45,13 +45,54 @@ export const ROLE_LABELS: Record<Role, string> = {
   Person: "Person select",
 };
 
-export type Category = "OPTIMAL CURSED" | "MINIMAL CURSED";
+/**
+ * The shelf a cursor is filed on. Mirrors `packs::category::CATEGORIES` — the
+ * backend decides, this only names what can come back.
+ */
+export type Category =
+  | "ANIME"
+  | "GAMING"
+  | "MEMES"
+  | "CUTE"
+  | "MOVIES & TV"
+  | "CARS"
+  | "WEAPONS"
+  | "SPORTS"
+  | "TECH"
+  | "OTHER";
+
+export const CATEGORIES: Category[] = [
+  "ANIME",
+  "GAMING",
+  "MEMES",
+  "CUTE",
+  "MOVIES & TV",
+  "CARS",
+  "WEAPONS",
+  "SPORTS",
+  "TECH",
+  "OTHER",
+];
 
 /**
- * MINIMAL CURSED is deliberately empty for now — a named, empty shelf is
- * clearer than guessing which cursors belong on it.
+ * The two filters that are not categories.
+ *
+ * Whether a cursor moves is a property every pack has, not a shelf it sits on —
+ * filing an animated Naruto pack under ANIMATED would take it away from every
+ * other Naruto pack. So these filter across the categories instead, and the
+ * catalog offers them in the same row because that is where you look for them.
  */
-export const CATEGORIES: Category[] = ["OPTIMAL CURSED", "MINIMAL CURSED"];
+export type MotionFilter = "ANIMATED" | "STATIC";
+
+/** What the catalog's filter row can be set to. */
+export type CatalogFilter = "ALL" | MotionFilter | Category;
+
+export const CATALOG_FILTERS: CatalogFilter[] = [
+  "ALL",
+  "ANIMATED",
+  "STATIC",
+  ...CATEGORIES,
+];
 
 export interface PackSummary {
   id: string;
@@ -109,6 +150,13 @@ export interface Settings {
   tintPreviews: boolean;
   animationSpeed: number;
   reapplyOnResume: boolean;
+  /**
+   * Pack ids bookmarked out of the catalog, newest first.
+   *
+   * Distinct from a preset: a preset is the whole pointer saved to switch back
+   * to, a bookmark is "keep this where I can find it" while browsing.
+   */
+  bookmarks: string[];
 
   watchdogEnabled: boolean;
   watchdogIntervalSecs: number;

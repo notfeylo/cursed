@@ -14,7 +14,7 @@ the reason a UI change can never write to the wrong place.
 ```
 src/                The React front end. Everything the user looks at.
 src-tauri/          The Rust core. Everything that touches Windows.
-assets/             The 83 bundled packs, and the generated artwork kept for review.
+assets/             The 133 bundled packs, and the generated artwork kept for review.
 website/            trycursed.com static source, guides, build script, and deployment policy.
 scripts/            Build, release and verification tooling.
 docs/               This, and everything else worth writing down.
@@ -46,7 +46,7 @@ shapes · `store.ts` state · `styles.css` every design token.
 | `src/channel.rs` | Which of the two side-by-side installs this binary is. Every per-channel name comes from here and nowhere else — see [`../docs/CHANNELS.md`](CHANNELS.md). |
 | `src/build/` | Artwork into cursor files: `svg`, `bitmap`, `matte` (background removal), `pipeline`, `cur_writer`, `ani_writer`, `hotspot`, `cur_reader` (one frame, via Windows), `icon_reader` (`.cur`/`.ico`/`.ani` parsed from bytes, every frame). Pure and unit-tested — no registry, no Win32. |
 | `src/packs/` | `styles.rs` defines the one generated blend base, `art.rs` draws the roles, `brand.rs` the mark, `catalog.rs` assembles it, `cfpack.rs` is the pack format. |
-| `src/bundled.rs` | **The catalog.** The 83 packs embedded in the binary and installed on first run. |
+| `src/bundled.rs` | **The catalog.** The 133 packs embedded in the binary and installed on first run. |
 | `src/custom.rs` | Cursors built from the user's own images, including optional hover artwork. |
 | `src/import.rs` | Folders and zips of `.cur`/`.ani` the user already had. |
 | `src/updates.rs` | The one network request the app makes, on WinHTTP. Architecture-aware asset matching, checksum verified before anything is executed. |

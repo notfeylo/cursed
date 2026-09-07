@@ -261,6 +261,8 @@ pub enum Source {
     Commit,
     /// The watchdog putting a scheme back that something else changed.
     Watchdog,
+    /// Re-asserting last session's scheme on the live layer at launch.
+    Startup,
 }
 
 impl std::fmt::Display for Source {
@@ -269,6 +271,7 @@ impl std::fmt::Display for Source {
             Source::Preview => "preview",
             Source::Commit => "commit",
             Source::Watchdog => "watchdog",
+            Source::Startup => "startup",
         })
     }
 }

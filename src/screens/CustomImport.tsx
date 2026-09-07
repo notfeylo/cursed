@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FlipHorizontal, FlipVertical, Plus, RotateCcw, RotateCw, Undo2 } from "lucide-react";
+import {
+  ChevronDown,
+  Crop,
+  FlipHorizontal,
+  FlipVertical,
+  Plus,
+  RotateCcw,
+  RotateCw,
+  Undo2,
+} from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -7,18 +16,25 @@ import { CropBox } from "../components/CropBox";
 import { MatteEditor } from "../components/MatteEditor";
 import { Button, Select, Slider, TextInput, Toggle } from "../components/ui";
 import * as ipc from "../lib/ipc";
+import { containedRect, frameToImage, imageToFrame } from "../lib/contain";
 import type { ApplyMode, ImportedImage } from "../lib/types";
 import { useStore } from "../store";
 
 type Preview = { size: number; dataUri: string };
 
-/** The presses on offer, in the order they read along the row. */
+/**
+ * The four turns, in the order they read along the row.
+ *
+ * Reset is deliberately not one of them. Five labelled chips wrapped onto a
+ * second line in a 420 px window, which made a row of four equal choices look
+ * like two groups; and reset is not a turn anyway — it undoes all of them. It
+ * sits in the panel header instead, where the orientation read-out used to be.
+ */
 const TURNS: { turn: ipc.Turn; label: string; Icon: typeof RotateCw }[] = [
   { turn: "rotateLeft", label: "Rotate left", Icon: RotateCcw },
   { turn: "rotateRight", label: "Rotate right", Icon: RotateCw },
   { turn: "flipHorizontal", label: "Mirror", Icon: FlipHorizontal },
   { turn: "flipVertical", label: "Flip", Icon: FlipVertical },
-  { turn: "reset", label: "Reset", Icon: Undo2 },
 ];
 
 const HOTSPOT_PRESETS = [
@@ -43,6 +59,9 @@ export function CustomImport() {
   const [mode, setMode] = useState<ApplyMode>(settings.applyMode);
   const [blendPack, setBlendPack] = useState(settings.tint ? "precision-gap-cross" : "");
   const [busy, setBusy] = useState(false);
+  // Whether the user has asked to crop. See the FRAMING panel: the drag surface
+  // is opt-in, because most imports do not need one.
+  const [cropping, setCropping] = useState(false);
   // How the background is dealt with. `auto` unless the user says otherwise:
   // re-cutting art somebody already cut loses a soft edge, and `auto` already
   // handles the ordinary case. `photo` is the learned matte, and is only ever
@@ -72,6 +91,10 @@ export function CustomImport() {
   // algebra. `turned` is what came back with it — the picture for the picker,
   // and what the presets would now propose.
   const [transform, setTransform] = useState<ipc.Transform>({});
+
+  // A crop already in force keeps the panel open whatever the toggle says:
+  // hiding the control that made it would leave no way to adjust or undo it.
+  const cropOpen = cropping || Boolean(transform.crop);
   const [turned, setTurned] = useState<ipc.Adjusted | null>(null);
   const [turning, setTurning] = useState(false);
 
@@ -81,8 +104,10 @@ export function CustomImport() {
       try {
         const staged = await loader();
         setImage(staged);
-        // A new picture arrives the way up it was drawn.
+        // A new picture arrives the way up it was drawn, and un-cropped — so
+        // the crop panel folds back up with it.
         setTransform({});
+        setCropping(false);
         setTurned(null);
         setHotspot(staged.suggestedHotspot);
         setPreviews(await ipc.previewCustom(staged.token, outline));
@@ -334,54 +359,94 @@ export function CustomImport() {
           </div>
 
           <div className="panel mt-4 rounded-sm border border-border p-4">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <span className="display text-[11px] text-text-muted">ORIENTATION</span>
-              <span className="mono shrink-0 text-[11px] text-text-dim">
-                {orientationLabel(transform)}
-              </span>
+              {/* Reset lives here, in the slot the "as imported" read-out had.
+                  That read-out only ever said what the four buttons below it
+                  already showed, and it took the one piece of horizontal space
+                  an actual control could use. */}
+              <button
+                type="button"
+                disabled={turning || asImported(transform)}
+                onClick={() => void press("reset")}
+                className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Undo2 size={12} strokeWidth={1.5} />
+                Reset
+              </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {/* Four columns, so the four turns are one row at any width this
+                window can be. They were chips in a `flex-wrap`, which put two
+                of them on a second line and read as two groups. */}
+            <div className="grid grid-cols-4 gap-2">
               {TURNS.map(({ turn, label, Icon }) => (
                 <button
                   key={turn}
                   type="button"
-                  disabled={turning || (turn === "reset" && asImported(transform))}
+                  disabled={turning}
                   onClick={() => void press(turn)}
                   aria-label={label}
-                  className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40"
+                  title={label}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xs border border-border px-1 py-2 text-[10px] leading-tight text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40"
                 >
-                  <Icon size={13} strokeWidth={1.5} />
-                  {label}
+                  <Icon size={15} strokeWidth={1.5} />
+                  <span className="w-full truncate text-center">{label}</span>
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-              Right angles only. An arbitrary angle has to be resampled, and at
-              cursor sizes that softens every edge. Animations turn frame by
-              frame, and the hotspot turns with the picture.
-            </p>
           </div>
 
+          {/* Cropping is offered, not imposed.
+              A second full-size picture with a drag surface sat between the
+              hotspot and the rest of the form for every import, including the
+              majority that are already the right shape and need no crop at all.
+              It is a question now, and the tool appears when the answer is yes.
+              A crop already in force counts as yes — hiding the control that
+              made it would leave no way to adjust or undo it. */}
           <div className="panel mt-4 rounded-sm border border-border p-4">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <span className="display text-[11px] text-text-muted">FRAMING</span>
               <span className="mono shrink-0 text-[11px] text-text-dim">
                 {transform.crop ? "cropped" : "whole picture"}
               </span>
             </div>
-            <CropBox
-              src={turned?.dataUri ?? image.dataUri}
-              cropped={Boolean(transform.crop)}
-              busy={turning}
-              onCrop={(rect) => void press(null, { kind: "set", rect })}
-              onClear={() => void press(null, { kind: "clear" })}
-            />
-            <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-              Drag a box over the part you want. A cursor is a small square, so
-              cropping to the subject is usually the difference between artwork
-              that reads at 32 pixels and one that does not. The hotspot moves
-              into the new frame with the picture.
-            </p>
+
+            <button
+              type="button"
+              onClick={() => setCropping((on) => !on)}
+              aria-expanded={cropOpen}
+              className="mt-3 flex w-full items-center justify-between gap-3 rounded-xs border border-border px-3 py-2 text-left text-[11px] text-text-muted transition-colors duration-150 hover:border-border-hi hover:text-text focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            >
+              <span className="flex items-center gap-2">
+                <Crop size={13} strokeWidth={1.5} />
+                Want to crop the image?
+              </span>
+              <ChevronDown
+                size={14}
+                strokeWidth={1.5}
+                className={`shrink-0 transition-transform duration-150 ${
+                  cropOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {cropOpen && (
+              <div className="mt-3">
+                <CropBox
+                  src={turned?.dataUri ?? image.dataUri}
+                  cropped={Boolean(transform.crop)}
+                  busy={turning}
+                  onCrop={(rect) => void press(null, { kind: "set", rect })}
+                  onClear={() => void press(null, { kind: "clear" })}
+                />
+                <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
+                  Drag a box over the part you want. A cursor is a small square, so
+                  cropping to the subject is usually the difference between artwork
+                  that reads at 32 pixels and one that does not. The hotspot moves
+                  into the new frame with the picture.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="panel mt-4 rounded-sm border border-border p-4">
@@ -599,15 +664,11 @@ function asImported(transform: ipc.Transform): boolean {
   );
 }
 
-/** A few words for what has been done, for the corner of the panel. */
-function orientationLabel(transform: ipc.Transform): string {
-  if (asImported(transform)) return "as imported";
-  const degrees = ((transform.quarterTurns ?? 0) % 4) * 90;
-  const mirrored = Boolean(transform.flipH || transform.flipV);
-  return [degrees ? degrees + "°" : null, mirrored ? "mirrored" : null]
-    .filter(Boolean)
-    .join(" · ");
-}
+// `orientationLabel` was here. It rendered "as imported" / "90° · mirrored"
+// into the corner of the ORIENTATION panel, and said nothing the picture above
+// it and the buttons below it did not already show — while taking the space
+// Reset now occupies. `asImported` survives it: that is what tells Reset whether
+// there is anything to undo.
 
 function DropZone({ busy, onBrowse }: { busy: boolean; onBrowse: () => void }) {
   return (
@@ -675,6 +736,7 @@ function HotspotPicker({
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
 
   // The listener effect must not depend on `onChange`, or every pointermove
   // would tear down and re-attach the listeners mid-drag. A ref keeps the
@@ -682,14 +744,40 @@ function HotspotPicker({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Same for the measurement: `set` is a dependency of the drag effect, so it
+  // must not change identity when the image is measured.
+  const naturalRef = useRef(natural);
+  naturalRef.current = natural;
+
+  useEffect(() => {
+    setNatural(null);
+  }, [src]);
+
+  /**
+   * The hotspot is a fraction of the *picture*, and this frame is square with an
+   * `object-contain` image — so on anything that is not square the pointer has
+   * to be mapped through the letterbox. Without it the marker lands on a
+   * different part of the artwork than the one clicked, and the cursor is built
+   * with its hotspot there. See `lib/contain`.
+   */
   const set = useCallback((clientX: number, clientY: number) => {
     const box = boxRef.current?.getBoundingClientRect();
     if (!box || box.width === 0 || box.height === 0) return;
-    onChangeRef.current([
-      Math.min(1, Math.max(0, (clientX - box.left) / box.width)),
-      Math.min(1, Math.max(0, (clientY - box.top) / box.height)),
-    ]);
+    onChangeRef.current(
+      frameToImage(
+        [(clientX - box.left) / box.width, (clientY - box.top) / box.height],
+        containedRect(box, naturalRef.current),
+      ),
+    );
   }, []);
+
+  // Where to draw the marker: the hotspot is on the picture, the crosshair is
+  // drawn on the frame, so it goes back through the same mapping.
+  const box = boxRef.current?.getBoundingClientRect();
+  const [markX, markY] = imageToFrame(
+    hotspot,
+    containedRect(box ?? { width: 0, height: 0 }, natural),
+  );
 
   useEffect(() => {
     if (!dragging) return;
@@ -716,19 +804,25 @@ function HotspotPicker({
         src={src}
         alt=""
         draggable={false}
+        onLoad={(e) =>
+          setNatural({
+            width: e.currentTarget.naturalWidth,
+            height: e.currentTarget.naturalHeight,
+          })
+        }
         className="h-full w-full object-contain [image-rendering:pixelated]"
       />
       <span
         className="pointer-events-none absolute h-px w-full bg-accent/70"
-        style={{ top: `${hotspot[1] * 100}%` }}
+        style={{ top: `${markY * 100}%` }}
       />
       <span
         className="pointer-events-none absolute h-full w-px bg-accent/70"
-        style={{ left: `${hotspot[0] * 100}%` }}
+        style={{ left: `${markX * 100}%` }}
       />
       <span
         className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-accent"
-        style={{ left: `${hotspot[0] * 100}%`, top: `${hotspot[1] * 100}%` }}
+        style={{ left: `${markX * 100}%`, top: `${markY * 100}%` }}
       />
     </div>
   );

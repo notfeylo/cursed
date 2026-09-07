@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Sparkles } from "lucide-react";
+import { Bookmark, Search, Sparkles } from "lucide-react";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button } from "../components/ui";
 import * as ipc from "../lib/ipc";
-import { CATEGORIES, type Category, type PackSummary } from "../lib/types";
+import {
+  CATALOG_FILTERS,
+  CATEGORIES,
+  type CatalogFilter,
+  type PackSummary,
+} from "../lib/types";
 import { useStore } from "../store";
 
 /** Hovering must feel free, so the live preview waits for the pointer to settle. */
@@ -23,9 +28,11 @@ export function Catalog() {
   const select = useStore((s) => s.select);
   const setPreviewing = useStore((s) => s.setPreviewing);
   const patchSettings = useStore((s) => s.patchSettings);
+  const toggleBookmark = useStore((s) => s.toggleBookmark);
+  const bookmarks = settings.bookmarks;
 
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<Category | "ALL">("ALL");
+  const [filter, setFilter] = useState<CatalogFilter>("ALL");
   const [tintPreviews, setTintPreviews] = useState(settings.tintPreviews);
 
   const tint = settings.tint;
@@ -48,16 +55,46 @@ export function Catalog() {
     [setPreviewing],
   );
 
+  /**
+   * ALL, the two motion filters and the category shelves all sit in one row, so
+   * one piece of state drives them — but they do not mean the same thing.
+   * ANIMATED and STATIC read the pack's own `animated` flag; everything else
+   * matches the shelf the backend filed it on.
+   */
+  const matchesFilter = (pack: PackSummary) => {
+    if (filter === "ALL") return true;
+    if (filter === "ANIMATED") return pack.animated;
+    if (filter === "STATIC") return !pack.animated;
+    return pack.category === filter;
+  };
+
+  /** How many packs each chip would show, so empty shelves can be left out. */
+  const counts = useMemo(() => {
+    const out = new Map<CatalogFilter, number>([
+      ["ALL", packs.length],
+      ["ANIMATED", 0],
+      ["STATIC", 0],
+      ...CATEGORIES.map((category) => [category, 0] as const),
+    ]);
+    const bump = (key: CatalogFilter) => out.set(key, (out.get(key) ?? 0) + 1);
+    for (const pack of packs) {
+      bump(pack.animated ? "ANIMATED" : "STATIC");
+      bump(pack.category);
+    }
+    return out;
+  }, [packs]);
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return packs.filter(
       (pack) =>
-        (category === "ALL" || pack.category === category) &&
+        matchesFilter(pack) &&
         (needle === "" ||
           pack.name.toLowerCase().includes(needle) ||
           pack.category.toLowerCase().includes(needle)),
     );
-  }, [packs, query, category]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packs, query, filter]);
 
   const cancelHover = () => {
     if (hoverTimer.current) {
@@ -129,19 +166,26 @@ export function Catalog() {
           />
         </div>
 
-        <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
-          {(["ALL", ...CATEGORIES] as const).map((item) => (
+        {/* Wrapped rather than a scrolling strip: a shelf you have to scroll
+            sideways to discover is one most people never find. Shelves with
+            nothing on them are left out entirely, so every chip here leads
+            somewhere — and the count says how far. */}
+        <div className="mt-2 flex flex-wrap gap-1">
+          {CATALOG_FILTERS.filter(
+            (item) => item === "ALL" || (counts.get(item) ?? 0) > 0,
+          ).map((item) => (
             <button
               key={item}
               type="button"
-              onClick={() => setCategory(item)}
+              onClick={() => setFilter(item)}
               className={`display shrink-0 rounded-full border px-2.5 py-1 text-[10px] transition-colors duration-150 ${
-                category === item
+                filter === item
                   ? "border-accent bg-accent-dim text-accent-hi"
                   : "border-border text-text-dim hover:border-border-hi hover:text-text-muted"
               }`}
             >
               {item}
+              <span className="mono ml-1 opacity-60">{counts.get(item) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -154,7 +198,7 @@ export function Catalog() {
             empty={packs.length === 0}
             onReset={() => {
               setQuery("");
-              setCategory("ALL");
+              setFilter("ALL");
             }}
           />
         ) : (
@@ -165,6 +209,8 @@ export function Catalog() {
                 pack={pack}
                 tint={tint}
                 tinted={tintPreviews}
+                bookmarked={bookmarks.includes(pack.id)}
+                onBookmark={() => void toggleBookmark(pack.id)}
                 onEnter={() => onHover(pack)}
                 onLeave={onLeave}
                 onClick={() => choose(pack)}
@@ -209,6 +255,8 @@ function Tile({
   pack,
   tint,
   tinted,
+  bookmarked,
+  onBookmark,
   onEnter,
   onLeave,
   onClick,
@@ -217,19 +265,28 @@ function Tile({
   tint: string;
   /** Recolor this tile to the tint, rather than showing its own colors. */
   tinted: boolean;
+  bookmarked: boolean;
+  onBookmark: () => void;
   onEnter: () => void;
   onLeave: () => void;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-      title={pack.name}
-      className="group relative flex aspect-square flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 tile hover:tile-hover hover:bg-elevated"
-    >
+    /*
+      The tile is a button and the bookmark is a button, so the bookmark is a
+      sibling rather than a child — a button inside a button is invalid markup,
+      and browsers resolve it by dropping one of them. `group` moves out here
+      with it so the hover styling still covers both.
+    */
+    <div className="group relative">
+      <button
+        type="button"
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
+        onClick={onClick}
+        title={pack.name}
+        className="relative flex aspect-square w-full flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 tile hover:tile-hover hover:bg-elevated"
+      >
       {pack.animated && (
         <span className="absolute top-1.5 right-1.5 text-accent-hi" title="Animated">
           <Sparkles size={10} />
@@ -277,7 +334,26 @@ function Tile({
         {pack.name}
       </span>
 
-    </button>
+      </button>
+
+      {/* Shown on hover, and kept on screen permanently once it is set —
+          otherwise the only way to see what you have bookmarked is to hover
+          all hundred and thirty tiles one at a time. */}
+      <button
+        type="button"
+        onClick={onBookmark}
+        title={bookmarked ? `Remove ${pack.name} from saved` : `Save ${pack.name}`}
+        aria-label={bookmarked ? `Remove ${pack.name} from saved` : `Save ${pack.name}`}
+        aria-pressed={bookmarked}
+        className={`absolute top-1 left-1 grid h-6 w-6 place-items-center rounded-xs transition-all duration-150 focus-visible:opacity-100 ${
+          bookmarked
+            ? "text-accent-hi opacity-100 hover:bg-elevated"
+            : "text-text-dim opacity-0 group-hover:opacity-100 hover:bg-elevated hover:text-text"
+        }`}
+      >
+        <Bookmark size={12} fill={bookmarked ? "currentColor" : "none"} />
+      </button>
+    </div>
   );
 }
 

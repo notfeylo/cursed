@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tintPreviews: false,
   animationSpeed: 1,
   reapplyOnResume: true,
+  bookmarks: [],
 
   watchdogEnabled: true,
   watchdogIntervalSecs: 5,
@@ -71,6 +72,8 @@ interface Store {
 
   bootstrap: () => Promise<void>;
   patchSettings: (patch: Partial<Settings>) => Promise<void>;
+  /** Adds or removes a catalog bookmark. Newest goes to the front. */
+  toggleBookmark: (packId: string) => Promise<void>;
   refreshActive: () => Promise<void>;
   refreshPresets: () => Promise<void>;
 }
@@ -123,6 +126,15 @@ export const useStore = create<Store>((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }
+  },
+
+  toggleBookmark: async (packId) => {
+    const current = get().settings.bookmarks;
+    // Newest first, so the shelf reads in the order things were added to it.
+    const next = current.includes(packId)
+      ? current.filter((id) => id !== packId)
+      : [packId, ...current];
+    await get().patchSettings({ bookmarks: next });
   },
 
   refreshActive: async () => {

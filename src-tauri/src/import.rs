@@ -375,12 +375,12 @@ fn author_from_readme(text: &str) -> Option<String> {
 /// "Animated" and then ship a static PNG preview alongside the `.ani`, so
 /// trusting the name puts still images in the animated category and makes the
 /// filter useless.
-fn categorise(_name: &str, _animated: bool) -> &'static str {
-    // Everything imported lands in OPTIMAL CURSED for now. MINIMAL CURSED
-    // exists alongside it and is deliberately empty until there is something to
-    // put there — an empty, named shelf is clearer than guessing which cursors
-    // belong on it.
-    "OPTIMAL CURSED"
+fn categorise(name: &str, _animated: bool) -> &'static str {
+    // `animated` is deliberately unused: the catalog offers ANIMATED and STATIC
+    // as filters over the whole set, read from the `animated` flag itself, so
+    // spending the one category slot on it would file a Naruto animation away
+    // from every other Naruto pack.
+    crate::packs::category::classify(name)
 }
 
 fn extension_of(path: &Path) -> String {
@@ -1185,6 +1185,70 @@ pub fn preview(pack: &ImportedPack) -> AppResult<String> {
     }
 }
 
+/// One frame of a preview, and how long it is shown.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewFrame {
+    pub data_uri: String,
+    pub delay_ms: u32,
+}
+
+/// Every frame of a pack's arrow, for a preview that moves.
+///
+/// **`preview` returns the first frame and nothing else**, which is the right
+/// answer for a grid of a hundred and thirty tiles — decoding every frame of
+/// every animation to fill a scrolling list would cost far more than it is
+/// worth, and a still is enough to tell two cursors apart.
+///
+/// It is the wrong answer once one cursor has been chosen. Half this catalog is
+/// animated, the whole point of those packs is that they move, and the screen
+/// that exists to show you a cursor before you commit to it was showing a frozen
+/// first frame — with no indication that it was one. That is what "it is not
+/// showing the preview, animated or not" means: the preview is there, it just
+/// never moves.
+///
+/// So this is the detail view's version: on demand, for one pack, with the
+/// delays the file carries. A static cursor comes back as a single frame, so the
+/// caller has one shape to handle rather than two.
+pub fn preview_frames(pack: &ImportedPack) -> AppResult<Vec<PreviewFrame>> {
+    let files = role_files(pack)?;
+    let path = files
+        .get(&Role::Arrow)
+        .or_else(|| files.values().next())
+        .ok_or_else(|| AppError::invalid("nothing to preview"))?;
+
+    let bytes = std::fs::read(path)?;
+    if !crate::build::icon_reader::looks_like_an_ani(&bytes) {
+        return Ok(vec![PreviewFrame {
+            data_uri: preview(pack)?,
+            delay_ms: 0,
+        }]);
+    }
+
+    let frames = crate::build::icon_reader::decode_ani(&bytes)?;
+    if frames.is_empty() {
+        return Ok(vec![PreviewFrame {
+            data_uri: preview(pack)?,
+            delay_ms: 0,
+        }]);
+    }
+
+    // `decode_ani` returns playback order, so a `seq` chunk is already expanded
+    // and the frames can be shown straight through in a loop.
+    frames
+        .into_iter()
+        .map(|(bitmap, delay_ms)| {
+            Ok(PreviewFrame {
+                data_uri: bitmap.resized(THUMBNAIL_PX, THUMBNAIL_PX)?.to_png_data_uri()?,
+                // A zero delay would spin as fast as the browser will paint. The
+                // `.ani` default of 6 jiffies is what Windows itself falls back
+                // to, and it is 100 ms.
+                delay_ms: if delay_ms == 0 { 100 } else { delay_ms },
+            })
+        })
+        .collect()
+}
+
 pub fn remove(id: &str) -> AppResult<()> {
     let slug = id.strip_prefix("user:").unwrap_or(id);
     let dir = imported_dir()?.join(paths::validate_relative(slug)?);
@@ -1345,17 +1409,35 @@ mod tests {
         assert_eq!(parse_name("my-cool-thing").1, None);
     }
 
-    /// Everything imported currently lands in one category on purpose.
-    /// MINIMAL CURSED exists but is empty until there is something to put in it.
+    /// An import is filed on the same shelf a bundled pack would be.
+    ///
+    /// The importer is the only place a pack's category is ever written, so a
+    /// user's own download has to go through the same rules as the catalog —
+    /// otherwise the filter row works for everything that shipped and silently
+    /// dumps everything imported into OTHER.
     #[test]
-    fn every_import_lands_in_optimal_cursed_for_now() {
-        for (name, animated) in [
-            ("Batman & Batarang", false),
-            ("Minecraft Enchanted Sword", true),
-            ("something plain", false),
-            ("", false),
+    fn an_import_is_filed_by_what_it_is() {
+        for (name, animated, expected) in [
+            ("Batman & Batarang", false, "MOVIES & TV"),
+            ("Minecraft Enchanted Sword", true, "GAMING"),
+            ("Naruto & Arrow Animated", true, "ANIME"),
+            ("something plain", false, "OTHER"),
+            ("", false, "OTHER"),
         ] {
-            assert_eq!(categorise(name, animated), "OPTIMAL CURSED", "for {name:?}");
+            assert_eq!(categorise(name, animated), expected, "for {name:?}");
+        }
+    }
+
+    /// Whether a cursor moves must not change the shelf it is filed on.
+    ///
+    /// ANIMATED and STATIC are filters the catalog applies over the whole set,
+    /// read from the pack's own flag. If `categorise` looked at it too, an
+    /// animated Naruto pack would be filed away from every other Naruto pack and
+    /// the ANIME shelf would be missing exactly the cursors people want most.
+    #[test]
+    fn motion_does_not_decide_the_category() {
+        for name in ["Naruto & Arrow Animated", "Pusheen the Cat", "9892a"] {
+            assert_eq!(categorise(name, true), categorise(name, false), "for {name:?}");
         }
     }
 

@@ -176,6 +176,31 @@ pub fn list_packs() -> AppResult<Vec<PackSummary>> {
     catalog::list_summaries()
 }
 
+/// Every frame of one pack's arrow, so the detail view can show it moving.
+///
+/// Separate from `list_packs` on purpose: the catalog hands back one still per
+/// pack because it draws a hundred and thirty of them at once, and this is asked
+/// for once, for the one cursor somebody has actually opened.
+///
+/// A generated pack comes back as its single rendered still. Those animate by
+/// being re-rendered per phase at apply time rather than by carrying frames, and
+/// inventing a frame sequence here to match would be a second animator that has
+/// to agree with the first.
+#[tauri::command]
+pub fn preview_frames(pack_id: String) -> AppResult<Vec<crate::import::PreviewFrame>> {
+    if catalog::is_imported(&pack_id) {
+        let pack = crate::import::get(&pack_id)?;
+        return crate::import::preview_frames(&pack);
+    }
+
+    let pack = crate::packs::styles::find(&pack_id).ok_or(crate::error::AppError::UnknownPack)?;
+    let tint = settings::get().tint;
+    Ok(vec![crate::import::PreviewFrame {
+        data_uri: catalog::preview_uri(&pack, &tint)?,
+        delay_ms: 0,
+    }])
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyArgs {
@@ -261,25 +286,56 @@ fn build_set_for(
     args: &ApplyArgs,
     spec: &RenderSpec,
 ) -> AppResult<(crate::cursor::scheme::CursorSet, String)> {
+    build_pack_set(&args.pack_id, args.apply_mode, args.hover_style, spec)
+}
+
+/// The scheme one pack produces, whichever kind of pack it is.
+///
+/// **Every path that turns a pack id into cursors must come through here.**
+/// Apply and preview already shared a function; session restore and the
+/// appearance re-apply did not, and both called `catalog::build_roles`
+/// directly — which resolves a *generated* pack and nothing else. Handed a
+/// `user:` id, which is what every one of the hundred and thirty-three shipped
+/// packs has, it returns `UnknownPack`.
+///
+/// That was not a small gap. It meant:
+///
+///  * **Changing size, colour or outline in Settings did nothing** for any
+///    catalog cursor. `reapply_with_appearance` failed, and the failure was
+///    logged as "settings saved, but the cursor could not be redrawn" and
+///    otherwise swallowed — the number moved, the pointer did not.
+///  * **The applied cursor was not restored at launch.** `session::restore`
+///    failed the same way, so nothing was adopted, the watchdog had no scheme to
+///    defend, and the home screen fell back to reading a name out of the
+///    registry. The cursor on screen was last session's only because Windows had
+///    loaded it from the registry, not because this app had done anything.
+///
+/// One entry point, so a third caller cannot reintroduce it.
+pub fn build_pack_set(
+    pack_id: &str,
+    apply_mode: ApplyMode,
+    hover_style: HoverStyle,
+    spec: &RenderSpec,
+) -> AppResult<(crate::cursor::scheme::CursorSet, String)> {
     // An imported pack defines a role or two; the rest come from a built-in so
     // the pointer set stays coherent. That blend is also what fills in an
     // imported pack with no arrow of its own — which is what the preview path
     // used to paper over by installing whichever role happened to sort first as
     // the pointer.
-    if catalog::is_imported(&args.pack_id) {
-        let pack = crate::import::get(&args.pack_id)?;
+    if catalog::is_imported(pack_id) {
+        let pack = crate::import::get(pack_id)?;
         let base = settings::get().blend_pack;
-        let mut set = catalog::build_imported(&args.pack_id, &base, spec)?;
-        catalog::apply_hover_style(&mut set, args.hover_style, spec)?;
+        let mut set = catalog::build_imported(pack_id, &base, spec)?;
+        catalog::apply_hover_style(&mut set, hover_style, spec)?;
         return Ok((set, pack.name));
     }
-    let mut set = catalog::build_roles(&args.pack_id, roles_for(args.apply_mode), spec)?;
+    let mut set = catalog::build_roles(pack_id, roles_for(apply_mode), spec)?;
     // After the set is assembled, so preview and apply cannot disagree about
     // what the hand is — the whole reason they share this function.
-    catalog::apply_hover_style(&mut set, args.hover_style, spec)?;
+    catalog::apply_hover_style(&mut set, hover_style, spec)?;
     Ok((
         set,
-        catalog::display_name(&args.pack_id)
+        catalog::display_name(pack_id)
             .ok_or(AppError::UnknownPack)?
             .to_owned(),
     ))
@@ -1284,6 +1340,10 @@ pub fn hide_to_tray(app: AppHandle) -> AppResult<()> {
 #[tauri::command]
 pub fn quit_app(app: AppHandle) -> AppResult<()> {
     crate::begin_shutdown();
+    // The same hand-back the tray's Quit does. Quit is one action however it is
+    // reached, and an in-app quit that kept the cursor while the tray's gave it
+    // up would be the kind of difference nobody can predict from the outside.
+    crate::tray::quit_hands_the_pointer_back();
     app.exit(0);
     Ok(())
 }
@@ -1291,6 +1351,71 @@ pub fn quit_app(app: AppHandle) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A saved pack id may only be resolved through [`build_pack_set`].
+    ///
+    /// `catalog::build_roles` resolves a *generated* pack. Every id the shipped
+    /// catalog produces is a `user:` one, which it answers with `UnknownPack` —
+    /// so any caller that reaches for it with an id off disk is broken for the
+    /// entire catalog while working perfectly on the one built-in blend base.
+    ///
+    /// It happened twice, in the two places that did not share the apply path:
+    /// the appearance re-apply (size and colour silently stopped working) and
+    /// the session restore (last session's cursor was never adopted). Both
+    /// failures were logged at warn and swallowed, which is why neither was
+    /// obvious.
+    ///
+    /// So the rule is a location rule, and this is it: `build_roles` is called
+    /// from `commands.rs` — inside `build_pack_set`, which knows to branch — and
+    /// from `catalog.rs`, which owns it and uses it for the blend base. Anywhere
+    /// else is the bug coming back.
+    #[test]
+    fn nothing_outside_the_catalog_resolves_a_pack_id_without_branching() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let Ok(entries) = std::fs::read_dir(&src) else {
+            // Only reachable outside a checkout; there is nothing to read.
+            return;
+        };
+
+        let mut offenders: Vec<String> = Vec::new();
+        let mut stack: Vec<std::path::PathBuf> =
+            entries.filter_map(Result::ok).map(|e| e.path()).collect();
+        while let Some(path) = stack.pop() {
+            if path.is_dir() {
+                if let Ok(inner) = std::fs::read_dir(&path) {
+                    stack.extend(inner.filter_map(Result::ok).map(|e| e.path()));
+                }
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            // The two files allowed to call it, for the reasons above.
+            if name == "commands.rs" || name == "catalog.rs" {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for (number, line) in text.lines().enumerate() {
+                // Skip comments, so the prose explaining this rule does not trip it.
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("//") || trimmed.starts_with("///") {
+                    continue;
+                }
+                if line.contains("build_roles(") {
+                    offenders.push(format!("{name}:{}", number + 1));
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "{offenders:?} call catalog::build_roles directly, which cannot resolve the \
+             `user:` ids the whole shipped catalog uses — go through commands::build_pack_set"
+        );
+    }
 
     /// Every link the UI offers must be one the backend will open.
     ///

@@ -8,7 +8,7 @@ answers the post's specific question instead of always linking to the homepage.
 Windows has 17 pointer roles. Changing only the arrow leaves the link hand, text
 cursor, busy cursor, and resize pointers behind.
 
-Cursed applies a complete matching set, includes 83 packs, and can turn your own
+Cursed applies a complete matching set, includes 133 packs, and can turn your own
 image or GIF into a native Windows cursor. Free and open source.
 
 https://www.trycursed.com/
@@ -34,7 +34,7 @@ https://www.trycursed.com/guides/cursor-file-formats
 
 ## Short release post
 
-Cursed 1.27.0 is available for Windows 10 and 11: 83 cursor packs, complete
+Cursed 1.27.0 is available for Windows 10 and 11: 133 cursor packs, complete
 17-role schemes, image and GIF imports, size and color controls, and one-click
 restoration. No account or administrator access required.
 

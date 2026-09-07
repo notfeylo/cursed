@@ -13,6 +13,7 @@ use crate::cursor::roles::{Role, ALL_ROLES};
 use crate::cursor::scheme::CursorSet;
 use crate::error::{AppError, AppResult};
 use crate::packs::art;
+use crate::packs::category;
 use crate::packs::styles::{self, PackDef};
 use crate::state::settings::HoverStyle;
 use crate::paths;
@@ -182,10 +183,10 @@ fn built_in_summaries() -> AppResult<Vec<PackSummary>> {
             Ok(PackSummary {
                 id: pack.id.to_owned(),
                 name: pack.name.to_owned(),
-                // The built-ins are the clean, geometric, recolourable half of
-                // the catalog — which is what MINIMAL CURSED was named for and
-                // left empty waiting on.
-                category: "MINIMAL CURSED",
+                // Filed by the same rules as everything else. A built-in is not
+                // a category of its own: the user is looking for a cursor, not
+                // for where it was compiled from.
+                category: category::classify(pack.name),
                 author: "feylo",
                 recolorable: true,
                 animated: pack.animated,
@@ -212,7 +213,7 @@ pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
             Some(PackSummary {
                 id: pack.id.clone(),
                 name: pack.name.clone(),
-                category: leak_category(&pack.category),
+                category: shelf_for(&pack.category, &pack.name),
                 author: "imported",
                 recolorable: false,
                 animated: pack.animated,
@@ -225,14 +226,20 @@ pub fn list_summaries() -> AppResult<Vec<PackSummary>> {
     Ok(imported)
 }
 
+/// Which shelf an imported pack goes on.
+///
 /// Imported categories are user data, but `PackSummary` carries a `&'static
-/// str` for the built-ins. The set is small and closed, so map onto known
-/// values and fall back rather than leaking memory for arbitrary strings.
-fn leak_category(category: &str) -> &'static str {
-    match category {
-        "MINIMAL CURSED" => "MINIMAL CURSED",
-        _ => "OPTIMAL CURSED",
-    }
+/// str`. The set of shelves is small and closed, so a stored value is only
+/// honoured when it is one of them — anything else is re-derived from the name
+/// rather than leaking memory for an arbitrary string.
+///
+/// Re-deriving is the normal case, not the exception. Every pack imported before
+/// [`category`] existed has `OPTIMAL CURSED` written into its `pack.json` on the
+/// user's disk, and those files are not something a release can rewrite. Reading
+/// the stored value first and falling back would leave the whole existing
+/// catalog on one shelf; deriving it fixes every install on the next launch.
+fn shelf_for(stored: &str, name: &str) -> &'static str {
+    category::known(stored).unwrap_or_else(|| category::classify(name))
 }
 
 /// A tinted 64 px render of the pack's Arrow, as a `data:` URI.
@@ -489,6 +496,31 @@ pub fn build_imported(pack_id: &str, base: &str, spec: &RenderSpec) -> AppResult
     // handle that looks like an arrow says nothing about which way to drag, and
     // an I-beam that is an arrow hides where text will land. Those keep the base
     // pack's purpose-built shapes.
+    // Re-rendered at the size the user asked for, not installed as they arrived.
+    //
+    // This is what makes the size control work on an imported pack. A `.cur` was
+    // being stretched by the shell and an `.ani` was not being resized at all —
+    // see `build::rescale`, which is where the whole reasoning lives. Done once
+    // here so both the arrow-fill below and the roles the pack defines get the
+    // same treatment.
+    let slug = pack_id.strip_prefix("user:").unwrap_or(pack_id);
+    let files: std::collections::BTreeMap<Role, PathBuf> = files
+        .into_iter()
+        .map(|(role, path)| {
+            let sized = match crate::build::rescale::imported_role(slug, role, &path, spec.size) {
+                Ok(sized) => sized,
+                // Never fail an apply over a resize. The original file is a
+                // working cursor at the wrong size, which is strictly better
+                // than no cursor and a red error banner.
+                Err(e) => {
+                    log::warn!("{pack_id}: {role} could not be re-rendered at {}px, so the original is used: {e}", spec.size);
+                    path
+                }
+            };
+            (role, sized)
+        })
+        .collect();
+
     if let Some(arrow) = files.get(&Role::Arrow) {
         for role in POINTER_LIKE_ROLES {
             if !files.contains_key(&role) {

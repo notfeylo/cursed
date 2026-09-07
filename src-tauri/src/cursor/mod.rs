@@ -183,6 +183,47 @@ pub fn adopt(
     Ok(())
 }
 
+/// Adopts last session's scheme **and puts it back on the live layer**.
+///
+/// This is [`adopt`] plus one `SetSystemCursor` pass, and it is what a launch
+/// should do rather than `adopt` alone.
+///
+/// `adopt` is right about the registry: the scheme is already there, Windows
+/// reads it at sign-in, and rewriting it every launch is churn. What it assumed
+/// is that the registry and the live layer always agree after a sign-in, and
+/// they do not. `SetSystemCursor` state is per-session and is rebuilt by the
+/// shell from the registry, and three things that this app relies on do not
+/// survive that intact:
+///
+///  * **`NWPen`, `Pin` and `Person`** have no `OCR_*` id, so they are live-layer
+///    overrides here and nothing else re-establishes them.
+///  * **An `.ani` loaded by the shell** is subject to the same `LoadImageW`
+///    resizing trap documented in [`engine`] — it can come back as a still until
+///    something reloads it properly, which is what "my animated cursor stopped
+///    moving after a restart" is.
+///  * **Anything that ran before us at sign-in** — another cursor tool, a theme
+///    applying itself, a policy — leaves the registry ours and the screen theirs.
+///
+/// The registry is deliberately still not written. This costs one pass over the
+/// applied roles at startup and makes "the pointer I was using is the pointer I
+/// get back" true rather than probable.
+///
+/// A live-layer failure is logged, not returned: the scheme is in the registry
+/// and correct, so it is a complaint about *when* the pointer is right, and
+/// failing the restore over it would leave the app believing nothing is applied.
+pub fn adopt_and_reassert(
+    set: CursorSet,
+    display_name: &str,
+    size: u32,
+    pack_id: Option<String>,
+    tint: String,
+) -> AppResult<()> {
+    if let Err(e) = engine::apply_live(&set, size, engine::Source::Startup) {
+        log::warn!("the scheme was adopted, but re-asserting it on screen was partial: {e}");
+    }
+    adopt(set, display_name, size, pack_id, tint)
+}
+
 /// Live layer only — no registry write, no broadcast. This is what catalog
 /// hover uses, and it is why hovering costs nothing and reverts cleanly.
 pub fn preview(set: &CursorSet, size: u32) -> AppResult<()> {
@@ -348,13 +389,14 @@ fn describe_cursor_file(path: &std::path::Path) -> String {
     "not a cursor file".to_owned()
 }
 
-/// True when the registry no longer reflects what we committed — i.e. a theme
-/// change, a personalisation reset, or another cursor tool has overwritten us.
-pub fn drifted() -> bool {
-    let Some(state) = applied() else {
-        return false;
-    };
-
+/// Whether `HKCU\Control Panel\Cursors` currently holds this exact set.
+///
+/// Used for two different questions that are the same comparison: whether
+/// something has drifted since we committed, and — at startup, before anything
+/// is applied — whether last session's scheme is still what Windows has. The
+/// second is how a launch tells "nothing changed, adopt it" from "the pointer
+/// was handed back on exit or taken by something else, commit it".
+pub fn registry_holds(set: &CursorSet) -> bool {
     // Every role, not only the arrow.
     //
     // Watching the arrow alone missed a whole class of reset: something restores
@@ -365,7 +407,7 @@ pub fn drifted() -> bool {
     //
     // It is a handful of registry string reads every few seconds, which is not a
     // cost worth trading correctness for.
-    for (role, expected) in &state.set.files {
+    for (role, expected) in &set.files {
         let Ok(current) = scheme::read_role(*role) else {
             continue;
         };
@@ -374,10 +416,19 @@ pub fn drifted() -> bool {
             continue;
         }
         if path_tail(&current) != expected_tail {
-            return true;
+            return false;
         }
     }
-    false
+    true
+}
+
+/// True when the registry no longer reflects what we committed — i.e. a theme
+/// change, a personalisation reset, or another cursor tool has overwritten us.
+pub fn drifted() -> bool {
+    let Some(state) = applied() else {
+        return false;
+    };
+    !registry_holds(&state.set)
 }
 
 #[cfg(test)]

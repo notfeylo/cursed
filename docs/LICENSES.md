@@ -16,7 +16,7 @@ license. What each of them is, is set out below.
 
 ## Cursor packs that ship with Cursed
 
-Eighty-three packs are built into the installer and unpacked the first time you
+A hundred and thirty-three packs are built into the installer and unpacked the first time you
 run it. They are the catalog.
 
 ### Geared Brass and Geared Steel — GPL-3.0
@@ -32,11 +32,16 @@ are. They sit alongside Cursed as separately-licensed data rather than as part
 of it — what the GPL calls mere aggregation. Nothing on this page claims any
 right over them.
 
-### The other eighty-one
+### The other hundred and thirty-one
 
 Thirty-four came from cursor-sharing sites and state no licence. Forty-seven
 were given to the project directly by the person who drew them, for use here,
 with no credit asked for.
+
+Fifty came from **custom-cursor.com** and **sweezy-cursors.com** and state no
+licence either. Unlike the forty-seven, these are credited: both sites are named
+and linked on the website, and the artist name inside an animated cursor is left
+where the artist put it.
 
 Several across both groups depict characters, logos or products belonging to
 other people. Permission from whoever drew a cursor is not permission from

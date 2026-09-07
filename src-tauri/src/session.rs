@@ -11,7 +11,7 @@
 
 use crate::cursor;
 use crate::error::AppResult;
-use crate::packs::catalog::{self, RenderSpec};
+use crate::packs::catalog::RenderSpec;
 use crate::paths;
 use crate::state::settings::ApplyMode;
 use crate::{custom, state};
@@ -134,14 +134,12 @@ pub fn reapply_with_appearance(tint: &str, size: u32, outline: bool) -> AppResul
         outline,
     };
 
+    let hover = crate::state::settings::get().hover_style;
     let (set, pack_id) = match &descriptor.source {
-        AppliedSource::Pack { pack_id, apply_mode } => {
-            let roles = crate::commands::roles_for(*apply_mode);
-            (
-                catalog::build_roles(pack_id, roles, &spec)?,
-                Some(pack_id.clone()),
-            )
-        }
+        AppliedSource::Pack { pack_id, apply_mode } => (
+            crate::commands::build_pack_set(pack_id, *apply_mode, hover, &spec)?.0,
+            Some(pack_id.clone()),
+        ),
         AppliedSource::Custom {
             cursor_id,
             apply_mode,
@@ -215,6 +213,7 @@ fn restore() -> AppResult<()> {
         outline: descriptor.outline,
     };
 
+    let hover = settings.hover_style;
     let (set, pack_id) = match &descriptor.source {
         AppliedSource::Pack {
             pack_id,
@@ -223,9 +222,13 @@ fn restore() -> AppResult<()> {
             // Build exactly the roles that are live, so the adopted set is the
             // set in the registry — a superset would leave the watchdog
             // perpetually "fixing" roles the user chose not to change.
-            let roles = crate::commands::roles_for(*apply_mode);
+            //
+            // Through `build_pack_set`, not `build_roles`: this is a saved pack
+            // id, and every id the shipped catalog produces is a `user:` one
+            // that `build_roles` cannot resolve. Calling it directly meant a
+            // restore that failed on the entire catalog.
             (
-                catalog::build_roles(pack_id, roles, &spec)?,
+                crate::commands::build_pack_set(pack_id, *apply_mode, hover, &spec)?.0,
                 Some(pack_id.clone()),
             )
         }
@@ -249,7 +252,29 @@ fn restore() -> AppResult<()> {
     // the next launch logs the same correction again, forever. When the size has
     // actually changed, commit it.
     if size == descriptor.size {
-        return cursor::adopt(set, &descriptor.display_name, size, pack_id, descriptor.tint);
+        // Adopting is only correct while the registry still holds this scheme.
+        //
+        // Quitting from the tray hands the pointer back to Windows on purpose,
+        // and something else — a theme, another cursor tool — can take it while
+        // the app is closed. In both cases `applied.json` still names the user's
+        // cursor, so this is the launch that is supposed to bring it back; adopt
+        // would instead record it as live while the screen shows Windows' own,
+        // leaving the watchdog to notice and fix it an interval later.
+        if cursor::registry_holds(&set) {
+            return cursor::adopt_and_reassert(
+                set,
+                &descriptor.display_name,
+                size,
+                pack_id,
+                descriptor.tint,
+            );
+        }
+
+        log::info!(
+            "the registry no longer holds last session's scheme, so it is committed rather \
+             than adopted"
+        );
+        return cursor::commit(set, &descriptor.display_name, size, pack_id, descriptor.tint);
     }
 
     cursor::commit(

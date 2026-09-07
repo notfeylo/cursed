@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { Check, Copy, Download, Pencil, Star, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bookmark, Check, Copy, Download, Pencil, Star, Trash2, Upload, X } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Button, TextInput } from "../components/ui";
 import * as ipc from "../lib/ipc";
-import type { Preset } from "../lib/types";
+import type { PackSummary, Preset } from "../lib/types";
 import { useStore } from "../store";
 
 export function Saved() {
@@ -16,9 +16,38 @@ export function Saved() {
   const refreshPresets = useStore((s) => s.refreshPresets);
   const refreshActive = useStore((s) => s.refreshActive);
 
+  const select = useStore((s) => s.select);
+  const toggleBookmark = useStore((s) => s.toggleBookmark);
+  const patchSettings = useStore((s) => s.patchSettings);
+
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [busy, setBusy] = useState(false);
+
+  /** Bookmarked ids resolved against the catalog, in the order they were added. */
+  const bookmarked = useMemo(
+    () =>
+      settings.bookmarks
+        .map((id) => packs.find((pack) => pack.id === id))
+        .filter((pack): pack is PackSummary => pack !== undefined),
+    [settings.bookmarks, packs],
+  );
+
+  /**
+   * Forgets bookmarks whose cursor is gone.
+   *
+   * A pack can be removed from Settings or cleared with the rest of the
+   * imports, and its id would otherwise sit in the list for ever — invisible
+   * here, because it resolves to nothing, but still counted against the cap and
+   * still written back on every save. Waiting for `packs` to be populated
+   * matters: before the catalog loads, *every* id looks stale, and pruning then
+   * would delete the whole shelf on a slow start.
+   */
+  useEffect(() => {
+    if (packs.length === 0) return;
+    if (bookmarked.length === settings.bookmarks.length) return;
+    void patchSettings({ bookmarks: bookmarked.map((pack) => pack.id) });
+  }, [packs.length, bookmarked, settings.bookmarks.length, patchSettings]);
 
   const guard = async (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -86,6 +115,58 @@ export function Saved() {
       </ScreenHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {/*
+          Bookmarks first, and only when there are some.
+          A preset is a decision already made — pack, colour, size, the lot. A
+          bookmark is a cursor someone liked the look of while scrolling a
+          hundred and thirty of them and did not want to lose. The second is the
+          cheaper act, so it comes first and stays out of the way when unused.
+        */}
+        {bookmarked.length > 0 && (
+          <>
+            <div className="mb-2 flex items-center gap-1.5">
+              <Bookmark size={11} className="text-accent-hi" />
+              <span className="display text-[10px] text-text-dim">BOOKMARKED</span>
+              <span className="mono text-[10px] text-text-dim">{bookmarked.length}</span>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              {bookmarked.map((pack) => (
+                <div key={pack.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => select(pack)}
+                    title={`Open ${pack.name}`}
+                    className="relative flex aspect-square w-full flex-col items-center justify-center rounded-sm border border-border bg-surface p-2 tile hover:tile-hover hover:bg-elevated"
+                  >
+                    <img
+                      src={pack.preview}
+                      alt={pack.name}
+                      draggable={false}
+                      className="h-9 w-9 object-contain transition-transform duration-150 group-hover:scale-110"
+                    />
+                    <span className="display mt-2 w-full truncate px-0.5 text-center text-[10px] text-text-dim transition-colors duration-150 group-hover:text-text">
+                      {pack.name}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void toggleBookmark(pack.id)}
+                    title={`Remove ${pack.name} from saved`}
+                    aria-label={`Remove ${pack.name} from saved`}
+                    className="absolute top-1 left-1 grid h-6 w-6 place-items-center rounded-xs text-text-dim opacity-0 transition-all duration-150 group-hover:opacity-100 hover:bg-elevated hover:text-text focus-visible:opacity-100"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <span className="display mb-2 block text-[10px] text-text-dim">PRESETS</span>
+          </>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
