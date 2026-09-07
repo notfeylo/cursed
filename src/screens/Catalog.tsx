@@ -55,19 +55,6 @@ export function Catalog() {
     [setPreviewing],
   );
 
-  /**
-   * ALL, the two motion filters and the category shelves all sit in one row, so
-   * one piece of state drives them — but they do not mean the same thing.
-   * ANIMATED and STATIC read the pack's own `animated` flag; everything else
-   * matches the shelf the backend filed it on.
-   */
-  const matchesFilter = (pack: PackSummary) => {
-    if (filter === "ALL") return true;
-    if (filter === "ANIMATED") return pack.animated;
-    if (filter === "STATIC") return !pack.animated;
-    return pack.category === filter;
-  };
-
   /** How many packs each chip would show, so empty shelves can be left out. */
   const counts = useMemo(() => {
     const out = new Map<CatalogFilter, number>([
@@ -85,15 +72,26 @@ export function Catalog() {
   }, [packs]);
 
   const visible = useMemo(() => {
+    // ALL, the two motion filters and the category shelves all sit in one row,
+    // so one piece of state drives them — but they do not mean the same thing.
+    // ANIMATED and STATIC read the pack's own flag; everything else matches the
+    // shelf the backend filed it on. Kept inside the memo so its dependencies
+    // are the whole truth rather than a comment promising they are.
+    const matches = (pack: PackSummary) => {
+      if (filter === "ALL") return true;
+      if (filter === "ANIMATED") return pack.animated;
+      if (filter === "STATIC") return !pack.animated;
+      return pack.category === filter;
+    };
+
     const needle = query.trim().toLowerCase();
     return packs.filter(
       (pack) =>
-        matchesFilter(pack) &&
+        matches(pack) &&
         (needle === "" ||
           pack.name.toLowerCase().includes(needle) ||
           pack.category.toLowerCase().includes(needle)),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packs, query, filter]);
 
   const cancelHover = () => {
